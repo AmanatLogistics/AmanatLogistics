@@ -17,7 +17,20 @@ export function env(name: string): string | undefined {
   return (import.meta.env[name] as string | undefined) ?? process.env[name];
 }
 
-const hasBlob = () => Boolean(env('BLOB_READ_WRITE_TOKEN'));
+/**
+ * Vercel Blob read/write token.
+ * Normally `BLOB_READ_WRITE_TOKEN`, but Vercel lets you choose a custom prefix
+ * when connecting a store (e.g. `AMANAT_BLOB_READ_WRITE_TOKEN`), so accept any
+ * variable whose name ends with that suffix.
+ */
+export function blobToken(): string | undefined {
+  const direct = env('BLOB_READ_WRITE_TOKEN');
+  if (direct) return direct;
+  const key = Object.keys(process.env ?? {}).find((k) => k.endsWith('BLOB_READ_WRITE_TOKEN'));
+  return key ? process.env[key] : undefined;
+}
+
+const hasBlob = () => Boolean(blobToken());
 
 // On Vercel/serverless the filesystem is read-only, so writes need Vercel Blob.
 const isServerless = () =>
@@ -42,7 +55,7 @@ async function readOverrides(): Promise<Partial<SiteContent>> {
   try {
     if (hasBlob()) {
       const { list } = await import('@vercel/blob');
-      const { blobs } = await list({ prefix: CONTENT_KEY, limit: 1 });
+      const { blobs } = await list({ prefix: CONTENT_KEY, limit: 1, token: blobToken() });
       if (blobs.length) {
         const res = await fetch(`${blobs[0].url}?t=${Date.now()}`);
         if (res.ok) data = await res.json();
@@ -107,6 +120,7 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
       addRandomSuffix: false,
       allowOverwrite: true,
       cacheControlMaxAge: 0,
+      token: blobToken(),
     });
   } else if (isServerless()) {
     throw new Error(BLOB_NOT_CONFIGURED);
@@ -126,7 +140,7 @@ export async function saveImage(file: File): Promise<string> {
 
   if (hasBlob()) {
     const { put } = await import('@vercel/blob');
-    const blob = await put(`amanat/uploads/${name}`, file, { access: 'public' });
+    const blob = await put(`amanat/uploads/${name}`, file, { access: 'public', token: blobToken() });
     return blob.url;
   }
 

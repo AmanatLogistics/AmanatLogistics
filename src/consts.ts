@@ -60,9 +60,10 @@ export const VALUES = [
   { title: 'Global Reach', line: 'Established corridors across three continents, growing steadily.', bg: '#F3E1D6', dot: '#7A3B2E' },
 ];
 
+// Upload real photos in /admin → Team members (they show a placeholder until then).
 export const TEAM = [
-  { name: 'Founder Name', role: 'Founder & Managing Director', img: '/images/team/founder.jpg' },
-  { name: 'Team Member', role: 'Head of Export Operations', img: '/images/team/ops.jpg' },
+  { name: 'Founder Name', role: 'Founder & Managing Director', img: '' },
+  { name: 'Team Member', role: 'Head of Export Operations', img: '' },
 ];
 
 export const GALLERY = [
@@ -120,7 +121,9 @@ export const DEFAULT_CONTENT = {
   images: {
     aboutHeader: '/images/about-header.jpg',
     aboutStory: '/images/about-story.jpg',
-    worldMap: '/images/routes-worldmap.svg',
+    // Routes now draw a built-in vector map (RouteMap.astro); upload a graphic
+    // here only if you want to replace it with your own artwork.
+    worldMap: '',
   },
   // Coloured header band on each inner page
   pageHeaders: {
