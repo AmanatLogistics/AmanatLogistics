@@ -49,6 +49,7 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (e) {
     console.error('Save failed:', e);
-    return new Response(JSON.stringify({ error: 'Could not save. Try again.' }), { status: 500 });
+    const msg = e instanceof Error && e.message.startsWith('Storage not connected') ? e.message : 'Could not save. Try again.';
+    return new Response(JSON.stringify({ error: msg }), { status: 500 });
   }
 };

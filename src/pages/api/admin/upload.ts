@@ -59,6 +59,7 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ ok: true, url }), { status: 200 });
   } catch (e) {
     console.error('Upload failed:', e);
-    return new Response(JSON.stringify({ error: 'Upload failed. Try again.' }), { status: 500 });
+    const msg = e instanceof Error && e.message.startsWith('Storage not connected') ? e.message : 'Upload failed. Try again.';
+    return new Response(JSON.stringify({ error: msg }), { status: 500 });
   }
 };

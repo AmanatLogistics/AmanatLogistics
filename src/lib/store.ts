@@ -19,6 +19,14 @@ export function env(name: string): string | undefined {
 
 const hasBlob = () => Boolean(env('BLOB_READ_WRITE_TOKEN'));
 
+// On Vercel/serverless the filesystem is read-only, so writes need Vercel Blob.
+const isServerless = () =>
+  Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
+
+/** Thrown on the live site when no Blob store is connected (message shown to admin). */
+export const BLOB_NOT_CONFIGURED =
+  'Storage not connected. On Vercel, go to Storage → Create → Blob → connect it to this project, then redeploy. Saving works locally without this.';
+
 /* ------------------------------------------------------------------ */
 /* Read                                                                */
 /* ------------------------------------------------------------------ */
@@ -100,6 +108,8 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
       allowOverwrite: true,
       cacheControlMaxAge: 0,
     });
+  } else if (isServerless()) {
+    throw new Error(BLOB_NOT_CONFIGURED);
   } else {
     const { mkdir, writeFile } = await import('node:fs/promises');
     const dir = new URL('../../.data/', import.meta.url);
@@ -119,6 +129,8 @@ export async function saveImage(file: File): Promise<string> {
     const blob = await put(`amanat/uploads/${name}`, file, { access: 'public' });
     return blob.url;
   }
+
+  if (isServerless()) throw new Error(BLOB_NOT_CONFIGURED);
 
   const { mkdir, writeFile } = await import('node:fs/promises');
   const dir = new URL('../../public/uploads/', import.meta.url);
