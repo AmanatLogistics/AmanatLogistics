@@ -23,9 +23,12 @@ export const GET: APIRoute = async ({ request }) => {
         environment: e.VERCEL_ENV ?? 'local',
         deployedCommit: (e.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7) || 'n/a',
         storage: {
+          blobStoreConnected: Boolean(e.BLOB_STORE_ID),
           blobTokenFound: Boolean(blobToken()),
+          // On Vercel the SDK signs requests with OIDC when no static token exists.
+          authMode: blobToken() ? 'static token' : e.BLOB_STORE_ID ? 'OIDC (automatic)' : 'none',
           blobVariableNames: blobLike, // names only, never values
-          savingWillWork: Boolean(blobToken()) || !e.VERCEL,
+          savingWillWork: Boolean(blobToken() || e.BLOB_STORE_ID) || !e.VERCEL,
         },
         otherSettings: {
           adminPasswordSet: Boolean(e.ADMIN_PASSWORD),

@@ -30,7 +30,20 @@ export function blobToken(): string | undefined {
   return key ? process.env[key] : undefined;
 }
 
-const hasBlob = () => Boolean(blobToken());
+/**
+ * Blob is usable when either a static token exists, or a store is connected on
+ * Vercel — there the SDK authenticates itself via OIDC and no token is issued.
+ */
+const hasBlob = () => Boolean(blobToken() || env('BLOB_STORE_ID'));
+
+/**
+ * Only pass an explicit token when we actually have one; otherwise let the SDK
+ * resolve credentials itself (OIDC on Vercel).
+ */
+const auth = () => {
+  const t = blobToken();
+  return t ? { token: t } : {};
+};
 
 // On Vercel/serverless the filesystem is read-only, so writes need Vercel Blob.
 const isServerless = () =>
@@ -55,7 +68,7 @@ async function readOverrides(): Promise<Partial<SiteContent>> {
   try {
     if (hasBlob()) {
       const { list } = await import('@vercel/blob');
-      const { blobs } = await list({ prefix: CONTENT_KEY, limit: 1, token: blobToken() });
+      const { blobs } = await list({ prefix: CONTENT_KEY, limit: 1, ...auth() });
       if (blobs.length) {
         const res = await fetch(`${blobs[0].url}?t=${Date.now()}`);
         if (res.ok) data = await res.json();
@@ -120,7 +133,7 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
       addRandomSuffix: false,
       allowOverwrite: true,
       cacheControlMaxAge: 0,
-      token: blobToken(),
+      ...auth(),
     });
   } else if (isServerless()) {
     throw new Error(BLOB_NOT_CONFIGURED);
@@ -140,7 +153,7 @@ export async function saveImage(file: File): Promise<string> {
 
   if (hasBlob()) {
     const { put } = await import('@vercel/blob');
-    const blob = await put(`amanat/uploads/${name}`, file, { access: 'public', token: blobToken() });
+    const blob = await put(`amanat/uploads/${name}`, file, { access: 'public', ...auth() });
     return blob.url;
   }
 
