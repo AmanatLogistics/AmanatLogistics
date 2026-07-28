@@ -1,0 +1,101 @@
+---
+import { NAV, SITE } from '../consts';
+
+interface Props {
+  active?: string;
+}
+const { active } = Astro.props;
+---
+
+<header
+  class="sticky top-0 z-50 border-b border-line backdrop-blur-md"
+  style="background:rgba(246,241,232,0.96);"
+>
+  <div class="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-6 px-5 md:h-[84px] md:px-10">
+    <!-- Logo / wordmark -->
+    <a href="/" class="flex items-center gap-3.5" aria-label={`${SITE.name} — Home`}>
+      <img src="/images/logo.svg" alt="" width="52" height="52" class="h-11 w-11 rounded-lg md:h-[52px] md:w-[52px]" onerror="this.style.display='none'" />
+      <span class="flex flex-col leading-none">
+        <span class="font-serif text-[18px] font-bold text-plum md:text-[20px]">{SITE.name}</span>
+        <span class="eyebrow text-[10px] text-label md:text-[10.5px]">{SITE.tagline}</span>
+      </span>
+    </a>
+
+    <!-- Desktop nav -->
+    <nav class="hidden items-center gap-7 lg:flex">
+      {
+        NAV.map((item) => {
+          const isActive = active === item.href;
+          return (
+            <a
+              href={item.href}
+              class:list={[
+                'text-[14.5px] transition-colors hover:text-plum-hover',
+                isActive ? 'border-b-2 border-gold pb-0.5 font-semibold text-plum-hover' : 'font-medium text-ink/80',
+              ]}
+            >
+              {item.label}
+            </a>
+          );
+        })
+      }
+      <a
+        href="/contact#form"
+        class="rounded-md bg-accent px-[22px] py-3 text-[14px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover"
+      >
+        Request a Quote
+      </a>
+    </nav>
+
+    <!-- Mobile toggle -->
+    <button
+      id="menu-toggle"
+      class="flex flex-col gap-[5px] p-2 lg:hidden"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+    >
+      <span class="block h-[2px] w-6 bg-plum transition-transform"></span>
+      <span class="block h-[2px] w-6 bg-plum transition-opacity"></span>
+      <span class="block h-[2px] w-6 bg-plum transition-transform"></span>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <nav
+    id="mobile-menu"
+    class="hidden flex-col gap-1 border-t border-line bg-cream px-5 py-4 lg:hidden"
+  >
+    {
+      NAV.map((item) => (
+        <a
+          href={item.href}
+          class:list={[
+            'rounded-md px-3 py-2.5 text-[15px] font-medium transition-colors hover:bg-sand',
+            active === item.href ? 'text-plum-hover' : 'text-ink/80',
+          ]}
+        >
+          {item.label}
+        </a>
+      ))
+    }
+    <a
+      href="/contact#form"
+      class="mt-2 rounded-md bg-accent px-4 py-3 text-center text-[15px] font-semibold text-paper"
+    >
+      Request a Quote
+    </a>
+  </nav>
+</header>
+
+<script>
+  const toggle = document.getElementById('menu-toggle');
+  const menu = document.getElementById('mobile-menu');
+  toggle?.addEventListener('click', () => {
+    const open = menu?.classList.toggle('hidden');
+    const isOpen = open === false;
+    menu?.classList.toggle('flex', isOpen);
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    toggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+  });
+</script>

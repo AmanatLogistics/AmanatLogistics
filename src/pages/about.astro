@@ -1,0 +1,117 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Eyebrow from '../components/Eyebrow.astro';
+import ImageFrame from '../components/ImageFrame.astro';
+import { VALUES, TEAM } from '../consts';
+---
+
+<BaseLayout title="About" active="/about">
+  <!-- ============ PAGE HEADER (over image) ============ -->
+  <section class="relative overflow-hidden bg-plum">
+    <ImageFrame
+      src="/images/about-header.jpg"
+      alt="Warm produce and warehouse scene at Amanat Logistics"
+      tone="plum"
+      loading="eager"
+      class="absolute inset-0 h-full w-full"
+      label="FULL-WIDTH IMAGE: warm produce / warehouse scene<br>about-header.jpg — 2400×900px"
+    />
+    <div class="absolute inset-0" style="background:linear-gradient(90deg,rgba(43,20,35,0.92) 0%,rgba(43,20,35,0.68) 55%,rgba(43,20,35,0.34) 100%);"></div>
+    <div class="relative mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-20 md:px-10 md:py-24">
+      <Eyebrow text="Our Story" tone="dark" />
+      <h1 class="m-0 max-w-[20ch] font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">About Amanat Logistics</h1>
+      <p class="m-0 max-w-[58ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+        A Kandahar-rooted company carrying Afghanistan's finest produce to the world — with a name that means trust.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ STORY ============ -->
+  <section class="bg-cream">
+    <div class="mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 py-20 md:grid-cols-[0.95fr_1.05fr] md:gap-20 md:px-10 md:py-[100px]">
+      <ImageFrame
+        src="/images/about-story.jpg"
+        alt="Kandahar fig orchard and drying yard at golden hour"
+        class="h-[320px] rounded-[10px] md:h-[460px] reveal"
+        label="IMAGE: Kandahar fig orchard or drying yard,<br>farmers sorting harvest, golden-hour light"
+      />
+      <div class="flex flex-col gap-5 reveal">
+        <Eyebrow text="Rooted in Kandahar" />
+        <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]" style="text-wrap:pretty;">Carrying a heritage of quality to the world.</h2>
+        <p class="m-0 text-[16.5px] leading-[1.7] text-muted-dark">
+          Amanat Logistics was founded in Kandahar, in the heart of one of the world's great fruit-growing regions. For generations, our land has produced figs, raisins, almonds, and pomegranates prized across the region for their sweetness and quality. We saw an opportunity to bring that heritage to international markets — properly graded, certified, and delivered with care.
+        </p>
+        <p class="m-0 text-[16.5px] leading-[1.7] text-muted-dark">
+          "Amanat" means a trust — something precious placed in your safekeeping. That word guides everything we do. We work directly with growers, control quality at our own facilities, and manage export logistics end to end, so our partners deal with one accountable company built on honesty and consistency.
+        </p>
+        <p class="m-0 text-[16.5px] leading-[1.7] text-muted-dark">
+          Today we serve importers, distributors, and officials across several continents — and we're proud to represent the very best of Afghan agriculture wherever our shipments arrive.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MISSION & VALUES ============ -->
+  <section class="border-t border-line bg-paper">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-12 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[640px] flex-col gap-4 reveal">
+        <Eyebrow text="Mission & Values" />
+        <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">What we stand behind, every shipment.</h2>
+      </div>
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {
+          VALUES.map((v) => (
+            <div class="flex flex-col gap-3.5 rounded-xl border border-line bg-cream p-7 reveal">
+              <div class="flex h-11 w-11 items-center justify-center rounded-lg" style={`background:${v.bg};`}>
+                <div class="h-3 w-3 rotate-45" style={`background:${v.dot};`}></div>
+              </div>
+              <span class="font-serif text-[21px] font-bold text-plum">{v.title}</span>
+              <span class="text-[14.5px] leading-relaxed text-muted">{v.line}</span>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TEAM ============ -->
+  <section class="border-t border-line bg-cream">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-12 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[640px] flex-col gap-4 reveal">
+        <Eyebrow text="Leadership" />
+        <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">The people behind Amanat.</h2>
+      </div>
+      <div class="flex flex-wrap gap-7">
+        {
+          TEAM.map((m) => (
+            <div class="flex flex-[0_1_280px] flex-col items-center gap-[18px] rounded-xl border border-line bg-paper p-8 text-center reveal">
+              <ImageFrame
+                src={m.img}
+                alt={m.name}
+                class="h-[120px] w-[120px] rounded-full"
+                label="PHOTO"
+              />
+              <div class="flex flex-col gap-1.5">
+                <span class="font-serif text-[21px] font-bold text-plum">{m.name}</span>
+                <span class="eyebrow text-[12px] text-label">{m.role}</span>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA BAND ============ -->
+  <section class="bg-ink">
+    <div class="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-10 px-5 py-16 md:px-10">
+      <div class="flex flex-col gap-2">
+        <h2 class="m-0 font-serif text-[26px] font-bold leading-tight text-[#F8F3E9] md:text-[32px]">Interested in partnering with us?</h2>
+        <span class="text-[16px] text-[#B8AB9C]">Let's talk about your market, your volumes, and how we can deliver.</span>
+      </div>
+      <a href="/contact#form" class="whitespace-nowrap rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-[#C89B52] hover:text-ink">
+        Request a Quote
+      </a>
+    </div>
+  </section>
+</BaseLayout>

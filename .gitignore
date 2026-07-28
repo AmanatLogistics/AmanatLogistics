@@ -1,0 +1,20 @@
+# build output
+dist/
+.vercel/
+.astro/
+
+# dependencies
+node_modules/
+
+# env — never commit secrets
+.env
+.env.production
+.env*.local
+
+# logs
+npm-debug.log*
+*.log
+
+# os
+.DS_Store
+Thumbs.db

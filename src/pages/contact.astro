@@ -1,0 +1,184 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Eyebrow from '../components/Eyebrow.astro';
+import { CONTACT } from '../consts';
+
+const fieldClass =
+  'amn-field rounded-md border border-[#D8CCB6] bg-paper px-3.5 py-3 text-[14.5px] text-ink transition-colors';
+---
+
+<BaseLayout title="Contact Us" active="/contact">
+  <!-- ============ PAGE HEADER ============ -->
+  <section class="bg-plum">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
+      <Eyebrow text="Get In Touch" tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Contact Us</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+        Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ CONTACT + FORM ============ -->
+  <section class="bg-paper">
+    <div class="mx-auto grid max-w-[1240px] grid-cols-1 items-start gap-12 px-5 py-20 md:grid-cols-[0.85fr_1.15fr] md:gap-[72px] md:px-10 md:py-24">
+      <!-- LEFT: direct contact -->
+      <div class="flex flex-col gap-7">
+        <Eyebrow text="Direct Contact" />
+        <div class="flex flex-col">
+          <div class="flex flex-col gap-1 border-b border-line py-5">
+            <span class="eyebrow text-[12px] text-label">Amanat Logistics — Export</span>
+            <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="font-serif text-[22px] font-bold text-plum">{CONTACT.phoneExport}</a>
+          </div>
+          <div class="flex flex-col gap-1 border-b border-line py-5">
+            <span class="eyebrow text-[12px] text-label">Amanat Shopping</span>
+            <a href={`tel:${CONTACT.phoneShopping.replace(/\s/g, '')}`} class="font-serif text-[22px] font-bold text-plum">{CONTACT.phoneShopping}</a>
+          </div>
+          <div class="flex flex-col gap-1 border-b border-line py-5">
+            <span class="eyebrow text-[12px] text-label">Email</span>
+            <a href={`mailto:${CONTACT.email}`} class="text-[17px] font-medium text-plum">{CONTACT.email}</a>
+          </div>
+          <div class="flex flex-col gap-1 py-5">
+            <span class="eyebrow text-[12px] text-label">Location</span>
+            <span class="text-[17px] font-medium text-plum">{CONTACT.location}</span>
+          </div>
+        </div>
+        <!-- Map -->
+        <iframe
+          title="Amanat Logistics location — Kandahar, Afghanistan"
+          class="h-[240px] w-full rounded-[10px] border border-line"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          src="https://www.openstreetmap.org/export/embed.html?bbox=65.6%2C31.5%2C65.85%2C31.7&layer=mapnik&marker=31.61%2C65.71"
+        ></iframe>
+      </div>
+
+      <!-- RIGHT: quote form -->
+      <div id="form" class="scroll-mt-24 rounded-xl border border-line bg-cream p-6 shadow-[0_6px_24px_rgba(61,34,51,0.06)] md:p-11">
+        <div class="mb-5 flex flex-col gap-1.5">
+          <span class="font-serif text-[26px] font-bold text-plum">Request a Quote</span>
+          <span class="text-[14.5px] text-muted">Tell us what you need — we'll reply with routing, pricing, and timelines.</span>
+        </div>
+
+        <form id="quote-form" class="flex flex-col gap-5" novalidate>
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Name</span>
+              <input name="name" required autocomplete="name" placeholder="Your full name" class={fieldClass} />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Company / Organization</span>
+              <input name="company" autocomplete="organization" placeholder="Company or ministry" class={fieldClass} />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Email</span>
+              <input type="email" name="email" required autocomplete="email" placeholder="you@company.com" class={fieldClass} />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Phone</span>
+              <input name="phone" autocomplete="tel" placeholder="+00 000 000 0000" class={fieldClass} />
+            </label>
+          </div>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-[13px] font-semibold text-muted-dark">Service</span>
+            <select name="service" class={fieldClass}>
+              <option>Export &amp; Freight</option>
+              <option>Personal Shopping</option>
+            </select>
+          </label>
+
+          <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Departure</span>
+              <input name="departure" placeholder="e.g. Kandahar" class={fieldClass} />
+            </label>
+            <label class="flex flex-col gap-1.5">
+              <span class="text-[13px] font-semibold text-muted-dark">Destination Country</span>
+              <input name="destination" placeholder="Destination country" class={fieldClass} />
+            </label>
+          </div>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-[13px] font-semibold text-muted-dark">Product &amp; Estimated Weight</span>
+            <input name="product" placeholder="e.g. Dried figs, ~500 kg" class={fieldClass} />
+          </label>
+
+          <label class="flex flex-col gap-1.5">
+            <span class="text-[13px] font-semibold text-muted-dark">Message</span>
+            <textarea name="message" rows="4" placeholder="Any additional details, timeline, or requirements…" class={`${fieldClass} resize-y`}></textarea>
+          </label>
+
+          <!-- Honeypot (spam trap) — hidden from humans -->
+          <input type="text" name="website" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
+
+          <button
+            type="submit"
+            class="rounded-md bg-accent px-4 py-4 text-[15px] font-semibold text-paper transition-colors hover:bg-plum-hover disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Submit Request
+          </button>
+
+          <div id="form-status" class="hidden rounded-md px-4 py-3 text-[14px]" role="status" aria-live="polite"></div>
+
+          <div class="flex items-center justify-center gap-2.5 pt-1">
+            <div class="h-[7px] w-[7px] rounded-full bg-olive"></div>
+            <span class="text-center text-[13px] text-muted">
+              We respond to every serious inquiry within one business day. Your details stay confidential.
+            </span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+</BaseLayout>
+
+<script>
+  const form = document.getElementById('quote-form') as HTMLFormElement | null;
+  const status = document.getElementById('form-status') as HTMLElement | null;
+  const button = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+
+  function show(msg: string, ok: boolean) {
+    if (!status) return;
+    status.textContent = msg;
+    status.classList.remove('hidden');
+    status.classList.toggle('bg-[#E5EADB]', ok);
+    status.classList.toggle('text-[#33402B]', ok);
+    status.classList.toggle('bg-[#F3D9D2]', !ok);
+    status.classList.toggle('text-[#7A2E22]', !ok);
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Sending…';
+    }
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        form.reset();
+        show("Thank you — your request has been sent. We'll reply within one business day.", true);
+      } else {
+        show(body?.error || 'Something went wrong. Please email info@amanatlogistics.com directly.', false);
+      }
+    } catch {
+      show('Network error. Please try again, or email info@amanatlogistics.com directly.', false);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.textContent = 'Submit Request';
+      }
+    }
+  });
+</script>

@@ -1,0 +1,16 @@
+---
+interface Props {
+  text: string;
+  /** color scheme: on light or on dark backgrounds */
+  tone?: 'light' | 'dark';
+  class?: string;
+}
+const { text, tone = 'light', class: klass = '' } = Astro.props;
+const color = tone === 'dark' ? 'text-gold-light' : 'text-label';
+const line = tone === 'dark' ? 'bg-accent' : 'bg-accent';
+---
+
+<div class={`flex items-center gap-3 ${klass}`}>
+  <span class={`h-[1.5px] w-9 ${line}`}></span>
+  <span class={`eyebrow ${color}`}>{text}</span>
+</div>

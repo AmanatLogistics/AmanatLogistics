@@ -1,0 +1,147 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Eyebrow from '../components/Eyebrow.astro';
+import ImageFrame from '../components/ImageFrame.astro';
+import { EXPORTS } from '../consts';
+
+const freightModes = [
+  {
+    title: 'Sea Freight',
+    body: 'Cost-efficient bulk shipping for large dry-fruit consignments, with full container and consolidated options.',
+    svg: '<path d="M6 30 L42 30 L37 40 L11 40 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><path d="M24 30 L24 12 L34 20 L24 20" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><path d="M4 36 Q8 39 12 36 T20 36 T28 36 T36 36" stroke="#8C5A2B" stroke-width="2"/>',
+  },
+  {
+    title: 'Air Freight',
+    body: 'Fast, temperature-aware shipping for fresh fruit and priority orders — days from Kandahar to your port.',
+    svg: '<path d="M6 26 L42 16 L42 22 L18 30 L12 40 L10 40 L13 29 L6 30 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/>',
+  },
+  {
+    title: 'Land / Road Freight',
+    body: 'Regional overland corridors to neighboring markets, with customs brokerage at both borders.',
+    svg: '<rect x="6" y="18" width="22" height="16" stroke="#8C5A2B" stroke-width="2"/><path d="M28 24 L36 24 L42 30 L42 34 L28 34 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><circle cx="15" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/><circle cx="35" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/>',
+  },
+];
+
+const steps = [
+  { n: '1', t: 'Send us the link or screenshot', d: 'Share the product page or a screenshot from Amazon, Daraz, or any store.' },
+  { n: '2', t: 'We place the order', d: 'We purchase and consolidate your items, confirming every cost up front.' },
+  { n: '3', t: 'We deliver to you', d: 'Tracked delivery to your door, with updates the whole way.' },
+];
+---
+
+<BaseLayout title="Services" active="/services">
+  <!-- ============ PAGE HEADER ============ -->
+  <section class="bg-plum">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
+      <Eyebrow text="What We Do" tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Our Services</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+        From Kandahar's orchards to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ EXPORT & FREIGHT ============ -->
+  <section class="bg-paper">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-14 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[680px] flex-col gap-4 reveal">
+        <Eyebrow text="Lead Service — Export & Freight" />
+        <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">Premium Afghan produce, exported worldwide.</h2>
+        <p class="m-0 text-[16.5px] leading-[1.7] text-muted-dark">
+          We source premium figs, dried fruits, fresh fruits, and nuts directly from Kandahar's growers — then grade, pack, and ship them to importers and partners across the globe with certified documentation and reliable freight.
+        </p>
+      </div>
+
+      <!-- Freight-mode cards -->
+      <div class="grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          freightModes.map((m) => (
+            <div class="flex flex-col gap-4 rounded-xl border border-line bg-cream p-9 reveal">
+              <svg width="44" height="44" viewBox="0 0 48 48" fill="none" aria-hidden="true" set:html={m.svg} />
+              <h3 class="m-0 font-serif text-[22px] font-bold text-plum">{m.title}</h3>
+              <p class="m-0 text-[15px] leading-relaxed text-muted">{m.body}</p>
+            </div>
+          ))
+        }
+      </div>
+
+      <!-- What We Export -->
+      <div class="flex flex-col gap-6 border-t border-line pt-5">
+        <h3 class="m-0 font-serif text-[26px] font-bold text-plum">What We Export</h3>
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {
+            EXPORTS.map((e) => (
+              <div class="flex flex-col gap-2.5 reveal">
+                <ImageFrame src={e.img} alt={e.alt} class="h-[130px] rounded-[10px] md:h-[150px]" label={e.alt} />
+                <span class="text-center font-serif text-[16px] font-bold text-plum">{e.name}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PERSONAL SHOPPING ============ -->
+  <section class="bg-olive">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-[52px] px-5 py-20 md:px-10 md:py-24">
+      <div class="grid grid-cols-1 items-center gap-12 md:grid-cols-2 md:gap-16">
+        <div class="flex flex-col gap-5 reveal">
+          <Eyebrow text="Secondary Service" tone="dark" />
+          <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-[#F5F3EA] md:text-[38px]">Global Personal Shopping</h2>
+          <p class="m-0 text-[16.5px] leading-[1.7] text-[#CFD3C4]">
+            Want a product sold online but can't order it yourself? Simply send us a product link or a screenshot from Amazon, Daraz, or any other online store. Amanat places the order on your behalf, consolidates it, and delivers it to you — with clear, itemized pricing and no hidden fees.
+          </p>
+        </div>
+        <ImageFrame
+          src="/images/shopping-parcels.jpg"
+          alt="Packed parcels and consolidated orders ready for delivery"
+          tone="olive"
+          class="h-[240px] rounded-[10px] md:h-[300px] reveal"
+          label="IMAGE: parcels / packed orders ready for delivery,<br>or client on phone reviewing a product"
+        />
+      </div>
+
+      <!-- 3-step flow -->
+      <div class="flex flex-col gap-6 pt-3">
+        <div class="grid grid-cols-1 items-stretch gap-5 md:grid-cols-[1fr_auto_1fr_auto_1fr]">
+          {
+            steps.map((s, i) => (
+              <>
+                <div class="flex flex-col gap-3 rounded-xl bg-paper p-8 reveal">
+                  <span class="font-serif text-[30px] font-bold text-gold">{s.n}</span>
+                  <span class="font-serif text-[19px] font-bold text-plum">{s.t}</span>
+                  <span class="text-[14.5px] leading-relaxed text-muted">{s.d}</span>
+                </div>
+                {i < steps.length - 1 && (
+                  <div class="hidden items-center justify-center text-[26px] text-gold-light md:flex">→</div>
+                )}
+              </>
+            ))
+          }
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-5">
+          <span class="eyebrow text-[12px] text-[#B7BEA9]">Supported Platforms</span>
+          {
+            ['Amazon', 'Daraz', '+ more'].map((p) => (
+              <span class="flex h-10 w-[120px] items-center justify-center rounded-md border border-dashed border-[#7E8A72] font-mono text-[11px] text-[#C6CBB8]">{p}</span>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="border-y border-line bg-sand">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-center gap-5 px-5 py-16 text-center md:px-10 md:py-[76px]">
+      <h2 class="m-0 max-w-[24ch] font-serif text-[28px] font-bold leading-tight text-plum md:text-[34px]">Ready to move your order — or ours?</h2>
+      <p class="m-0 max-w-[52ch] text-[16.5px] leading-relaxed text-muted-dark">
+        Tell us what you need to export or purchase, and we'll respond within one business day.
+      </p>
+      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover">
+        Request a Quote
+      </a>
+    </div>
+  </section>
+</BaseLayout>

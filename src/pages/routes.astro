@@ -1,0 +1,99 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Eyebrow from '../components/Eyebrow.astro';
+import ImageFrame from '../components/ImageFrame.astro';
+import { DESTINATIONS } from '../consts';
+---
+
+<BaseLayout title="Routes & Coverage" active="/routes">
+  <!-- ============ PAGE HEADER ============ -->
+  <section class="bg-plum">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
+      <Eyebrow text="Where We Ship" tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Routes &amp; Coverage</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+        Established export corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ WORLD MAP ============ -->
+  <section class="bg-ink">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-4 px-5 py-20 md:px-10">
+      <div class="relative">
+        <ImageFrame
+          src="/images/routes-worldmap.svg"
+          alt="World map: Afghanistan (Kandahar) origin with export routes to India, Canada, UK and USA"
+          tone="dark"
+          class="h-[360px] rounded-xl md:h-[520px]"
+          label="WORLD-MAP GRAPHIC:<br>Afghanistan highlighted as origin (Kandahar),<br>arcing route lines to India, Canada, UK &amp; USA<br>routes-worldmap.svg — 2200×1040px"
+        />
+      </div>
+      <div class="flex flex-wrap items-center gap-6 pt-1">
+        <div class="flex items-center gap-2">
+          <div class="h-3 w-3 rounded-full bg-accent"></div>
+          <span class="text-[13px] text-[#B8AB9C]">Origin — Kandahar, Afghanistan</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="h-[2px] w-[18px] bg-gold-light"></div>
+          <span class="text-[13px] text-[#B8AB9C]">Active export route</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DESTINATION CARDS ============ -->
+  <section class="bg-paper">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[640px] flex-col gap-4 reveal">
+        <Eyebrow text="Current Destinations" />
+        <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">Countries we serve today.</h2>
+      </div>
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          DESTINATIONS.map((d) => (
+            <div class="flex flex-col gap-4 rounded-xl border border-line bg-cream p-7 reveal">
+              <div class="flex items-center gap-3.5">
+                <div class="flex h-[38px] w-[56px] items-center justify-center rounded-[5px] border border-dashed border-gold font-mono text-[8px] text-label" style="background:repeating-linear-gradient(45deg,#EDE4D2,#EDE4D2 6px,#E6DBC4 6px,#E6DBC4 12px);">
+                  FLAG
+                </div>
+                <div class="flex flex-col gap-0.5">
+                  <span class="font-serif text-[21px] font-bold text-plum">{d.name}</span>
+                  <span class="eyebrow text-[12px] text-label">{d.mode}</span>
+                </div>
+              </div>
+              <div class="flex flex-col gap-2 border-t border-line pt-4">
+                <span class="eyebrow text-[12px] text-[#A08F76]">What we deliver</span>
+                <span class="text-[15px] leading-relaxed text-muted-dark">{d.delivers}</span>
+              </div>
+            </div>
+          ))
+        }
+        <!-- Add-more card -->
+        <div class="flex min-h-[190px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#C9BCA3] p-7 text-center">
+          <div class="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-dashed border-gold text-[20px] text-label">+</div>
+          <span class="font-serif text-[17px] font-bold text-label">More destinations</span>
+          <span class="text-[13.5px] leading-snug text-[#A08F76]">Space to add new countries as coverage expands.</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <div class="h-[1.5px] w-[30px] bg-accent"></div>
+        <span class="font-serif text-[15px] italic text-label">Expanding to more destinations soon.</span>
+        <div class="h-[1.5px] w-[30px] bg-accent"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="border-y border-line bg-sand">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-center gap-5 px-5 py-16 text-center md:px-10 md:py-[76px]">
+      <h2 class="m-0 max-w-[26ch] font-serif text-[28px] font-bold leading-tight text-plum md:text-[34px]">Want us to ship to your country?</h2>
+      <p class="m-0 max-w-[52ch] text-[16.5px] leading-relaxed text-muted-dark">
+        Tell us your destination and volume — we'll confirm routing, timelines, and documentation.
+      </p>
+      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover">
+        Request a Quote
+      </a>
+    </div>
+  </section>
+</BaseLayout>

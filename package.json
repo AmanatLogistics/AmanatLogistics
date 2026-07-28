@@ -1,0 +1,26 @@
+{
+  "name": "amanat-website",
+  "version": "1.0.0",
+  "description": "Amanat Logistics — premium export & freight website (Astro + Tailwind + Resend)",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@astrojs/vercel": "^11.0.3",
+    "astro": "^7.0.9",
+    "resend": "^6.17.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "tailwindcss": "^4.3.2"
+  }
+}

@@ -1,0 +1,69 @@
+---
+/**
+ * Graceful image frame.
+ * - If the real image exists at `src`, it fills the frame.
+ * - If it's missing (assets not added yet), the labeled dashed placeholder
+ *   from the design shows instead (the <img> removes itself on error).
+ * Swap in real photos by dropping files into /public/images/… — no code change.
+ */
+interface Props {
+  src?: string;
+  alt?: string;
+  label?: string;
+  /** color tone of the placeholder pattern */
+  tone?: 'cream' | 'plum' | 'olive' | 'dark';
+  /** extra classes for sizing (height, rounding, etc.) */
+  class?: string;
+  loading?: 'lazy' | 'eager';
+}
+
+const { src, alt = '', label = 'IMAGE', tone = 'cream', class: klass = '', loading = 'lazy' } = Astro.props;
+
+const tones: Record<string, { pattern: string; text: string; border: string }> = {
+  cream: {
+    pattern: 'repeating-linear-gradient(45deg,#EDE4D2,#EDE4D2 11px,#E6DBC4 11px,#E6DBC4 22px)',
+    text: '#8C6D3F',
+    border: '#B08A48',
+  },
+  plum: {
+    pattern: 'repeating-linear-gradient(45deg,#4A2C3F,#4A2C3F 12px,#43273A 12px,#43273A 24px)',
+    text: '#C9ADBF',
+    border: '#7A5A6E',
+  },
+  olive: {
+    pattern: 'repeating-linear-gradient(45deg,#4E5B44,#4E5B44 12px,#47543D 12px,#47543D 24px)',
+    text: '#C6CBB8',
+    border: '#7E8A72',
+  },
+  dark: {
+    pattern: 'repeating-linear-gradient(45deg,#34302A,#34302A 14px,#2F2B25 14px,#2F2B25 28px)',
+    text: '#A08F76',
+    border: '#6E6252',
+  },
+};
+
+const t = tones[tone];
+---
+
+<div
+  class={`relative overflow-hidden ${klass}`}
+  style={`background:${t.pattern};border:1.5px dashed ${t.border};`}
+>
+  <span
+    class="absolute inset-0 flex items-center justify-center px-4 text-center font-mono leading-relaxed"
+    style={`font-size:11px;color:${t.text};`}
+    set:html={label}
+  />
+  {
+    src && (
+      <img
+        src={src}
+        alt={alt}
+        loading={loading}
+        decoding="async"
+        class="relative z-10 h-full w-full object-cover"
+        onerror="this.remove()"
+      />
+    )
+  }
+</div>

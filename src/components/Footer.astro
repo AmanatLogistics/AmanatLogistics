@@ -1,0 +1,55 @@
+---
+import { SITE, CONTACT, NAV } from '../consts';
+const year = new Date().getFullYear();
+const siteLinks = NAV.filter((n) => n.href !== '/contact');
+---
+
+<footer class="bg-plum">
+  <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 pb-10 pt-16 md:px-10">
+    <div class="flex flex-col justify-between gap-10 md:flex-row md:items-start md:gap-12">
+      <!-- Brand -->
+      <div class="flex max-w-[38ch] flex-col gap-3.5">
+        <div class="flex items-center gap-3">
+          <img src="/images/logo-light.svg" alt="" width="44" height="44" class="h-11 w-11 rounded-lg" onerror="this.style.display='none'" />
+          <span class="font-serif text-[22px] font-bold text-[#F8F3E9]">{SITE.name}</span>
+        </div>
+        <span class="text-[14px] leading-relaxed text-[#B294A5]">
+          Premium figs &amp; dry fruits, from Kandahar to the world — exported with integrity, delivered with care.
+        </span>
+      </div>
+
+      <div class="flex flex-col gap-10 sm:flex-row sm:gap-16">
+        <!-- Site links -->
+        <div class="flex flex-col gap-2.5">
+          <span class="eyebrow text-[12px] text-gold-light">Site</span>
+          {
+            siteLinks.map((item) => (
+              <a href={item.href} class="text-[14px] text-[#CDBBB0] transition-colors hover:text-[#F8F3E9]">
+                {item.label}
+              </a>
+            ))
+          }
+        </div>
+        <!-- Contact -->
+        <div class="flex flex-col gap-2.5">
+          <span class="eyebrow text-[12px] text-gold-light">Contact</span>
+          <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="text-[14px] text-[#CDBBB0] transition-colors hover:text-[#F8F3E9]">
+            Logistics: {CONTACT.phoneExport}
+          </a>
+          <a href={`tel:${CONTACT.phoneShopping.replace(/\s/g, '')}`} class="text-[14px] text-[#CDBBB0] transition-colors hover:text-[#F8F3E9]">
+            Shopping: {CONTACT.phoneShopping}
+          </a>
+          <a href={`mailto:${CONTACT.email}`} class="text-[14px] text-[#CDBBB0] transition-colors hover:text-[#F8F3E9]">
+            {CONTACT.email}
+          </a>
+          <span class="text-[14px] text-[#CDBBB0]">{CONTACT.location}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col justify-between gap-3 border-t border-[rgba(214,182,118,0.2)] pt-6 sm:flex-row">
+      <span class="text-[13px] text-[#9C8090]">© {year} {SITE.name}. All rights reserved.</span>
+      <span class="text-[13px] text-[#9C8090]">{CONTACT.location}</span>
+    </div>
+  </div>
+</footer>
