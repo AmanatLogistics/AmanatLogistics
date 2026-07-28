@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { Resend } from 'resend';
+import { env, getContent } from '../../lib/store';
 
-// On-demand (server) route — everything else on the site stays static.
+// On-demand (server) route.
 export const prerender = false;
 
 const escapeHtml = (s: string) =>
@@ -38,7 +39,7 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Please enter a valid email address.' }, 400);
   }
 
-  const apiKey = import.meta.env.RESEND_API_KEY;
+  const apiKey = env('RESEND_API_KEY');
   if (!apiKey) {
     console.error('RESEND_API_KEY is not set.');
     return json({ error: 'Email service not configured yet. Please email info@amanatlogistics.com directly.' }, 500);
@@ -48,8 +49,8 @@ export const POST: APIRoute = async ({ request }) => {
 
   // Until your domain is verified in Resend, MAIL_FROM falls back to Resend's
   // sandbox sender (which only delivers to the Resend account owner).
-  const from = import.meta.env.MAIL_FROM || 'Amanat Logistics <onboarding@resend.dev>';
-  const to = import.meta.env.MAIL_TO || 'info@amanatlogistics.com';
+  const from = env('MAIL_FROM') || 'Amanat Logistics <onboarding@resend.dev>';
+  const to = env('MAIL_TO') || (await getContent()).contact.email || 'info@amanatlogistics.com';
 
   const fields: Array<[string, string]> = [
     ['Name', name],

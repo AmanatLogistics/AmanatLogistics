@@ -2,17 +2,23 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
-import { GALLERY, GALLERY_CATS } from '../consts';
+import { GALLERY_CATS } from '../consts';
+import { getContent } from '../lib/store';
+
+export const prerender = false;
+
+const { gallery: GALLERY, pageHeaders } = await getContent();
+const H = pageHeaders.gallery;
 ---
 
 <BaseLayout title="Gallery" active="/gallery">
   <!-- ============ PAGE HEADER ============ -->
   <section class="bg-plum">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
-      <Eyebrow text="Our Work in Pictures" tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Gallery</h1>
+      <Eyebrow text={H.eyebrow} tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
       <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
-        Our products, our facilities, and our shipments — real photography builds real trust.
+        {H.subtitle}
       </p>
     </div>
   </section>
@@ -44,8 +50,12 @@ import { GALLERY, GALLERY_CATS } from '../consts';
       <!-- Masonry -->
       <div class="gap-5 [column-count:1] sm:[column-count:2] lg:[column-count:3]">
         {
-          GALLERY.map((g) => (
-            <div class="gallery-item group relative mb-5 break-inside-avoid overflow-hidden rounded-[10px]" data-cat={g.cat}>
+          GALLERY.map((g, i) => (
+            <div
+              class="gallery-item group relative mb-5 break-inside-avoid overflow-hidden rounded-[10px]"
+              data-cat={g.cat}
+              style={`--gh:${(g as { h?: number }).h ?? [300, 220, 260, 230][i % 4]}px`}
+            >
               <ImageFrame src={g.img} alt={g.alt} class={`w-full`} label={g.alt} />
               <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-3.5 pt-6 opacity-0 transition-opacity duration-300 group-hover:opacity-100" style="background:linear-gradient(0deg,rgba(43,20,35,0.82),rgba(43,20,35,0));">
                 <span class="text-[12px] font-semibold text-[#F0E7DD]">{g.cat}</span>
@@ -59,34 +69,45 @@ import { GALLERY, GALLERY_CATS } from '../consts';
 </BaseLayout>
 
 <style>
-  /* Give each masonry image a natural, varied height until real photos load */
+  /* Varied masonry heights (from admin/default data) until real photos load */
   .gallery-item :global(.relative[style]) {
-    min-height: 220px;
+    min-height: var(--gh, 220px);
+  }
+  /* Gentle zoom on hover */
+  .gallery-item :global(img) {
+    transition: transform 0.6s ease, opacity 0.45s ease;
+  }
+  .gallery-item:hover :global(img) {
+    transform: scale(1.045);
   }
 </style>
 
 <script>
-  const tabs = document.querySelectorAll<HTMLButtonElement>('.gallery-tab');
-  const items = document.querySelectorAll<HTMLElement>('.gallery-item');
+  function initGallery() {
+    const tabs = document.querySelectorAll<HTMLButtonElement>('.gallery-tab');
+    const items = document.querySelectorAll<HTMLElement>('.gallery-item');
+    if (!tabs.length) return;
 
-  const active = 'border-accent bg-accent text-paper';
-  const inactive = 'border-[#D8CCB6] bg-transparent text-muted-dark';
+    const active = 'border-accent bg-accent text-paper';
+    const inactive = 'border-[#D8CCB6] bg-transparent text-muted-dark';
 
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      const filter = tab.dataset.filter;
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const filter = tab.dataset.filter;
 
-      tabs.forEach((t) => {
-        const on = t === tab;
-        t.setAttribute('aria-selected', String(on));
-        active.split(' ').forEach((c) => t.classList.toggle(c, on));
-        inactive.split(' ').forEach((c) => t.classList.toggle(c, !on));
-      });
+        tabs.forEach((t) => {
+          const on = t === tab;
+          t.setAttribute('aria-selected', String(on));
+          active.split(' ').forEach((c) => t.classList.toggle(c, on));
+          inactive.split(' ').forEach((c) => t.classList.toggle(c, !on));
+        });
 
-      items.forEach((item) => {
-        const show = filter === 'All' || item.dataset.cat === filter;
-        item.style.display = show ? '' : 'none';
+        items.forEach((item) => {
+          const show = filter === 'All' || item.dataset.cat === filter;
+          item.style.display = show ? '' : 'none';
+        });
       });
     });
-  });
+  }
+  document.addEventListener('astro:page-load', initGallery);
 </script>

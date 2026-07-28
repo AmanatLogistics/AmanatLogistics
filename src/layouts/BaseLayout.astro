@@ -1,8 +1,11 @@
 ---
 import '../styles/global.css';
+import { ClientRouter } from 'astro:transitions';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import WhatsAppButton from '../components/WhatsAppButton.astro';
 import { SITE } from '../consts';
+import { getContent } from '../lib/store';
 
 interface Props {
   title: string;
@@ -11,9 +14,11 @@ interface Props {
   active?: string;
 }
 
-const { title, description = SITE.description, active } = Astro.props;
+const { seo } = await getContent();
+const { title, description = seo.description, active } = Astro.props;
 const fullTitle = `${SITE.name} — ${title}`;
 const canonical = new URL(Astro.url.pathname, SITE.domain).href;
+const ogImage = new URL(seo.ogImage, SITE.domain).href;
 ---
 
 <!doctype html>
@@ -33,14 +38,14 @@ const canonical = new URL(Astro.url.pathname, SITE.domain).href;
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={`${SITE.domain}/images/og-image.jpg`} />
+    <meta property="og:image" content={ogImage} />
     <meta name="twitter:card" content="summary_large_image" />
 
     <!-- Fonts (matches approved design) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=Archivo:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Archivo:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
 
@@ -61,18 +66,28 @@ const canonical = new URL(Astro.url.pathname, SITE.domain).href;
         },
       })}
     />
+
+    <!-- App-like navigation: swap pages without a full reload -->
+    <ClientRouter />
   </head>
   <body>
+    <div id="nav-progress" aria-hidden="true"></div>
     <Header active={active} />
     <main>
       <slot />
     </main>
     <Footer />
+    <WhatsAppButton />
 
-    <!-- Subtle, accessible scroll-reveal -->
+    <!-- Subtle, accessible scroll-reveal — re-runs after each in-app navigation -->
     <script>
-      const els = document.querySelectorAll('.reveal');
-      if (els.length && 'IntersectionObserver' in window) {
+      function initReveal() {
+        const els = document.querySelectorAll('.reveal:not(.is-visible)');
+        if (!els.length) return;
+        if (!('IntersectionObserver' in window)) {
+          els.forEach((el) => el.classList.add('is-visible'));
+          return;
+        }
         const io = new IntersectionObserver(
           (entries) => {
             for (const e of entries) {
@@ -85,9 +100,32 @@ const canonical = new URL(Astro.url.pathname, SITE.domain).href;
           { threshold: 0.12 },
         );
         els.forEach((el) => io.observe(el));
-      } else {
-        els.forEach((el) => el.classList.add('is-visible'));
       }
+      document.addEventListener('astro:page-load', initReveal);
+
+      // Slim top progress bar during page navigation (view transitions)
+      const bar = document.getElementById('nav-progress');
+      let trickle: ReturnType<typeof setInterval> | undefined;
+      document.addEventListener('astro:before-preparation', () => {
+        if (!bar) return;
+        clearInterval(trickle);
+        bar.classList.add('loading');
+        bar.style.width = '25%';
+        let w = 25;
+        trickle = setInterval(() => {
+          w = Math.min(w + Math.random() * 12, 88);
+          bar.style.width = `${w}%`;
+        }, 220);
+      });
+      document.addEventListener('astro:page-load', () => {
+        if (!bar) return;
+        clearInterval(trickle);
+        bar.style.width = '100%';
+        setTimeout(() => {
+          bar.classList.remove('loading');
+          bar.style.width = '0';
+        }, 350);
+      });
     </script>
   </body>
 </html>

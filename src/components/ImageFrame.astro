@@ -43,17 +43,25 @@ const tones: Record<string, { pattern: string; text: string; border: string }> =
 };
 
 const t = tones[tone];
+// When used as an absolute background (hero/header), don't also apply `relative`
+// — the two conflict and break the layout. The frame is still a positioning
+// context for its inner layers either way.
+const isAbsolute = klass.includes('absolute');
 ---
 
-<div
-  class={`relative overflow-hidden ${klass}`}
-  style={`background:${t.pattern};border:1.5px dashed ${t.border};`}
->
-  <span
-    class="absolute inset-0 flex items-center justify-center px-4 text-center font-mono leading-relaxed"
-    style={`font-size:11px;color:${t.text};`}
-    set:html={label}
-  />
+<div class={`img-frame ${isAbsolute ? '' : 'relative'} overflow-hidden ${src ? '' : 'img-done'} ${klass}`}>
+  {/* Placeholder layer — always present, so a missing/failed image never leaves
+      an empty box. A real image renders on top and covers it once loaded. */}
+  <div
+    class="absolute inset-0 flex items-center justify-center px-4 text-center"
+    style={`background:${t.pattern};border:1.5px dashed ${t.border};`}
+  >
+    {
+      !src && (
+        <span class="font-mono leading-relaxed" style={`font-size:11px;color:${t.text};`} set:html={label} />
+      )
+    }
+  </div>
   {
     src && (
       <img
@@ -61,9 +69,28 @@ const t = tones[tone];
         alt={alt}
         loading={loading}
         decoding="async"
-        class="relative z-10 h-full w-full object-cover"
-        onerror="this.remove()"
+        fetchpriority={loading === 'eager' ? 'high' : 'auto'}
+        class="relative block h-full w-full object-cover"
+        onload="this.classList.add('img-loaded');this.closest('.img-frame').classList.add('img-done')"
+        onerror="this.closest('.img-frame').classList.add('img-done');this.remove()"
       />
     )
   }
 </div>
+
+<script>
+  // Images that were already cached can fire `load` before the inline handler
+  // attaches after a view transition — sweep and mark any completed images.
+  function sweepLoadedImages() {
+    document.querySelectorAll<HTMLImageElement>('.img-frame img').forEach((img) => {
+      if (img.complete && img.naturalWidth > 0) {
+        img.classList.add('img-loaded');
+        img.closest('.img-frame')?.classList.add('img-done');
+      } else if (img.complete) {
+        img.closest('.img-frame')?.classList.add('img-done');
+        img.remove();
+      }
+    });
+  }
+  document.addEventListener('astro:page-load', sweepLoadedImages);
+</script>

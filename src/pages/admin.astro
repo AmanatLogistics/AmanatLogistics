@@ -1,0 +1,845 @@
+---
+/**
+ * Admin panel — password-protected content editor.
+ * Login: password checked against ADMIN_PASSWORD (see .env.example).
+ * Everything editable here saves instantly to the live site — no code, no redeploy.
+ *
+ * NOTE: the dashboard DOM is rendered client-side, so the <style> below is
+ * `is:global` — Astro's default scoped styles would not reach JS-created elements.
+ */
+import { isAdmin } from '../lib/auth';
+import { getContent } from '../lib/store';
+import { GALLERY_CATS } from '../consts';
+
+export const prerender = false;
+
+const authed = await isAdmin(Astro.request);
+const content = authed ? await getContent() : null;
+const cats = GALLERY_CATS.filter((c) => c !== 'All');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Amanat Admin</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style is:global>
+      :root {
+        --burg: #63273c;
+        --burg-dark: #4a1d2e;
+        --burg-soft: #f3e6ec;
+        --cream: #f4efe6;
+        --paper: #ffffff;
+        --line: #e5dccb;
+        --ink: #2c1820;
+        --muted: #77685c;
+        --gold: #b08a48;
+        --ok: #2e6b0e;
+        --ok-bg: #e9f3de;
+        --err: #a32d2d;
+        --err-bg: #fbe9e9;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        font-family: 'Archivo', system-ui, sans-serif;
+        background: var(--cream);
+        color: var(--ink);
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ===================== top bar ===================== */
+      .topbar {
+        position: sticky; top: 0; z-index: 40;
+        background: var(--burg); color: #f8f3e9;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 20px; height: 58px;
+        box-shadow: 0 2px 10px rgba(74, 29, 46, 0.25);
+      }
+      .brand { display: flex; align-items: center; gap: 10px; }
+      .brand svg { width: 30px; height: auto; color: #f8f3e9; }
+      .brand b { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+      .brand small { font-size: 11px; opacity: 0.7; display: block; margin-top: 1px; }
+      .topbar .actions { display: flex; gap: 10px; align-items: center; }
+      .topbar a.view {
+        color: #f8f3e9; font-size: 13px; font-weight: 600; text-decoration: none;
+        padding: 8px 14px; border: 1px solid rgba(248, 243, 233, 0.35); border-radius: 7px;
+      }
+      .topbar a.view:hover { background: rgba(248, 243, 233, 0.12); }
+      .topbar button.logout {
+        background: transparent; color: #e9cdd9; border: none; font-family: inherit;
+        font-size: 13px; font-weight: 600; cursor: pointer; padding: 8px 6px;
+      }
+      .topbar button.logout:hover { color: #fff; }
+
+      /* ===================== shell ===================== */
+      .shell {
+        display: grid; grid-template-columns: 232px 1fr;
+        max-width: 1150px; margin: 0 auto; gap: 26px;
+        padding: 26px 20px 90px;
+        align-items: start;
+      }
+      /* sidebar */
+      .side {
+        position: sticky; top: 84px;
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+        padding: 10px; display: flex; flex-direction: column; gap: 2px;
+      }
+      .side .side-title {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--muted); padding: 8px 12px 6px;
+      }
+      .navitem {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border-radius: 8px; border: none; background: transparent;
+        font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted);
+        cursor: pointer; text-align: left; width: 100%; position: relative;
+      }
+      .navitem svg { width: 17px; height: 17px; flex: none; }
+      .navitem:hover { background: var(--cream); color: var(--ink); }
+      .navitem.active { background: var(--burg); color: #f8f3e9; }
+      .navitem .dirty {
+        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+        width: 7px; height: 7px; border-radius: 50%; background: var(--gold); display: none;
+      }
+      .navitem.is-dirty .dirty { display: block; }
+
+      /* ===================== section panels ===================== */
+      .panel { display: none; }
+      .panel.active { display: block; }
+      .panel-head { margin-bottom: 16px; }
+      .panel-head h1 { margin: 0 0 4px; font-size: 20px; font-weight: 800; color: var(--burg); letter-spacing: -0.01em; }
+      .panel-head p { margin: 0; font-size: 13.5px; color: var(--muted); line-height: 1.5; }
+
+      .sheet {
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+        padding: 20px;
+      }
+
+      /* fields */
+      .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      .fields .f.wide { grid-column: 1 / -1; }
+      .f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .f .lbl { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+      input[type='text'], select, textarea {
+        width: 100%; border: 1px solid #dcd2bd; border-radius: 8px;
+        padding: 10px 12px; font-size: 14px; font-family: inherit;
+        background: #fdfcf9; color: var(--ink); outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      input[type='text']:focus, select:focus {
+        border-color: var(--gold); box-shadow: 0 0 0 3px rgba(176, 138, 72, 0.15); background: #fff;
+      }
+      select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%2377685C' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+      /* image picker */
+      .imgpick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .imgpick-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .clearimg-btn { color: var(--err); }
+      .clearimg-btn:hover { border-color: var(--err); background: var(--err-bg); }
+      .clearimg-btn[hidden] { display: none; }
+      .imgpick .thumbwrap {
+        width: 84px; height: 62px; border-radius: 8px; overflow: hidden; flex: none;
+        border: 1px solid var(--line); position: relative;
+        background: repeating-linear-gradient(45deg, #efe7d6, #efe7d6 7px, #e8dfc9 7px, #e8dfc9 14px);
+      }
+      .imgpick .thumbwrap::after {
+        content: 'No photo'; position: absolute; inset: 0; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 600; color: #a4906a;
+      }
+      .imgpick img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+      .imgpick img:not([src]) { display: none; }
+
+      /* list rows */
+      .rows { display: flex; flex-direction: column; gap: 12px; }
+      .rowcard {
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+        padding: 16px; position: relative;
+      }
+      .rowcard .fields { padding-right: 30px; }
+      .rowcard .rm {
+        position: absolute; top: 10px; right: 10px;
+        width: 28px; height: 28px; border-radius: 7px; border: none; background: transparent;
+        color: #b9a89a; cursor: pointer; font-size: 15px; line-height: 1;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .rowcard .rm:hover { background: var(--err-bg); color: var(--err); }
+
+      /* gallery grid */
+      .photogrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+      .photocard {
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+        overflow: hidden; position: relative; display: flex; flex-direction: column;
+      }
+      .photocard .pimg {
+        height: 128px; position: relative;
+        background: repeating-linear-gradient(45deg, #efe7d6, #efe7d6 8px, #e8dfc9 8px, #e8dfc9 16px);
+      }
+      .photocard .pimg::after {
+        content: 'No photo yet — upload one'; position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 11px; font-weight: 600; color: #a4906a;
+      }
+      .photocard .pimg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+      .photocard .pimg img:not([src]) { display: none; }
+      .photocard .pbody { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .photocard .rm {
+        position: absolute; top: 8px; right: 8px; z-index: 2;
+        width: 26px; height: 26px; border-radius: 6px; border: none;
+        background: rgba(44, 24, 32, 0.55); color: #fff; cursor: pointer; font-size: 13px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .photocard .rm:hover { background: var(--err); }
+      .photocard .upload-btn { width: 100%; }
+
+      /* buttons */
+      .btn {
+        font-family: inherit; font-size: 13.5px; font-weight: 700;
+        border-radius: 8px; padding: 10px 18px; cursor: pointer;
+        border: 1px solid #dcd2bd; background: var(--paper); color: var(--ink);
+        transition: all 0.15s;
+      }
+      .btn:hover { border-color: var(--gold); }
+      .btn.primary { background: var(--burg); border-color: var(--burg); color: #f8f3e9; }
+      .btn.primary:hover { background: var(--burg-dark); }
+      .btn.sm { padding: 8px 12px; font-size: 12.5px; font-weight: 600; }
+      .btn.ghost { border-style: dashed; color: var(--muted); background: transparent; }
+      .btn.ghost:hover { color: var(--burg); border-color: var(--gold); }
+      .btn:disabled { opacity: 0.55; cursor: wait; }
+
+      /* save bar */
+      .savebar {
+        display: flex; align-items: center; gap: 14px;
+        margin-top: 16px; padding: 14px 16px;
+        background: var(--paper); border: 1px solid var(--line); border-radius: 12px;
+      }
+      .savebar .note { font-size: 12.5px; color: var(--muted); }
+
+      .addwrap { margin-top: 12px; }
+
+      /* toast */
+      .toast {
+        position: fixed; right: 20px; bottom: 20px; z-index: 60;
+        display: flex; align-items: center; gap: 10px;
+        background: var(--ink); color: #f6f1e8;
+        border-radius: 10px; padding: 13px 18px; font-size: 13.5px; font-weight: 600;
+        box-shadow: 0 8px 28px rgba(44, 24, 32, 0.35);
+        transform: translateY(90px); opacity: 0; transition: all 0.3s ease;
+        pointer-events: none; max-width: 340px;
+      }
+      .toast.show { transform: none; opacity: 1; }
+      .toast.ok { background: var(--ok); }
+      .toast.err { background: var(--err); }
+
+      /* ===================== login ===================== */
+      .login {
+        min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        padding: 20px;
+        background: linear-gradient(160deg, var(--burg) 0%, var(--burg-dark) 60%, #38101f 100%);
+      }
+      .login form {
+        background: var(--paper); border-radius: 16px;
+        padding: 40px 36px; width: 100%; max-width: 400px;
+        display: flex; flex-direction: column; gap: 16px;
+        box-shadow: 0 24px 60px rgba(20, 5, 12, 0.45);
+      }
+      .login .mark { display: flex; justify-content: center; margin-bottom: 4px; }
+      .login .mark svg { width: 54px; height: auto; color: var(--burg); }
+      .login h1 { margin: 0; font-size: 21px; font-weight: 800; color: var(--burg); text-align: center; }
+      .login p { margin: 0 0 4px; font-size: 13.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+      .login input[type='password'] {
+        border: 1px solid #dcd2bd; border-radius: 8px; padding: 13px 14px;
+        font-size: 15px; font-family: inherit; outline: none; width: 100%;
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      .login input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(176, 138, 72, 0.15); }
+      .login .err-msg {
+        display: none; font-size: 13px; font-weight: 600; color: var(--err);
+        background: var(--err-bg); border-radius: 8px; padding: 10px 12px; text-align: center;
+      }
+      .login a.back { color: var(--muted); font-size: 13px; text-decoration: none; text-align: center; }
+      .login a.back:hover { color: var(--burg); }
+
+      /* ===================== responsive ===================== */
+      @media (max-width: 860px) {
+        .shell { grid-template-columns: 1fr; gap: 16px; padding: 16px 14px 80px; }
+        .side {
+          position: static; flex-direction: row; overflow-x: auto; gap: 6px; padding: 8px;
+        }
+        .side .side-title { display: none; }
+        .navitem { width: auto; white-space: nowrap; padding: 9px 13px; }
+        .navitem .dirty { position: static; transform: none; margin-left: 6px; }
+        .fields { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    {
+      !authed ? (
+        <div class="login">
+          <form id="login-form">
+            <div class="mark">
+              <svg viewBox="0 0 500 340" fill="currentColor" aria-hidden="true">
+                <path d="M24 188 Q50 156 104 150 Q294 50 482 38 Q300 108 176 184 Q268 214 372 302 Q250 232 150 202 Q74 206 24 188 Z" />
+              </svg>
+            </div>
+            <h1>Amanat Admin</h1>
+            <p>Sign in to edit your website — text, photos, and contact details. Changes go live instantly.</p>
+            <input type="password" name="password" placeholder="Admin password" autofocus autocomplete="current-password" />
+            <button class="btn primary" type="submit" style="padding:13px;">Sign in</button>
+            <span class="err-msg" id="login-err">Wrong password.</span>
+            <a class="back" href="/">← Back to website</a>
+          </form>
+        </div>
+      ) : (
+        <>
+          <div class="topbar">
+            <div class="brand">
+              <svg viewBox="0 0 500 340" fill="currentColor" aria-hidden="true">
+                <path d="M24 188 Q50 156 104 150 Q294 50 482 38 Q300 108 176 184 Q268 214 372 302 Q250 232 150 202 Q74 206 24 188 Z" />
+              </svg>
+              <div>
+                <b>Amanat Admin</b>
+                <small>Changes go live instantly</small>
+              </div>
+            </div>
+            <div class="actions">
+              <a class="view" href="/" target="_blank">View website ↗</a>
+              <form method="post" action="/api/admin/logout" style="margin:0;">
+                <button class="logout" type="submit">Log out</button>
+              </form>
+            </div>
+          </div>
+          <div class="shell">
+            <nav class="side" id="sidenav">
+              <span class="side-title">Edit website</span>
+            </nav>
+            <main id="app" />
+          </div>
+          <div class="toast" id="toast" role="status" aria-live="polite" />
+          <script type="application/json" id="__content" set:html={JSON.stringify(content).replace(/</g, '\\u003c')} />
+          <script type="application/json" id="__cats" set:html={JSON.stringify(cats).replace(/</g, '\\u003c')} />
+        </>
+      )
+    }
+
+    <script>
+      // ---------------- login ----------------
+      const loginForm = document.getElementById('login-form') as HTMLFormElement | null;
+      loginForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = loginForm.querySelector('button')!;
+        const err = document.getElementById('login-err')!;
+        btn.disabled = true;
+        err.style.display = 'none';
+        const password = (loginForm.elements.namedItem('password') as HTMLInputElement).value;
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+        }).catch(() => null);
+        if (res?.ok) location.reload();
+        else {
+          err.textContent = (await res?.json().catch(() => null))?.error || 'Login failed.';
+          err.style.display = 'block';
+          btn.disabled = false;
+        }
+      });
+
+      // ---------------- dashboard ----------------
+      const app = document.getElementById('app');
+      if (app) {
+        const content = JSON.parse(document.getElementById('__content')!.textContent!);
+        const cats: string[] = JSON.parse(document.getElementById('__cats')!.textContent!);
+        const sidenav = document.getElementById('sidenav')!;
+        const toast = document.getElementById('toast')!;
+
+        type Field =
+          | { key: string; label: string; type?: 'text'; wide?: boolean; ph?: string }
+          | { key: string; label: string; type: 'image' }
+          | { key: string; label: string; type: 'select'; options: string[] };
+
+        interface Section {
+          id: string;
+          title: string;
+          hint: string;
+          kind: 'object' | 'list';
+          layout?: 'grid';
+          icon: string;
+          fields: Field[];
+          addLabel?: string;
+          itemName?: string;
+        }
+
+        const I = {
+          home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>',
+          stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+          phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c1 .3 2 .6 3 .7a2 2 0 0 1 1.6 2Z"/></svg>',
+          box: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+          globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
+          photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m5 19 5.5-5.5L14 17l3-3 2.5 2.5"/></svg>',
+          users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4M17.5 14.2a6.5 6.5 0 0 1 4 5.8"/></svg>',
+          tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0l-7-7A2 2 0 0 1 3 12.2V5a2 2 0 0 1 2-2h7.2a2 2 0 0 1 1.4.6l7 7a2 2 0 0 1 0 2.8Z"/><circle cx="8" cy="8" r="1.5"/></svg>',
+        };
+
+        const sections: Section[] = [
+          {
+            id: 'brand', title: 'Logo & brand', icon: I.tag, kind: 'object',
+            hint: 'Upload your logo. It replaces the built-in mark in the header, footer, and browser tab. Use a PNG with a transparent background for best results.',
+            fields: [
+              { key: 'logo', label: 'Logo — colour version (for the light header)', type: 'image' },
+              { key: 'logoLight', label: 'Logo — white version (for the dark footer)', type: 'image' },
+            ],
+          },
+          {
+            id: 'hero', title: 'Home page — hero', icon: I.home, kind: 'object',
+            hint: 'The big headline at the top of the Home page, and its background photo.',
+            fields: [
+              { key: 'eyebrow', label: 'Small label above headline', ph: 'Kandahar, Afghanistan' },
+              { key: 'title', label: 'Headline', wide: true, ph: 'Premium Figs & Dry Fruits…' },
+              { key: 'subtitle', label: 'Sub-headline', wide: true, ph: 'Trusted export and freight partner…' },
+              { key: 'image', label: 'Background photo (wide, at least 2400px)', type: 'image' },
+            ],
+          },
+          {
+            id: 'stats', title: 'Trust numbers', icon: I.stats, kind: 'list',
+            addLabel: 'Add a number', itemName: 'number',
+            hint: 'The statistics bar on the Home page — tons delivered, orders completed, and so on.',
+            fields: [
+              { key: 'value', label: 'Number', ph: 'e.g. 500+' },
+              { key: 'label', label: 'Label', ph: 'e.g. Tons Delivered' },
+            ],
+          },
+          {
+            id: 'services', title: 'Service descriptions', icon: I.box, kind: 'object',
+            hint: 'The two big service cards shown on the Home page and Services page.',
+            fields: [
+              { key: 'exportTitle', label: 'Service 1 — title', ph: 'Export & Freight' },
+              { key: 'exportText', label: 'Service 1 — description', wide: true },
+              { key: 'shoppingTitle', label: 'Service 2 — title', ph: 'Global Personal Shopping' },
+              { key: 'shoppingText', label: 'Service 2 — description', wide: true },
+            ],
+          },
+          {
+            id: 'freightModes', title: 'Freight modes', icon: I.box, kind: 'list',
+            addLabel: 'Add a freight mode', itemName: 'mode',
+            hint: 'The Sea / Air / Land cards under Export & Freight on the Services page.',
+            fields: [
+              { key: 'title', label: 'Mode', ph: 'e.g. Sea Freight' },
+              { key: 'text', label: 'Description', wide: true },
+            ],
+          },
+          {
+            id: 'shopping', title: 'Shopping — intro & photo', icon: I.tag, kind: 'object',
+            hint: 'The Global Personal Shopping intro paragraph and photo on the Services page.',
+            fields: [
+              { key: 'description', label: 'Intro paragraph', wide: true },
+              { key: 'image', label: 'Photo (parcels / packed orders)', type: 'image' },
+            ],
+          },
+          {
+            id: 'shoppingSteps', title: 'Shopping — how it works', icon: I.tag, kind: 'list',
+            addLabel: 'Add a step', itemName: 'step',
+            hint: 'The numbered steps under Global Personal Shopping. Numbers are added automatically.',
+            fields: [
+              { key: 'title', label: 'Step title', ph: 'e.g. We place the order' },
+              { key: 'text', label: 'Step description', wide: true },
+            ],
+          },
+          {
+            id: 'why', title: 'Why Amanat cards', icon: I.stats, kind: 'list',
+            addLabel: 'Add a card', itemName: 'card',
+            hint: 'The three reason cards on the Home page ("Why Amanat").',
+            fields: [
+              { key: 'title', label: 'Card title', ph: 'e.g. Authentic Afghan origin' },
+              { key: 'text', label: 'Card text', wide: true },
+            ],
+          },
+          {
+            id: 'about', title: 'About — our story', icon: I.users, kind: 'object',
+            hint: 'The three story paragraphs on the About page.',
+            fields: [
+              { key: 'p1', label: 'Paragraph 1', wide: true },
+              { key: 'p2', label: 'Paragraph 2', wide: true },
+              { key: 'p3', label: 'Paragraph 3', wide: true },
+            ],
+          },
+          {
+            id: 'values', title: 'Mission & values', icon: I.tag, kind: 'list',
+            addLabel: 'Add a value', itemName: 'value',
+            hint: 'The value cards on the About page (Authenticity, Quality…).',
+            fields: [
+              { key: 'title', label: 'Value', ph: 'e.g. Authenticity' },
+              { key: 'line', label: 'One-line description', wide: true },
+            ],
+          },
+          {
+            id: 'contact', title: 'Contact details', icon: I.phone, kind: 'object',
+            hint: 'Used in the footer, the Contact page, the WhatsApp button, and quote emails.',
+            fields: [
+              { key: 'phoneExport', label: 'Export / logistics phone', ph: '+93 …' },
+              { key: 'phoneShopping', label: 'Shopping phone', ph: '+93 …' },
+              { key: 'email', label: 'Email address', ph: 'info@amanatlogistics.com' },
+              { key: 'location', label: 'Location', ph: 'Kandahar, Afghanistan' },
+            ],
+          },
+          {
+            id: 'exports', title: 'Products we export', icon: I.box, kind: 'list',
+            addLabel: 'Add a product', itemName: 'product',
+            hint: 'The product cards on the Services page (figs, dried fruits, nuts…).',
+            fields: [
+              { key: 'name', label: 'Product name', ph: 'e.g. Figs' },
+              { key: 'alt', label: 'Short photo description', ph: 'e.g. Premium dried Kandahari figs' },
+              { key: 'img', label: 'Photo', type: 'image' },
+            ],
+          },
+          {
+            id: 'destinations', title: 'Destination countries', icon: I.globe, kind: 'list',
+            addLabel: 'Add a country', itemName: 'country',
+            hint: 'The country cards on the Routes & Coverage page. Add new markets here as you expand.',
+            fields: [
+              { key: 'name', label: 'Country', ph: 'e.g. Germany' },
+              { key: 'mode', label: 'Freight modes', ph: 'e.g. Air & sea freight' },
+              { key: 'delivers', label: 'What we deliver there', ph: 'e.g. Figs · dry fruits · nuts' },
+            ],
+          },
+          {
+            id: 'gallery', title: 'Gallery photos', icon: I.photo, kind: 'list', layout: 'grid',
+            addLabel: 'Add a photo', itemName: 'photo',
+            hint: 'Photos shown on the Gallery page. Visitors can filter them by category.',
+            fields: [
+              { key: 'img', label: 'Photo', type: 'image' },
+              { key: 'cat', label: 'Category', type: 'select', options: cats },
+              { key: 'alt', label: 'Caption', ph: 'e.g. Cargo loading at the warehouse' },
+            ],
+          },
+          {
+            id: 'team', title: 'Team members', icon: I.users, kind: 'list',
+            addLabel: 'Add a person', itemName: 'person',
+            hint: 'The leadership cards on the About page.',
+            fields: [
+              { key: 'name', label: 'Full name', ph: 'e.g. Abdul Amanat' },
+              { key: 'role', label: 'Role', ph: 'e.g. Founder & Managing Director' },
+              { key: 'img', label: 'Photo (square works best)', type: 'image' },
+            ],
+          },
+          {
+            id: 'platforms', title: 'Shopping platforms', icon: I.tag, kind: 'list',
+            addLabel: 'Add a platform', itemName: 'platform',
+            hint: 'Store logos shown under "Global Personal Shopping" on the Services page.',
+            fields: [
+              { key: 'name', label: 'Store name', ph: 'e.g. Amazon' },
+              { key: 'img', label: 'Logo', type: 'image' },
+            ],
+          },
+          {
+            id: 'images', title: 'Page photos', icon: I.photo, kind: 'object',
+            hint: 'The large decorative photos on the About and Routes pages.',
+            fields: [
+              { key: 'aboutHeader', label: 'About page — header background', type: 'image' },
+              { key: 'aboutStory', label: 'About page — story photo (orchard)', type: 'image' },
+              { key: 'worldMap', label: 'Routes — world map graphic', type: 'image' },
+            ],
+          },
+          {
+            id: 'pageHeaders', title: 'Page titles', icon: I.tag, kind: 'object',
+            hint: 'The title and subtitle in the coloured band at the top of each inner page.',
+            fields: [
+              { key: 'services.title', label: 'Services — title', ph: 'Our Services' },
+              { key: 'services.subtitle', label: 'Services — subtitle', wide: true },
+              { key: 'about.title', label: 'About — title', ph: 'About Amanat Logistics' },
+              { key: 'about.subtitle', label: 'About — subtitle', wide: true },
+              { key: 'routes.title', label: 'Routes — title', ph: 'Routes & Coverage' },
+              { key: 'routes.subtitle', label: 'Routes — subtitle', wide: true },
+              { key: 'gallery.title', label: 'Gallery — title', ph: 'Gallery' },
+              { key: 'gallery.subtitle', label: 'Gallery — subtitle', wide: true },
+              { key: 'contact.title', label: 'Contact — title', ph: 'Contact Us' },
+              { key: 'contact.subtitle', label: 'Contact — subtitle', wide: true },
+            ],
+          },
+          {
+            id: 'seo', title: 'Search & social', icon: I.globe, kind: 'object',
+            hint: 'The description shown by Google, and the preview image shown when the site is shared.',
+            fields: [
+              { key: 'description', label: 'Site description (for Google)', wide: true },
+              { key: 'ogImage', label: 'Social share image (1200×630)', type: 'image' },
+            ],
+          },
+        ];
+
+        const esc = (s: unknown) =>
+          String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+        function fieldHtml(f: Field, value: string): string {
+          if (f.type === 'image') {
+            const src = value ? ` src="${esc(value)}"` : '';
+            return `<div class="f wide" data-key="${f.key}" data-type="image">
+              <span class="lbl">${esc(f.label)}</span>
+              <span class="imgpick">
+                <span class="thumbwrap"><img${src} alt="" onerror="this.removeAttribute('src')" /></span>
+                <input type="hidden" value="${esc(value)}" />
+                <span class="imgpick-actions">
+                  <button type="button" class="btn sm upload-btn">${value ? 'Replace photo…' : 'Upload photo…'}</button>
+                  <button type="button" class="btn sm clearimg-btn"${value ? '' : ' hidden'}>Remove</button>
+                </span>
+              </span></div>`;
+          }
+          if (f.type === 'select') {
+            const opts = f.options
+              .map((o) => `<option ${o === value ? 'selected' : ''}>${esc(o)}</option>`)
+              .join('');
+            return `<div class="f" data-key="${f.key}"><span class="lbl">${esc(f.label)}</span><select>${opts}</select></div>`;
+          }
+          const wide = 'wide' in f && f.wide ? ' wide' : '';
+          const ph = 'ph' in f && f.ph ? ` placeholder="${esc(f.ph)}"` : '';
+          return `<div class="f${wide}" data-key="${f.key}"><span class="lbl">${esc(f.label)}</span><input type="text" value="${esc(value)}"${ph} /></div>`;
+        }
+
+        function photoCardHtml(s: Section, item: Record<string, string>): string {
+          const img = item.img || '';
+          const src = img ? ` src="${esc(img)}"` : '';
+          const selects = s.fields
+            .filter((f) => f.type !== 'image')
+            .map((f) => fieldHtml(f, item[f.key] ?? ''))
+            .join('');
+          return `<div class="photocard row-item">
+            <button type="button" class="rm remove-btn" title="Remove this photo">✕</button>
+            <div class="pimg f" data-key="img" data-type="image">
+              <img${src} alt="" onerror="this.removeAttribute('src')" />
+              <input type="hidden" value="${esc(img)}" />
+            </div>
+            <div class="pbody">
+              <div class="imgpick-actions">
+                <button type="button" class="btn sm upload-btn">${img ? 'Replace photo…' : 'Upload photo…'}</button>
+                <button type="button" class="btn sm clearimg-btn"${img ? '' : ' hidden'}>Clear</button>
+              </div>
+              ${selects}
+            </div>
+          </div>`;
+        }
+
+        function rowHtml(s: Section, item: Record<string, string>): string {
+          if (s.layout === 'grid') return photoCardHtml(s, item);
+          const inner = s.fields.map((f) => fieldHtml(f, item[f.key] ?? '')).join('');
+          return `<div class="rowcard row-item">
+            <button type="button" class="rm remove-btn" title="Remove">✕</button>
+            <div class="fields">${inner}</div>
+          </div>`;
+        }
+
+        function sectionHtml(s: Section): string {
+          const data = content[s.id];
+          let body: string;
+          if (s.kind === 'object') {
+            body = `<div class="sheet"><div class="fields obj-fields">${s.fields
+              .map((f) => fieldHtml(f, data?.[f.key] ?? ''))
+              .join('')}</div></div>`;
+          } else {
+            const rows = (data ?? []).map((item: any) => rowHtml(s, item)).join('');
+            const wrap = s.layout === 'grid' ? 'photogrid' : 'rows';
+            body = `<div class="${wrap}">${rows}</div>
+              <div class="addwrap"><button type="button" class="btn ghost add-btn">+ ${esc(s.addLabel ?? 'Add')}</button></div>`;
+          }
+          return `<section class="panel" data-section="${s.id}">
+            <div class="panel-head"><h1>${esc(s.title)}</h1><p>${esc(s.hint)}</p></div>
+            ${body}
+            <div class="savebar">
+              <button type="button" class="btn primary save-btn">Save changes</button>
+              <span class="note">Saving publishes straight to the live website.</span>
+            </div>
+          </section>`;
+        }
+
+        // render
+        app!.innerHTML = sections.map(sectionHtml).join('');
+        sidenav.insertAdjacentHTML(
+          'beforeend',
+          sections
+            .map(
+              (s, i) =>
+                `<button type="button" class="navitem${i === 0 ? ' active' : ''}" data-nav="${s.id}">${s.icon}<span>${esc(s.title)}</span><span class="dirty" title="Unsaved changes"></span></button>`,
+            )
+            .join(''),
+        );
+        app!.querySelector('.panel')!.classList.add('active');
+
+        const byId = (id: string) => sections.find((s) => s.id === id)!;
+        const panelOf = (id: string) => app!.querySelector(`.panel[data-section="${id}"]`) as HTMLElement;
+        const navOf = (id: string) => sidenav.querySelector(`[data-nav="${id}"]`) as HTMLElement;
+
+        function showToast(msg: string, kind: 'ok' | 'err') {
+          toast.textContent = msg;
+          toast.className = `toast show ${kind}`;
+          setTimeout(() => toast.classList.remove('show'), 3200);
+        }
+
+        function markDirty(panel: HTMLElement, dirty: boolean) {
+          navOf(panel.dataset.section!)?.classList.toggle('is-dirty', dirty);
+        }
+
+        // nav switching
+        sidenav.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement).closest('.navitem') as HTMLElement | null;
+          if (!btn) return;
+          sidenav.querySelectorAll('.navitem').forEach((n) => n.classList.remove('active'));
+          btn.classList.add('active');
+          app!.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+          panelOf(btn.dataset.nav!).classList.add('active');
+          window.scrollTo({ top: 0 });
+        });
+
+        // dirty tracking
+        app!.addEventListener('input', (e) => {
+          const panel = (e.target as HTMLElement).closest('.panel') as HTMLElement | null;
+          if (panel) markDirty(panel, true);
+        });
+        window.addEventListener('beforeunload', (e) => {
+          if (sidenav.querySelector('.is-dirty')) {
+            e.preventDefault();
+            e.returnValue = ''; // required by Chrome to show the warning
+          }
+        });
+
+        // actions
+        app!.addEventListener('click', async (e) => {
+          const t = e.target as HTMLElement;
+          const panel = t.closest('.panel') as HTMLElement | null;
+          if (!panel) return;
+          const s = byId(panel.dataset.section!);
+
+          if (t.classList.contains('remove-btn')) {
+            t.closest('.row-item')?.remove();
+            markDirty(panel, true);
+          }
+
+          if (t.classList.contains('clearimg-btn')) {
+            const holder = (t.closest('.f[data-type=image]') ??
+              t.closest('.photocard')?.querySelector('.f[data-type=image]')) as HTMLElement | null;
+            if (holder) {
+              (holder.querySelector('input[type=hidden]') as HTMLInputElement).value = '';
+              holder.querySelector('img')?.removeAttribute('src');
+              const up = t.parentElement?.querySelector('.upload-btn') as HTMLElement | null;
+              if (up) up.textContent = 'Upload photo…';
+              t.setAttribute('hidden', '');
+              markDirty(panel, true);
+            }
+          }
+
+          if (t.classList.contains('add-btn')) {
+            const wrap = panel.querySelector('.rows, .photogrid')!;
+            wrap.insertAdjacentHTML('beforeend', rowHtml(s, {}));
+            markDirty(panel, true);
+            (wrap.lastElementChild as HTMLElement)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+
+          if (t.classList.contains('upload-btn')) {
+            // The image field this button belongs to: either the button sits inside it,
+            // or (photo cards) it's the image field within the same row/panel.
+            const holder = (t.closest('.f[data-type=image]') ??
+              (t.closest('.row-item') ?? panel).querySelector('.f[data-type=image]')) as HTMLElement;
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/jpeg,image/png,image/webp,image/avif,image/svg+xml';
+            input.onchange = async () => {
+              const file = input.files?.[0];
+              if (!file) return;
+              const btn = t as HTMLButtonElement;
+              btn.disabled = true;
+              btn.textContent = 'Uploading…';
+              const fd = new FormData();
+              fd.append('file', file);
+              // Logos (brand + shopping platforms) get auto-trimmed so they never look small.
+              const trim = panel.dataset.section === 'brand' || panel.dataset.section === 'platforms' ? '?trim=1' : '';
+              const res = await fetch(`/api/admin/upload${trim}`, { method: 'POST', body: fd }).catch(() => null);
+              const body = await res?.json().catch(() => null);
+              if (res?.ok && body?.url) {
+                (holder.querySelector('input[type=hidden]') as HTMLInputElement).value = body.url;
+                const img = holder.querySelector('img') as HTMLImageElement;
+                img.src = body.url;
+                btn.textContent = 'Replace photo…';
+                (btn.parentElement?.querySelector('.clearimg-btn') as HTMLElement | null)?.removeAttribute('hidden');
+                markDirty(panel, true);
+                showToast('Photo uploaded — remember to Save changes', 'ok');
+              } else {
+                showToast(body?.error || 'Upload failed. Try again.', 'err');
+                btn.textContent = 'Upload photo…';
+              }
+              btn.disabled = false;
+            };
+            input.click();
+          }
+
+          if (t.classList.contains('save-btn')) {
+            const readFields = (scope: Element): Record<string, string> => {
+              const out: Record<string, string> = {};
+              scope.querySelectorAll('.f').forEach((f) => {
+                const key = (f as HTMLElement).dataset.key!;
+                const el = f.querySelector('input[type=text], input[type=hidden], select') as
+                  | HTMLInputElement
+                  | HTMLSelectElement
+                  | null;
+                if (el) out[key] = el.value.trim();
+              });
+              return out;
+            };
+
+            // Rebuild dotted keys ("services.title") into nested objects.
+            const expandDots = (flat: Record<string, string>) => {
+              const out: Record<string, any> = {};
+              for (const [k, v] of Object.entries(flat)) {
+                if (!k.includes('.')) { out[k] = v; continue; }
+                const parts = k.split('.');
+                let cur = out;
+                for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]] ??= {};
+                cur[parts[parts.length - 1]] = v;
+              }
+              return out;
+            };
+
+            let value: unknown;
+            if (s.kind === 'object') {
+              value = expandDots(readFields(panel.querySelector('.obj-fields')!));
+            } else {
+              // A <select> always has a value, so a row counts as "filled" only
+              // when a non-select field (text/image) has content.
+              const selectKeys = new Set(s.fields.filter((f) => f.type === 'select').map((f) => f.key));
+              value = [...panel.querySelectorAll('.row-item')]
+                .map((row) => readFields(row))
+                .filter((o) => Object.entries(o).some(([k, v]) => v && !selectKeys.has(k)));
+            }
+
+            const btn = t as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            const res = await fetch('/api/admin/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [s.id]: value }),
+            }).catch(() => null);
+            const body = await res?.json().catch(() => null);
+            if (res?.ok) {
+              content[s.id] = value;
+              markDirty(panel, false);
+              showToast('Saved — your changes are live on the website ✓', 'ok');
+            } else {
+              showToast(body?.error || 'Save failed. Try again.', 'err');
+            }
+            btn.disabled = false;
+            btn.textContent = 'Save changes';
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

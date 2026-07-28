@@ -1,35 +1,41 @@
 @import 'tailwindcss';
 
 /* ============================================================
-   Amanat Logistics — brand theme (Tailwind v4, CSS-first)
-   Palette + type lifted directly from the approved design.
+   Amanat Logistics — design system (Tailwind v4, CSS-first)
+   Direction: warm "harvest export house" — amber-gold + wine +
+   ivory + pistachio, a characterful Fraunces display, generous
+   scale. Deliberately not the default cream/Caslon/terracotta look.
    ============================================================ */
 @theme {
-  /* Surfaces */
-  --color-cream: #f6f1e8; /* page background */
-  --color-paper: #fdfbf6; /* cards / light sections */
-  --color-sand: #f0e9dc; /* stats / CTA bands */
+  /* Warm paper surfaces */
+  --color-cream: #f4ecda; /* page background — warm ivory */
+  --color-paper: #fbf6ea; /* cards / light sections */
+  --color-sand: #eee1c8; /* bands / stats */
 
   /* Ink + dark surfaces */
-  --color-ink: #2b2621; /* body text + darkest surface */
-  --color-plum: #3d2233; /* aubergine — headers, footer, dark bands */
-  --color-plum-hover: #4a2439;
-  --color-olive: #43503a; /* secondary service / accents */
+  --color-ink: #2a1a12; /* espresso — body text + darkest surface */
+  --color-plum: #641f30; /* wine (brand) — dark bands, footer */
+  --color-plum-hover: #7e2a3f;
+  --color-fig: #35141d; /* deepest wine-black band */
+  --color-olive: #566237; /* pistachio — secondary service accent */
 
-  /* Accent + gold */
-  --color-accent: #8c5a2b; /* primary brand brown (buttons, links) */
-  --color-gold: #b08a48;
-  --color-gold-light: #d6b676;
+  /* Amber-gold accent (primary) + pomegranate pop */
+  --color-accent: #c0872e; /* warm amber-gold — CTAs, links */
+  --color-accent-deep: #9c6a1e;
+  --color-gold: #c0872e;
+  --color-gold-light: #e6bd6d;
+  --color-pom: #b23a2c; /* pomegranate — sparing highlight */
 
   /* Lines + muted text */
-  --color-line: #e2d8c6;
-  --color-muted: #6e6458;
-  --color-muted-dark: #5a5147;
-  --color-label: #8c6d3f; /* small uppercase eyebrow labels */
+  --color-line: #e3d6bd;
+  --color-muted: #6f5c48;
+  --color-muted-dark: #574636;
+  --color-label: #9b7530; /* eyebrow labels */
 
   /* Type */
-  --font-serif: 'Libre Caslon Text', Georgia, serif;
+  --font-serif: 'Fraunces', 'Georgia', serif;
   --font-sans: 'Archivo', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
 html {
@@ -42,32 +48,95 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Shared helpers -------------------------------------------------- */
+/* Fraunces optical/soft display settings */
+.font-serif {
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 40, 'WONK' 0;
+  letter-spacing: -0.012em;
+}
+
+/* Eyebrow — refined uppercase sans label */
 .eyebrow {
-  font-size: 0.75rem;
-  letter-spacing: 0.22em;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   font-weight: 600;
 }
 
-/* Gentle scroll-reveal — subtle, not "AI template" bouncy */
+/* ---- Scroll reveal ----
+   Content is ALWAYS visible (no JS dependency, never leaves blank
+   sections). A gentle load fade plays where motion is welcome. */
+.reveal {
+  opacity: 1;
+}
 @media (prefers-reduced-motion: no-preference) {
   .reveal {
-    opacity: 0;
-    transform: translateY(18px);
-    transition:
-      opacity 0.7s ease,
-      transform 0.7s ease;
+    animation: amn-fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  .reveal.is-visible {
+}
+@keyframes amn-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
     opacity: 1;
     transform: none;
   }
 }
 
-/* Form focus state */
+/* ---- Image loading: shimmer skeleton + fade-in ---- */
+@keyframes amn-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.img-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.32) 50%, transparent 70%);
+  animation: amn-shimmer 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+.img-frame.img-done::before {
+  content: none;
+}
+.img-frame img {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.img-frame img.img-loaded {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .img-frame::before { animation: none; }
+  .reveal { animation: none; }
+}
+
+/* ---- Top progress bar during page navigation ---- */
+#nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  z-index: 200;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-gold-light));
+  box-shadow: 0 0 8px rgba(198, 137, 47, 0.55);
+  opacity: 0;
+  transition: width 0.25s ease, opacity 0.3s ease;
+  pointer-events: none;
+}
+#nav-progress.loading {
+  opacity: 1;
+}
+
+/* ---- Form focus ---- */
 .amn-field:focus {
   border-color: var(--color-gold) !important;
   outline: none;

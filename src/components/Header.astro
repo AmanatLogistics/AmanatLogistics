@@ -1,10 +1,13 @@
 ---
 import { NAV, SITE } from '../consts';
+import SwallowMark from './SwallowMark.astro';
+import { getContent } from '../lib/store';
 
 interface Props {
   active?: string;
 }
 const { active } = Astro.props;
+const { brand } = await getContent();
 ---
 
 <header
@@ -13,12 +16,20 @@ const { active } = Astro.props;
 >
   <div class="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-6 px-5 md:h-[84px] md:px-10">
     <!-- Logo / wordmark -->
-    <a href="/" class="flex items-center gap-3.5" aria-label={`${SITE.name} — Home`}>
-      <img src="/images/logo.svg" alt="" width="52" height="52" class="h-11 w-11 rounded-lg md:h-[52px] md:w-[52px]" onerror="this.style.display='none'" />
-      <span class="flex flex-col leading-none">
-        <span class="font-serif text-[18px] font-bold text-plum md:text-[20px]">{SITE.name}</span>
-        <span class="eyebrow text-[10px] text-label md:text-[10.5px]">{SITE.tagline}</span>
-      </span>
+    <a href="/" class="flex items-center gap-3" aria-label={`${SITE.name} — Home`}>
+      {
+        brand.logo ? (
+          <img src={brand.logo} alt={SITE.name} class="h-12 w-auto max-w-[240px] object-contain md:h-[60px]" />
+        ) : (
+          <>
+            <SwallowMark class="w-10 text-plum md:w-[46px]" />
+            <span class="flex flex-col leading-[1.05]">
+              <span class="font-sans text-[21px] font-extrabold tracking-tight text-plum md:text-[24px]">Amanat</span>
+              <span class="text-[9.5px] font-semibold tracking-[0.3em] text-label md:text-[10.5px]">LOGISTICS</span>
+            </span>
+          </>
+        )
+      }
     </a>
 
     <!-- Desktop nav -->
@@ -89,13 +100,17 @@ const { active } = Astro.props;
 </header>
 
 <script>
-  const toggle = document.getElementById('menu-toggle');
-  const menu = document.getElementById('mobile-menu');
-  toggle?.addEventListener('click', () => {
-    const open = menu?.classList.toggle('hidden');
-    const isOpen = open === false;
-    menu?.classList.toggle('flex', isOpen);
-    toggle.setAttribute('aria-expanded', String(isOpen));
-    toggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
-  });
+  function initMenu() {
+    const toggle = document.getElementById('menu-toggle');
+    const menu = document.getElementById('mobile-menu');
+    if (!toggle || !menu) return;
+    toggle.addEventListener('click', () => {
+      const open = menu.classList.toggle('hidden');
+      const isOpen = open === false;
+      menu.classList.toggle('flex', isOpen);
+      toggle.setAttribute('aria-expanded', String(isOpen));
+      toggle.setAttribute('aria-label', isOpen ? 'Close menu' : 'Open menu');
+    });
+  }
+  document.addEventListener('astro:page-load', initMenu);
 </script>

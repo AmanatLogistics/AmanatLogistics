@@ -1,0 +1,27 @@
+---
+import { getContent } from '../lib/store';
+
+// Export/logistics line drives the WhatsApp chat. Strip non-digits for wa.me.
+const { contact: CONTACT } = await getContent();
+const waNumber = CONTACT.phoneExport.replace(/\D/g, '');
+const prefill = encodeURIComponent(
+  "Hello Amanat Logistics, I'd like to ask about your export / shipping services.",
+);
+const href = `https://wa.me/${waNumber}?text=${prefill}`;
+---
+
+<a
+  href={href}
+  target="_blank"
+  rel="noopener noreferrer"
+  transition:persist
+  aria-label="Chat with Amanat Logistics on WhatsApp"
+  class="group fixed bottom-5 right-5 z-40 flex items-center gap-2.5 rounded-full bg-[#25D366] py-3 pl-3 pr-3 text-white shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition-transform hover:scale-105 sm:pr-5"
+>
+  <svg width="26" height="26" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+    <path
+      d="M16.004 0h-.008C7.174 0 0 7.176 0 16c0 3.5 1.128 6.742 3.046 9.376L1.05 31.31l6.14-1.962A15.9 15.9 0 0 0 16.004 32C24.826 32 32 24.822 32 16S24.826 0 16.004 0zm9.31 22.594c-.386 1.09-1.918 1.994-3.14 2.258-.836.178-1.928.32-5.604-1.204-4.7-1.948-7.726-6.724-7.962-7.034-.226-.31-1.9-2.53-1.9-4.826 0-2.296 1.166-3.424 1.636-3.904.386-.394.98-.574 1.55-.574.184 0 .35.01.5.017.446.02.67.046.964.748.366.88 1.256 3.176 1.362 3.398.108.222.216.522.066.832-.14.32-.264.454-.486.71-.222.256-.432.452-.654.726-.204.24-.434.498-.176.942.258.434 1.148 1.892 2.464 3.064 1.698 1.512 3.094 1.98 3.582 2.184.364.15.798.114 1.064-.174.338-.37.754-.984 1.178-1.588.3-.432.68-.486 1.076-.336.404.14 2.69 1.268 3.15 1.498.46.23.766.34.878.53.11.19.11 1.09-.276 2.18z"
+    ></path>
+  </svg>
+  <span class="hidden text-[14px] font-semibold sm:inline">Chat on WhatsApp</span>
+</a>

@@ -1,0 +1,81 @@
+---
+/**
+ * Export route diagram — Kandahar origin with gold arcs sweeping to each
+ * destination. A clean, on-brand signature (replaces the empty map placeholder).
+ * Destinations are positioned on a stylised field, not a literal map, so it stays
+ * legible and elegant at any size.
+ */
+interface Props {
+  class?: string;
+  destinations?: { name: string }[];
+}
+const { class: klass = '', destinations = [] } = Astro.props;
+
+const origin = { x: 344, y: 206, label: 'Kandahar' };
+// Fixed, balanced positions; first four destinations get a labelled node.
+const slots = [
+  { x: 452, y: 262 },
+  { x: 214, y: 250 },
+  { x: 176, y: 120 },
+  { x: 300, y: 96 },
+  { x: 468, y: 150 },
+];
+const nodes = (destinations.length ? destinations : [
+  { name: 'India' }, { name: 'Canada' }, { name: 'United Kingdom' }, { name: 'United States' },
+]).slice(0, 5).map((d, i) => ({ ...slots[i], name: d.name }));
+
+// quadratic arc with a perpendicular bow for a graceful sweep
+function arc(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const bow = Math.min(60, len * 0.28);
+  const cx = mx - (dy / len) * bow;
+  const cy = my - (dx / len) * bow;
+  return `M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`;
+}
+---
+
+<svg viewBox="0 0 620 360" class={klass} xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Export routes from Kandahar">
+  <defs>
+    <radialGradient id="rm-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e6bd6d" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#e6bd6d" stop-opacity="0" />
+    </radialGradient>
+    <pattern id="rm-dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.1" fill="#e6bd6d" opacity="0.1" />
+    </pattern>
+  </defs>
+
+  <rect width="620" height="360" fill="url(#rm-dots)" />
+
+  {/* arcs */}
+  {nodes.map((n) => (
+    <path d={arc(origin, n)} fill="none" stroke="#e6bd6d" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="2 5" stroke-linecap="round" />
+  ))}
+
+  {/* destination nodes */}
+  {nodes.map((n) => (
+    <g>
+      <circle cx={n.x} cy={n.y} r="4.5" fill="#f4ecda" />
+      <circle cx={n.x} cy={n.y} r="4.5" fill="none" stroke="#e6bd6d" stroke-width="1.5" />
+      <text
+        x={n.x}
+        y={n.y - 12}
+        text-anchor="middle"
+        fill="#EDDAC4"
+        font-family="'Archivo', sans-serif"
+        font-size="12.5"
+        font-weight="600"
+      >{n.name}</text>
+    </g>
+  ))}
+
+  {/* origin */}
+  <circle cx={origin.x} cy={origin.y} r="26" fill="url(#rm-glow)" />
+  <circle cx={origin.x} cy={origin.y} r="6.5" fill="#c0872e" />
+  <circle cx={origin.x} cy={origin.y} r="6.5" fill="none" stroke="#f4ecda" stroke-width="1.5" />
+  <text x={origin.x} y={origin.y + 26} text-anchor="middle" fill="#e6bd6d" font-family="'Archivo', sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" style="text-transform:uppercase;">Kandahar · Origin</text>
+</svg>

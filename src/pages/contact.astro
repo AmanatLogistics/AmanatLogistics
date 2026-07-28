@@ -1,7 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
-import { CONTACT } from '../consts';
+import { getContent } from '../lib/store';
+
+export const prerender = false;
+
+const { contact: CONTACT, pageHeaders } = await getContent();
+const H = pageHeaders.contact;
 
 const fieldClass =
   'amn-field rounded-md border border-[#D8CCB6] bg-paper px-3.5 py-3 text-[14.5px] text-ink transition-colors';
@@ -11,10 +16,10 @@ const fieldClass =
   <!-- ============ PAGE HEADER ============ -->
   <section class="bg-plum">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
-      <Eyebrow text="Get In Touch" tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Contact Us</h1>
+      <Eyebrow text={H.eyebrow} tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
       <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
-        Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.
+        {H.subtitle}
       </p>
     </div>
   </section>
@@ -134,51 +139,55 @@ const fieldClass =
 </BaseLayout>
 
 <script>
-  const form = document.getElementById('quote-form') as HTMLFormElement | null;
-  const status = document.getElementById('form-status') as HTMLElement | null;
-  const button = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+  function initQuoteForm() {
+    const form = document.getElementById('quote-form') as HTMLFormElement | null;
+    const status = document.getElementById('form-status') as HTMLElement | null;
+    const button = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+    if (!form) return;
 
-  function show(msg: string, ok: boolean) {
-    if (!status) return;
-    status.textContent = msg;
-    status.classList.remove('hidden');
-    status.classList.toggle('bg-[#E5EADB]', ok);
-    status.classList.toggle('text-[#33402B]', ok);
-    status.classList.toggle('bg-[#F3D9D2]', !ok);
-    status.classList.toggle('text-[#7A2E22]', !ok);
-  }
-
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!form.reportValidity()) return;
-
-    const data = Object.fromEntries(new FormData(form).entries());
-    if (button) {
-      button.disabled = true;
-      button.textContent = 'Sending…';
+    function show(msg: string, ok: boolean) {
+      if (!status) return;
+      status.textContent = msg;
+      status.classList.remove('hidden');
+      status.classList.toggle('bg-[#E5EADB]', ok);
+      status.classList.toggle('text-[#33402B]', ok);
+      status.classList.toggle('bg-[#F3D9D2]', !ok);
+      status.classList.toggle('text-[#7A2E22]', !ok);
     }
 
-    try {
-      const res = await fetch('/api/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const body = await res.json().catch(() => ({}));
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!form.reportValidity()) return;
 
-      if (res.ok) {
-        form.reset();
-        show("Thank you — your request has been sent. We'll reply within one business day.", true);
-      } else {
-        show(body?.error || 'Something went wrong. Please email info@amanatlogistics.com directly.', false);
-      }
-    } catch {
-      show('Network error. Please try again, or email info@amanatlogistics.com directly.', false);
-    } finally {
+      const data = Object.fromEntries(new FormData(form).entries());
       if (button) {
-        button.disabled = false;
-        button.textContent = 'Submit Request';
+        button.disabled = true;
+        button.textContent = 'Sending…';
       }
-    }
-  });
+
+      try {
+        const res = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        const body = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          form.reset();
+          show("Thank you — your request has been sent. We'll reply within one business day.", true);
+        } else {
+          show(body?.error || 'Something went wrong. Please email info@amanatlogistics.com directly.', false);
+        }
+      } catch {
+        show('Network error. Please try again, or email info@amanatlogistics.com directly.', false);
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = 'Submit Request';
+        }
+      }
+    });
+  }
+  document.addEventListener('astro:page-load', initQuoteForm);
 </script>

@@ -7,7 +7,7 @@ interface Props {
 }
 const { text, tone = 'light', class: klass = '' } = Astro.props;
 const color = tone === 'dark' ? 'text-gold-light' : 'text-label';
-const line = tone === 'dark' ? 'bg-accent' : 'bg-accent';
+const line = tone === 'dark' ? 'bg-gold-light' : 'bg-accent';
 ---
 
 <div class={`flex items-center gap-3 ${klass}`}>

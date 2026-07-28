@@ -1,33 +1,32 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
-import ImageFrame from '../components/ImageFrame.astro';
-import { DESTINATIONS } from '../consts';
+import RouteMap from '../components/RouteMap.astro';
+import { getContent } from '../lib/store';
+
+export const prerender = false;
+
+const { destinations: DESTINATIONS, pageHeaders } = await getContent();
+const H = pageHeaders.routes;
 ---
 
 <BaseLayout title="Routes & Coverage" active="/routes">
   <!-- ============ PAGE HEADER ============ -->
   <section class="bg-plum">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
-      <Eyebrow text="Where We Ship" tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">Routes &amp; Coverage</h1>
+      <Eyebrow text={H.eyebrow} tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
       <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
-        Established export corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.
+        {H.subtitle}
       </p>
     </div>
   </section>
 
-  <!-- ============ WORLD MAP ============ -->
-  <section class="bg-ink">
+  <!-- ============ ROUTE MAP ============ -->
+  <section class="bg-fig">
     <div class="mx-auto flex max-w-[1240px] flex-col gap-4 px-5 py-20 md:px-10">
-      <div class="relative">
-        <ImageFrame
-          src="/images/routes-worldmap.svg"
-          alt="World map: Afghanistan (Kandahar) origin with export routes to India, Canada, UK and USA"
-          tone="dark"
-          class="h-[360px] rounded-xl md:h-[520px]"
-          label="WORLD-MAP GRAPHIC:<br>Afghanistan highlighted as origin (Kandahar),<br>arcing route lines to India, Canada, UK &amp; USA<br>routes-worldmap.svg — 2200×1040px"
-        />
+      <div class="rounded-2xl border border-[#7a3346] bg-[#2c1119]/40 p-4 md:p-8">
+        <RouteMap destinations={DESTINATIONS} class="mx-auto h-auto w-full max-w-[760px]" />
       </div>
       <div class="flex flex-wrap items-center gap-6 pt-1">
         <div class="flex items-center gap-2">

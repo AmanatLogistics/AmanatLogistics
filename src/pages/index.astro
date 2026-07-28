@@ -2,36 +2,58 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
-import { STATS } from '../consts';
+import RouteMap from '../components/RouteMap.astro';
+import { getContent } from '../lib/store';
+
+export const prerender = false;
+
+const { hero, stats: STATS, services, why, destinations } = await getContent();
+
+// "India, Canada, United Kingdom & United States" — built from the live list
+const names = destinations.map((d) => d.name);
+const countryList =
+  names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : (names[0] ?? '');
 ---
 
 <BaseLayout title="Home" active="/">
   <!-- ============ HERO ============ -->
-  <section class="relative overflow-hidden bg-plum">
+  <section class="relative overflow-hidden bg-fig">
     <ImageFrame
-      src="/images/hero-home.jpg"
+      src={hero.image}
       alt="Kandahar figs and dry fruits prepared for export"
       tone="plum"
       loading="eager"
       class="absolute inset-0 h-full w-full"
       label="FULL-WIDTH IMAGE: Kandahar figs & dry fruits,<br>export cartons / cargo in warm light<br>hero-home.jpg — 2400×1100px"
     />
-    <div class="absolute inset-0" style="background:linear-gradient(90deg,rgba(43,20,35,0.94) 0%,rgba(43,20,35,0.74) 52%,rgba(43,20,35,0.4) 100%);"></div>
+    <!-- warm layered light: amber glow + wine scrim (reads rich with or without a photo) -->
+    <div
+      class="absolute inset-0"
+      style="background:
+        radial-gradient(115% 125% at 88% 8%, rgba(198,137,47,0.28) 0%, rgba(198,137,47,0) 46%),
+        radial-gradient(90% 120% at 0% 100%, rgba(53,20,29,0.85) 0%, rgba(53,20,29,0) 55%),
+        linear-gradient(103deg, rgba(41,16,22,0.96) 0%, rgba(72,24,40,0.82) 48%, rgba(72,24,40,0.5) 100%);"
+    >
+    </div>
 
-    <div class="relative mx-auto flex max-w-[1240px] flex-col items-start gap-7 px-5 py-24 md:px-10 md:py-[132px]">
-      <Eyebrow text="Kandahar, Afghanistan" tone="dark" />
-      <h1 class="m-0 max-w-[18ch] font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] sm:text-[48px] md:text-[56px]" style="text-wrap:pretty;">
-        Premium Figs &amp; Dry Fruits, From Kandahar to the World.
+    <div class="relative mx-auto flex max-w-[1240px] flex-col items-start gap-6 px-5 py-24 md:px-10 md:py-[136px]">
+      <div class="flex items-center gap-3">
+        <span class="h-px w-9 bg-gold-light/70"></span>
+        <span class="eyebrow text-gold-light">{hero.eyebrow}</span>
+      </div>
+      <h1 class="m-0 max-w-[16ch] font-serif text-[42px] font-semibold leading-[1.04] text-[#F7ECDA] sm:text-[56px] md:text-[68px]" style="text-wrap:balance;">
+        {hero.title}
       </h1>
-      <p class="m-0 max-w-[52ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
-        Trusted export and freight partner delivering Afghanistan's finest produce across the globe.
+      <p class="m-0 max-w-[50ch] text-[17px] leading-relaxed text-[#E4CFC2] md:text-[19px]">
+        {hero.subtitle}
       </p>
-      <div class="mt-2 flex flex-wrap gap-4">
-        <a href="/contact#form" class="rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper transition-colors hover:bg-[#C89B52] hover:text-ink">
+      <div class="mt-3 flex flex-wrap items-center gap-4">
+        <a href="/contact#form" class="rounded-full bg-gold px-8 py-3.5 text-[15px] font-semibold text-ink shadow-[0_8px_24px_rgba(192,135,46,0.32)] transition-transform hover:-translate-y-0.5">
           Request a Quote
         </a>
-        <a href="/services" class="rounded-md border border-[#A88A9B] px-8 py-4 text-[15px] font-semibold text-[#F0E7DD] transition-colors hover:border-gold-light hover:text-[#F8F3E9]">
-          Our Services
+        <a href="/services" class="group flex items-center gap-2 px-3 py-3.5 text-[15px] font-semibold text-[#F0E7DD] transition-colors hover:text-gold-light">
+          Explore our services
+          <span class="transition-transform group-hover:translate-x-1">→</span>
         </a>
       </div>
     </div>
@@ -66,10 +88,8 @@ import { STATS } from '../consts';
             <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
             <path d="M20 8 L28 8 L28 16 L20 16 Z" stroke="#D6B676" stroke-width="2"></path>
           </svg>
-          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F8F3E9] md:text-[27px]">Export &amp; Freight</h3>
-          <p class="m-0 text-[16px] leading-relaxed text-[#CDBBB0]">
-            Premium figs, dry fruits, and fresh fruits from Afghanistan — shipped by sea, air, and land with certified documentation and careful handling at every step.
-          </p>
+          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F8F3E9] md:text-[27px]">{services.exportTitle}</h3>
+          <p class="m-0 text-[16px] leading-relaxed text-[#CDBBB0]">{services.exportText}</p>
           <a href="/services" class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F8F3E9]">
             Learn More <span class="text-[17px]">→</span>
           </a>
@@ -81,10 +101,8 @@ import { STATS } from '../consts';
             <ellipse cx="24" cy="24" rx="7" ry="16" stroke="#D6B676" stroke-width="2"></ellipse>
             <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
           </svg>
-          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F5F3EA] md:text-[27px]">Global Personal Shopping</h3>
-          <p class="m-0 text-[16px] leading-relaxed text-[#C9CDBB]">
-            We order products from Amazon, Daraz &amp; more on your behalf — purchased, consolidated, and delivered to your door with transparent, itemized pricing.
-          </p>
+          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F5F3EA] md:text-[27px]">{services.shoppingTitle}</h3>
+          <p class="m-0 text-[16px] leading-relaxed text-[#C9CDBB]">{services.shoppingText}</p>
           <a href="/services" class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F5F3EA]">
             Learn More <span class="text-[17px]">→</span>
           </a>
@@ -99,15 +117,11 @@ import { STATS } from '../consts';
       <Eyebrow text="Why Amanat" class="reveal" />
       <div class="grid grid-cols-1 gap-7 md:grid-cols-3">
         {
-          [
-            { t: 'Authentic Afghan origin', d: "Sourced directly from Kandahar's orchards and growers — provenance you can document." },
-            { t: 'Secure end-to-end shipping', d: 'Careful packing, customs handling, and tracked freight from our facility to your port.' },
-            { t: 'Reliable partnership', d: 'A single accountable partner for officials, importers, and institutional buyers.' },
-          ].map((c) => (
+          why.map((c) => (
             <div class="flex flex-col gap-3 rounded-[10px] border border-line bg-paper p-8 reveal">
               <div class="mb-1 h-3 w-3 rotate-45 bg-accent"></div>
-              <span class="font-serif text-[20px] font-bold leading-snug text-plum">{c.t}</span>
-              <span class="text-[15px] leading-relaxed text-muted">{c.d}</span>
+              <span class="font-serif text-[20px] font-bold leading-snug text-plum">{c.title}</span>
+              <span class="text-[15px] leading-relaxed text-muted">{c.text}</span>
             </div>
           ))
         }
@@ -116,30 +130,26 @@ import { STATS } from '../consts';
   </section>
 
   <!-- ============ ROUTES PREVIEW ============ -->
-  <section class="bg-ink">
-    <div class="mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 py-20 md:grid-cols-[0.9fr_1.1fr] md:gap-[72px] md:px-10 md:py-24">
+  <section class="relative overflow-hidden bg-fig">
+    <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 py-20 md:grid-cols-[0.9fr_1.1fr] md:gap-[72px] md:px-10 md:py-24">
       <div class="flex flex-col gap-[22px]">
         <Eyebrow text="Routes & Coverage" tone="dark" />
-        <h2 class="m-0 font-serif text-[28px] font-bold leading-tight text-[#F8F3E9] md:text-[36px]" style="text-wrap:pretty;">
-          We currently ship to India, Canada, UK &amp; USA — with more destinations coming.
+        <h2 class="m-0 font-serif text-[30px] font-semibold leading-tight text-[#F6ECDA] md:text-[40px]" style="text-wrap:pretty;">
+          We currently ship to {countryList} — with more destinations coming.
         </h2>
-        <div class="mt-1 flex flex-wrap gap-3">
-          {['India', 'Canada', 'United Kingdom', 'United States'].map((c) => (
-            <span class="rounded-full border border-[#5A5147] px-5 py-2 text-[14px] font-semibold text-[#EDE4D4]">{c}</span>
+        <div class="mt-1 flex flex-wrap gap-2.5">
+          {destinations.map((d) => (
+            <span class="rounded-full border border-[#8a5a68] px-4 py-1.5 text-[13.5px] font-medium text-[#EDDAC4]">{d.name}</span>
           ))}
-          <span class="rounded-full border border-dashed border-label px-5 py-2 text-[14px] font-semibold text-[#B8A57E]">More coming</span>
+          <span class="rounded-full border border-dashed border-[#8a5a68] px-4 py-1.5 text-[13.5px] font-medium text-[#c79a6a]">More coming</span>
         </div>
         <a href="/contact" class="mt-2 flex items-center gap-2 self-start text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F8F3E9]">
           Ask about your destination <span class="text-[17px]">→</span>
         </a>
       </div>
-      <ImageFrame
-        src="/images/routes-worldmap.svg"
-        alt="World map showing export routes from Kandahar to India, Canada, UK and USA"
-        tone="dark"
-        class="h-[300px] rounded-[10px] md:h-[400px]"
-        label="GRAPHIC: world map with route lines<br>from Kandahar to India, Canada, UK, USA"
-      />
+      <div class="rounded-2xl border border-[#7a3346] bg-[#2c1119]/40 p-4 md:p-6">
+        <RouteMap destinations={destinations} class="h-auto w-full" />
+      </div>
     </div>
   </section>
 </BaseLayout>

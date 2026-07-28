@@ -11,6 +11,10 @@ node_modules/
 .env.production
 .env*.local
 
+# local admin data (content edits + uploaded images in dev)
+.data/
+public/uploads/
+
 # logs
 npm-debug.log*
 *.log

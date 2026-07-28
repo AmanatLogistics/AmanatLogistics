@@ -8,6 +8,11 @@ import vercel from '@astrojs/vercel';
 export default defineConfig({
   site: 'https://amanatlogistics.com',
   adapter: vercel(),
+  // Prefetch internal links so app-like (View Transitions) navigation is instant.
+  prefetch: {
+    prefetchAll: true,
+    defaultStrategy: 'viewport',
+  },
   vite: {
     plugins: [tailwindcss()],
   },

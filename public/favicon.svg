@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="12" fill="#3D2233"/>
-  <text x="32" y="45" font-family="Georgia, 'Libre Caslon Text', serif" font-size="38" font-weight="700" fill="#D6B676" text-anchor="middle">A</text>
+  <rect width="64" height="64" rx="12" fill="#63273C"/>
+  <g transform="translate(8 14) scale(0.096)">
+    <path d="M24 188 Q50 156 104 150 Q294 50 482 38 Q300 108 176 184 Q268 214 372 302 Q250 232 150 202 Q74 206 24 188 Z" fill="#F8F3E9"/>
+  </g>
 </svg>
