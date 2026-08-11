@@ -1,0 +1,245 @@
+:root {
+    --navy: #c0872e;
+    --navy-dark: rgba(246, 241, 232, 0.96);
+    --orange: #c0872e;
+    --blue: #1450c9;
+    --green: #22a559;
+    --gray-text: #667085;
+    --border: #e4e7ec;
+    --bg: #e6bd6d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    background: var(--bg);
+    color: rgba(246, 241, 232, 0.96);
+}
+
+a { text-decoration: none; }
+
+/* ---------- Header ---------- */
+.site-header {
+    background: var(--navy-dark);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 48px;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; color: #fff; }
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    color: #fff;
+    padding-left: 30px;
+}
+
+.brand-image {
+    height: 60px;
+    width: auto;
+    max-width: 240px;
+    object-fit: contain;
+}
+
+.brand-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.brand-tag {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+.brand-name { font-weight: 700; font-size: 18px; letter-spacing: .5px; }
+.brand-name span { color: var(--orange); }
+.brand-tag { font-size: 11px; color: #b7c0d8; margin-top: -2px; }
+
+.main-nav { display: flex; gap: 32px; }
+.main-nav a {
+    color: #7e2a3f;
+    font-size: 14px;
+    padding-bottom: 6px;
+}
+.main-nav a.active {
+    color: #7e2a3f;
+    border-bottom: 2px solid var(--orange);
+}
+
+/* ---------- Hero ---------- */
+.hero {
+    background: linear-gradient(rgba(52, 7, 7, 0.75), rgba(52, 7, 7, 0.75)),
+                url('https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?w=1600&q=60') center/cover;
+    color: #fff;
+    text-align: center;
+    padding: 60px 20px 90px;
+}
+.hero h1 { font-size: 34px; letter-spacing: 1px; margin: 0 0 10px; }
+.hero .breadcrumb { color: #cfd6ea; font-size: 14px; }
+.hero .breadcrumb a { color: #cfd6ea; }
+.hero .breadcrumb span { color: #fff; }
+
+/* ---------- Card container ---------- */
+.container {
+    max-width: 1160px;
+    margin: -60px auto 60px;
+    background: #e3d6bd;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(16,24,40,.08);
+    padding: 40px;
+}
+
+.card-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 20px; font-weight: 700; color: #7e2a3f;
+    margin-bottom: 20px;
+    font-family: Fraunces;
+}
+.card-title .icon { color: #7e2a3f; font-size: 20px; }
+
+/* ---------- Search bar ---------- */
+.search-row { display: flex; gap: 14px; margin-bottom: 34px; }
+.search-row input {
+    flex: 1;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+}
+.search-row button {
+    background: var(--navy);
+    color: var(--navy-dark);
+    border: none;
+    padding: 0 26px;
+    border-radius: 6px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.search-row button:hover { background: #7e2a3f; }
+
+.alert {
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin-bottom: 24px;
+    font-size: 14px;
+}
+.alert-error { background: #fef3f2; color: #b42318; border: 1px solid #fecdca; }
+
+/* ---------- Two column layout ---------- */
+.tracking-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 24px;
+}
+@media (max-width: 800px) {
+    .tracking-grid { grid-template-columns: 1fr; }
+}
+
+.panel {
+    background: #f8f9fc;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+.detail-row:last-of-type { border-bottom: none; }
+.detail-row .label { color: var(--gray-text); }
+.detail-row .value { font-weight: 600; color: #1d2939; text-align: right; }
+
+.whatsapp-btn {
+    margin-top: 20px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: #25d366;
+    color: #fff;
+    padding: 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+/* ---------- Progress timeline ---------- */
+.progress-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px;
+}
+.progress-header .status-label { color: var(--gray-text); font-size: 14px; }
+.progress-header .status-value { color: var(--blue); font-weight: 700; }
+
+.timeline { list-style: none; padding: 0; margin: 0; position: relative; }
+.timeline li {
+    position: relative;
+    padding-left: 46px;
+    padding-bottom: 30px;
+}
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li::before { /* connecting line */
+    content: '';
+    position: absolute;
+    left: 15px; top: 34px; bottom: -4px;
+    width: 2px;
+    background: var(--border);
+}
+.timeline li:last-child::before { display: none; }
+.timeline li.completed::before { background: var(--green); }
+.timeline li.active::before { background: var(--border); }
+
+.step-icon {
+    position: absolute; left: 0; top: 0;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #fff;
+    background: #d0d5dd;
+}
+.timeline li.completed .step-icon { background: var(--green); }
+.timeline li.active .step-icon { background: var(--blue); }
+.timeline li.pending .step-icon { background: #eaecf0; color: #98a2b3; }
+
+.step-title { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.timeline li.completed .step-title,
+.timeline li.completed .step-time { color: var(--green); }
+.timeline li.active .step-title,
+.timeline li.active .step-time { color: var(--blue); }
+.timeline li.pending .step-title { color: #667085; }
+
+.step-time { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+.timeline li.pending .step-time { color: #98a2b3; }
+.step-desc { font-size: 13.5px; color: var(--gray-text); }
+
+.text-plum-hover {
+    color: #7e2a3f;
+}
+.font-semibold {
+    --tw-font-weight: var(--font-weight-semibold);
+    font-weight: var(--font-weight-semibold);
+}
+
+
+/* ---------- Footer ---------- */
+.site-footer {
+    background: #7e2a3f;
+    color: #fff;
+    text-align: center;
+    padding: 22px;
+    font-size: 13px;
+}
+
+/* ---------- Empty state ---------- */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray-text);
+}
+.empty-state .big-icon { font-size: 40px; margin-bottom: 10px; }
