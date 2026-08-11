@@ -1,0 +1,131 @@
+---
+/**
+ * Edit or delete a shipment — replaces src/Tracker/admin/edit.php and
+ * admin/delete.php.
+ *
+ * Deletion is a POST with intent=delete rather than delete.php's GET link: a
+ * link could be followed by a crawler, a prefetcher, or an accidental click on
+ * a stale tab and would silently destroy the record.
+ */
+import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
+import ShipmentForm from '../../../components/tracker/ShipmentForm.astro';
+import { isTrackerAdmin } from '../../../lib/tracker/auth';
+import { isSameOrigin } from '../../../lib/session';
+import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
+import { parseShipmentForm } from '../../../lib/tracker/form';
+import {
+  deleteShipment,
+  findById,
+  trackingNumberTaken,
+  updateShipment,
+  type ShipmentInput,
+  type ShipmentStep,
+} from '../../../lib/tracker/shipments';
+
+export const prerender = false;
+
+const authed = await isTrackerAdmin(Astro.request);
+const id = Number.parseInt(Astro.params.id ?? '', 10);
+
+let data: ShipmentInput | null = null;
+let steps: ShipmentStep[] = [];
+let error: string | null = null;
+
+if (authed) {
+  if (!isConfigured()) {
+    error = DB_NOT_CONFIGURED;
+  } else if (!Number.isInteger(id) || id <= 0) {
+    return Astro.redirect('/tracking/admin', 303);
+  } else {
+    const existing = await findById(id);
+    if (!existing) return Astro.redirect('/tracking/admin', 303);
+
+    data = existing.shipment;
+    steps = existing.steps;
+
+    if (Astro.request.method === 'POST') {
+      if (!isSameOrigin(Astro.request)) {
+        error = 'That request looked unsafe, so it was blocked. Please try again.';
+      } else {
+        const form = await Astro.request.formData();
+
+        if (form.get('intent') === 'delete') {
+          try {
+            await deleteShipment(id);
+            return Astro.redirect('/tracking/admin?deleted=1', 303);
+          } catch (e) {
+            console.error('Deleting shipment failed:', e);
+            error = 'Could not delete the shipment. Please try again.';
+          }
+        } else {
+          const parsed = parseShipmentForm(form);
+          data = parsed.data;
+          steps = parsed.steps;
+          error = parsed.error;
+
+          if (!error) {
+            try {
+              if (await trackingNumberTaken(data.tracking_number, id)) {
+                error = 'Another shipment already uses that tracking number.';
+              } else {
+                await updateShipment(id, data, steps);
+                return Astro.redirect('/tracking/admin?saved=1', 303);
+              }
+            } catch (e) {
+              console.error('Updating shipment failed:', e);
+              error = 'Could not save the shipment. Please try again.';
+            }
+          }
+        }
+      }
+    }
+  }
+}
+---
+
+{
+  !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Session expired</h1>
+        <p class="lede">Please log in again to edit this shipment.</p>
+        <a class="btn btn-primary" href="/tracking/admin" style="width:100%;justify-content:center;">
+          Go to login
+        </a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout title="Edit shipment">
+      <div class="page-head">
+        <h1>{data ? `Edit — ${data.tracking_number}` : 'Edit shipment'}</h1>
+        <a class="btn btn-soft" href="/tracking/admin">← Back to shipments</a>
+      </div>
+
+      <div class="card">
+        {!data ? (
+          <div class="alert alert-err">{error ?? 'Shipment not found.'}</div>
+        ) : (
+          <ShipmentForm data={data} steps={steps} error={error} submitLabel="Update shipment">
+            {/*
+              Delete shares the save button's form on purpose: a nested <form>
+              is invalid HTML and browsers drop it, which would attach
+              intent=delete to every save. A named submit button contributes
+              its value only when it is the button actually clicked.
+            */}
+            <button
+              slot="extra-actions"
+              class="btn btn-danger"
+              type="submit"
+              name="intent"
+              value="delete"
+              onclick={`return confirm('Delete shipment ${data.tracking_number}? This cannot be undone.');`}
+            >
+              Delete shipment
+            </button>
+          </ShipmentForm>
+        )}
+      </div>
+    </TrackerAdminLayout>
+  )
+}

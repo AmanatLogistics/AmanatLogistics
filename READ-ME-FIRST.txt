@@ -1,0 +1,104 @@
+================================================================
+ Amanat Logistics — Shipment Tracker: PHP/MySQL → Astro + Postgres
+================================================================
+
+WHAT THIS IS
+------------
+The old tracker in src/Tracker/ was PHP + MySQL. Vercel cannot run PHP, so
+none of it worked on the live site. It has been rebuilt as normal Astro pages
+with a Postgres database.
+
+  Public page:  /tracking
+  Admin panel:  /tracking/admin     <-- separate from the website admin at /admin
+
+
+HOW TO APPLY (5 steps)
+----------------------
+
+1. Copy every file/folder in this zip into your project, keeping the same
+   folder structure. It overwrites 7 existing files and adds the rest:
+
+     overwritten:  package.json, package-lock.json, .env.example, README.md,
+                   public/robots.txt, public/sitemap.xml,
+                   src/consts.ts, src/lib/auth.ts, src/lib/store.ts,
+                   src/pages/index.astro
+     new:          db/, src/lib/session.ts, src/lib/tracker/,
+                   src/pages/tracking/, src/pages/api/tracker/,
+                   src/components/tracker/, src/styles/tracker-admin.css,
+                   src/layouts/TrackerAdmin*.astro
+
+2. DELETE the old folder — it is dead code and nothing points at it any more:
+
+     src/Tracker/
+
+3. Install the new database driver:
+
+     npm install
+
+4. Create a free database. In the Vercel dashboard:
+
+     Storage  ->  Create Database  ->  Neon  ->  Connect to project
+
+   Neon's free plan is enough for this. DATABASE_URL is then set for you
+   automatically. The app creates its own tables the first time it is used,
+   so there is NO SQL file to import. (db/tracker-schema.sql just documents
+   the tables, in case you ever want to create them by hand.)
+
+5. Set the tracker password. In Vercel -> Settings -> Environment Variables:
+
+     TRACKER_ADMIN_PASSWORD = <pick a strong password>
+
+   Make it DIFFERENT from ADMIN_PASSWORD. That way whoever updates shipments
+   cannot also edit the website, and vice versa.
+
+Then redeploy.
+
+
+RUNNING IT LOCALLY
+------------------
+    npm install
+    npm run dev        ->  http://localhost:4321/tracking
+
+Local passwords, if you don't set anything in .env:
+    website admin (/admin)           ->  admin123
+    tracker admin (/tracking/admin)  ->  tracker123
+
+For local tracking you also need a database. Copy a connection string from
+your Neon dashboard into .env:
+
+    DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
+
+Without it the site still runs — the tracking page just tells customers that
+tracking is temporarily unavailable instead of erroring.
+
+
+USING THE ADMIN
+---------------
+- Add a shipment, pick its CURRENT STAGE, and fill in a date/time for each
+  stage as it happens. Stages left blank show to the customer as "Pending".
+- Stage names are editable per shipment, so you can use the real route
+  ("In Salang", "Hairatan Customs Clearance") instead of generic labels.
+- WhatsApp: enter the number with country code, digits only (923001234567).
+  Leave blank to hide the button for that shipment.
+- Customers can search by tracking number OR invoice number.
+
+
+THINGS THAT WERE BROKEN IN THE PHP AND ARE NOW FIXED
+----------------------------------------------------
+1. The WhatsApp button used a number as an array key ($shipment[+93700098848]),
+   so the link was always an empty "wa.me/" and went nowhere.
+2. The admin list showed hardcoded stage names — a shipment on step 4 always
+   displayed "In Transit" even when its real stage was "In Salang".
+3. Stage names were hardcoded when a shipment was created and could not be
+   renamed, so custom route stages were impossible to enter.
+4. admin/setup.php was a publicly reachable "create an admin account" page.
+   It is gone — the password now comes from an environment variable.
+5. Deleting was a plain link (GET), so a browser prefetch or an old open tab
+   could silently delete a shipment. It is now a confirmed form submission.
+
+
+NOTE ON THE WEBSITE ADMIN (/admin)
+----------------------------------
+The tracker does NOT use Vercel Blob. The website content editor at /admin
+still does. If saving is failing there too, that is a separate issue from
+this migration — worth looking at separately.

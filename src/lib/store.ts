@@ -103,6 +103,7 @@ export async function getContent(): Promise<SiteContent> {
       routes: { ...DEFAULT_CONTENT.pageHeaders.routes, ...o.pageHeaders?.routes },
       gallery: { ...DEFAULT_CONTENT.pageHeaders.gallery, ...o.pageHeaders?.gallery },
       contact: { ...DEFAULT_CONTENT.pageHeaders.contact, ...o.pageHeaders?.contact },
+      tracking: { ...DEFAULT_CONTENT.pageHeaders.tracking, ...o.pageHeaders?.tracking },
     },
     freightModes: o.freightModes ?? DEFAULT_CONTENT.freightModes,
     shoppingSteps: o.shoppingSteps ?? DEFAULT_CONTENT.shoppingSteps,

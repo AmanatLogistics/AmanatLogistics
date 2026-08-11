@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /tracking/admin
 Disallow: /api/
 
 Sitemap: https://amanatlogistics.com/sitemap.xml

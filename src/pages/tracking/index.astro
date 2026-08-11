@@ -1,0 +1,162 @@
+---
+/**
+ * Public shipment tracking — the Astro replacement for src/Tracker/index.php.
+ *
+ * Customers enter a tracking or invoice number; the form submits with GET so
+ * results are shareable and bookmarkable, exactly as the PHP page worked.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Eyebrow from '../../components/Eyebrow.astro';
+import ShipmentDetails from '../../components/tracker/ShipmentDetails.astro';
+import TrackingTimeline from '../../components/tracker/TrackingTimeline.astro';
+import { getContent } from '../../lib/store';
+import { isConfigured } from '../../lib/tracker/db';
+import { findByCode, type Shipment, type ShipmentStep } from '../../lib/tracker/shipments';
+
+export const prerender = false;
+
+const { pageHeaders } = await getContent();
+const H = pageHeaders.tracking;
+
+const code = (Astro.url.searchParams.get('code') ?? '').trim();
+const searched = code !== '';
+
+let shipment: Shipment | null = null;
+let steps: ShipmentStep[] = [];
+let lookupFailed = false;
+
+if (searched && isConfigured()) {
+  try {
+    const found = await findByCode(code);
+    if (found) ({ shipment, steps } = found);
+  } catch (e) {
+    console.error('Tracking lookup failed:', e);
+    lookupFailed = true;
+  }
+}
+---
+
+<BaseLayout
+  title="Track Shipment"
+  description="Track an Amanat Logistics shipment by tracking number or invoice number and follow its progress from origin to delivery."
+  active="/tracking"
+>
+  <!-- ============ PAGE HEADER ============ -->
+  <section class="bg-plum">
+    <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
+      <Eyebrow text={H.eyebrow} tone="dark" />
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">{H.subtitle}</p>
+    </div>
+  </section>
+
+  <!-- ============ TRACKING CARD ============ -->
+  <section class="bg-cream">
+    <div class="mx-auto max-w-[1240px] px-5 py-16 md:px-10 md:py-20">
+      <div class="rounded-2xl border border-line bg-paper p-6 shadow-[0_10px_30px_rgba(42,26,18,0.06)] md:p-10">
+        <h2 class="m-0 mb-5 flex items-center gap-2.5 font-serif text-[22px] font-bold text-plum md:text-[26px]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M12 21s7-5.7 7-11a7 7 0 1 0-14 0c0 5.3 7 11 7 11Z"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linejoin="round"></path>
+            <circle cx="12" cy="10" r="2.6" stroke="currentColor" stroke-width="1.7"></circle>
+          </svg>
+          Track Your Shipment
+        </h2>
+
+        <!-- Search -->
+        <form method="get" action="/tracking" class="flex flex-col gap-3 sm:flex-row">
+          <label for="code" class="sr-only">Tracking number or invoice number</label>
+          <input
+            id="code"
+            name="code"
+            type="text"
+            required
+            value={code}
+            placeholder="Enter Tracking Number or Invoice Number"
+            class="amn-field flex-1 rounded-lg border border-line bg-cream px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70"
+          />
+          <button
+            type="submit"
+            class="flex items-center justify-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-[15px] font-semibold text-paper transition-colors hover:bg-plum-hover"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"></circle>
+              <path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></path>
+            </svg>
+            Track Now
+          </button>
+        </form>
+
+        <!-- Results -->
+        {
+          !isConfigured() && searched && (
+            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+              Tracking is not available right now. Please contact us and we will check your shipment for you.
+            </p>
+          )
+        }
+
+        {
+          lookupFailed && (
+            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+              We could not reach the tracking system just now. Please try again in a moment.
+            </p>
+          )
+        }
+
+        {
+          searched && !shipment && isConfigured() && !lookupFailed && (
+            <div class="mt-7 flex items-start gap-3 rounded-lg border border-[#EBC3BD] bg-[#FBEEEC] px-4 py-3.5 text-[14.5px] text-[#9A3226]">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" class="mt-px flex-none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+                <path d="M12 7.5v5.5M12 16.2v.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+              <span>
+                No shipment found for "{code}". Please check the tracking or invoice number and try again.
+              </span>
+            </div>
+          )
+        }
+
+        {
+          shipment && (
+            <div class="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-[340px_1fr]">
+              <ShipmentDetails shipment={shipment} />
+              <TrackingTimeline steps={steps} currentStep={shipment.current_step} />
+            </div>
+          )
+        }
+
+        {
+          !searched && (
+            <div class="mt-8 flex flex-col items-center gap-3 rounded-xl border border-dashed border-line bg-cream px-6 py-14 text-center">
+              <svg width="46" height="46" viewBox="0 0 24 24" fill="none" class="text-label" aria-hidden="true">
+                <path
+                  d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5v-7Z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linejoin="round"
+                />
+                <path d="m3 8.5 9 4.5 9-4.5M12 13v7" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+              </svg>
+              <p class="m-0 max-w-[46ch] text-[15px] leading-relaxed text-muted">
+                Enter your tracking or invoice number above to see your shipment status.
+              </p>
+            </div>
+          )
+        }
+      </div>
+
+      <p class="mt-6 text-center text-[14px] text-muted">
+        Can't find your shipment?{' '}
+        <a href="/contact#form" class="font-semibold text-accent-deep underline underline-offset-2 hover:text-plum">
+          Contact our team
+        </a>{' '}
+        and we'll look into it.
+      </p>
+    </div>
+  </section>
+</BaseLayout>

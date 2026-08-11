@@ -1,0 +1,177 @@
+---
+/**
+ * The add/edit shipment form. Shared by /tracking/admin/new and
+ * /tracking/admin/[id] — the PHP kept two near-identical copies of this markup
+ * in add.php and edit.php, which is how they drifted apart.
+ *
+ * Unlike the PHP, each step's title and description are editable, so
+ * route-specific stages ("In Salang", "Hairatan Customs Clearance") can be
+ * entered per shipment instead of being locked to eight hardcoded names.
+ */
+import {
+  SHIPPING_METHODS,
+  type ShipmentInput,
+  type ShipmentStep,
+} from '../../lib/tracker/shipments';
+
+interface Props {
+  /** Values to pre-fill — a blank shipment when adding. */
+  data: ShipmentInput;
+  steps: ShipmentStep[];
+  submitLabel: string;
+  /** Validation message from the last POST, if any. */
+  error?: string | null;
+}
+const { data, steps, submitLabel, error = null } = Astro.props;
+---
+
+<form method="post">
+  {error && <div class="alert alert-err">{error}</div>}
+
+  <div class="section-title">Shipment details</div>
+  <div class="form-grid">
+    <div class="field">
+      <label for="tracking_number">Tracking number *</label>
+      <input id="tracking_number" name="tracking_number" value={data.tracking_number} required />
+    </div>
+    <div class="field">
+      <label for="invoice_number">Invoice number *</label>
+      <input id="invoice_number" name="invoice_number" value={data.invoice_number} required />
+    </div>
+    <div class="field">
+      <label for="customer_name">Customer name *</label>
+      <input id="customer_name" name="customer_name" value={data.customer_name} required />
+    </div>
+    <div class="field">
+      <label for="whatsapp_number">WhatsApp number</label>
+      <input
+        id="whatsapp_number"
+        name="whatsapp_number"
+        value={data.whatsapp_number ?? ''}
+        placeholder="e.g. 923001234567"
+      />
+      <span class="hint">With country code, digits only. Leave blank to hide the button.</span>
+    </div>
+    <div class="field">
+      <label for="origin">Origin</label>
+      <input id="origin" name="origin" value={data.origin} placeholder="e.g. Guangzhou, China" />
+    </div>
+    <div class="field">
+      <label for="destination">Destination</label>
+      <input
+        id="destination"
+        name="destination"
+        value={data.destination}
+        placeholder="e.g. Kandahar, Afghanistan"
+      />
+    </div>
+    <div class="field">
+      <label for="total_packages">Total packages</label>
+      <input id="total_packages" name="total_packages" type="number" min="1" value={data.total_packages} />
+    </div>
+    <div class="field">
+      <label for="total_weight">Total weight</label>
+      <input id="total_weight" name="total_weight" value={data.total_weight} placeholder="e.g. 120.5 KG" />
+    </div>
+    <div class="field">
+      <label for="shipping_method">Shipping method</label>
+      <select id="shipping_method" name="shipping_method">
+        {
+          SHIPPING_METHODS.map((m) => (
+            <option value={m} selected={data.shipping_method === m}>
+              {m}
+            </option>
+          ))
+        }
+      </select>
+    </div>
+    <div class="field">
+      <label for="current_step">Current status step</label>
+      <select id="current_step" name="current_step">
+        {
+          steps.map((s) => (
+            <option value={s.step_number} selected={data.current_step === s.step_number}>
+              {s.step_number}. {s.step_title}
+            </option>
+          ))
+        }
+      </select>
+      <span class="hint">Everything before this shows as completed; everything after, as pending.</span>
+    </div>
+    <div class="field">
+      <label for="booking_date">Booking date *</label>
+      <input id="booking_date" name="booking_date" type="date" value={data.booking_date} required />
+    </div>
+    <div class="field">
+      <label for="estimated_delivery">Estimated delivery *</label>
+      <input
+        id="estimated_delivery"
+        name="estimated_delivery"
+        type="date"
+        value={data.estimated_delivery}
+        required
+      />
+    </div>
+  </div>
+
+  <div class="section-title">
+    Progress timeline
+    <span class="note">
+      Fill in the date and time as each stage happens. Leave a stage blank and the customer sees
+      it as “Pending”. Stage names are editable, so you can match the real route.
+    </span>
+  </div>
+
+  <div class="steps-grid">
+    {
+      steps.map((s) => (
+        <div class="step-card">
+          <h4>Step {s.step_number}</h4>
+          <div class="field">
+            <label for={`step_title_${s.step_number}`}>Stage name</label>
+            <input
+              id={`step_title_${s.step_number}`}
+              name={`step_title_${s.step_number}`}
+              value={s.step_title}
+            />
+          </div>
+          <div class="field">
+            <label for={`step_description_${s.step_number}`}>Description shown to the customer</label>
+            <input
+              id={`step_description_${s.step_number}`}
+              name={`step_description_${s.step_number}`}
+              value={s.step_description}
+            />
+          </div>
+          <div class="step-row">
+            <div class="field">
+              <label for={`step_date_${s.step_number}`}>Date</label>
+              <input
+                id={`step_date_${s.step_number}`}
+                name={`step_date_${s.step_number}`}
+                type="date"
+                value={s.step_date ?? ''}
+              />
+            </div>
+            <div class="field">
+              <label for={`step_time_${s.step_number}`}>Time</label>
+              <input
+                id={`step_time_${s.step_number}`}
+                name={`step_time_${s.step_number}`}
+                value={s.step_time ?? ''}
+                placeholder="10:30 AM"
+              />
+            </div>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">{submitLabel}</button>
+    <a class="btn btn-soft" href="/tracking/admin">Cancel</a>
+    <span class="spacer"></span>
+    <slot name="extra-actions" />
+  </div>
+</form>

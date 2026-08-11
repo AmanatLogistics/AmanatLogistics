@@ -1,0 +1,30 @@
+---
+/**
+ * Standalone document for the tracker admin login screen — no top bar, since
+ * there is no session yet to log out of.
+ */
+import '../styles/tracker-admin.css';
+import { SITE } from '../consts';
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Tracker Admin — {SITE.name}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <main class="login-wrap">
+      <slot />
+    </main>
+  </body>
+</html>

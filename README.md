@@ -3,7 +3,7 @@
 Premium export & freight marketing site. Built with **Astro 7 + Tailwind CSS v4**,
 contact form emails via **Resend**, deploys to **Vercel**.
 
-Pages: Home · About · Services · Routes & Coverage · Gallery · Contact.
+Pages: Home · About · Services · Routes & Coverage · Track Shipment · Gallery · Contact.
 
 ---
 
@@ -55,6 +55,48 @@ admin password. From there you can edit — changes go live instantly, no redepl
 Security: the page is `noindex`, blocked in robots.txt, and every admin API
 checks a signed HttpOnly session cookie (7-day expiry). Only someone with the
 password can see or change anything.
+
+---
+
+## Shipment tracker
+
+Customers track a consignment at **`/tracking`** by tracking number *or* invoice
+number, and see its details plus an 8-stage progress timeline. Staff manage
+shipments at **`/tracking/admin`**.
+
+**The tracker admin is a separate panel from `/admin` above**, with its own
+password. Whoever updates shipments cannot edit the website, and vice versa —
+the two use different session cookies, so signing in to one never grants the
+other.
+
+**Setup (once):**
+
+1. **Database.** On Vercel: **Storage → Create Database → Neon → Connect to
+   project.** Neon's free plan is plenty for this. `DATABASE_URL` is then set
+   automatically and the tracker creates its own tables on first use — there is
+   no SQL to import. (`db/tracker-schema.sql` documents the tables if you ever
+   want to create them by hand.)
+2. **Password.** Set `TRACKER_ADMIN_PASSWORD` in Vercel → Settings →
+   Environment Variables. Local dev fallback: `tracker123`.
+
+For local development, put a Neon connection string in `.env` as `DATABASE_URL`.
+Without one the site still runs: the tracking page tells customers tracking is
+temporarily unavailable rather than erroring.
+
+**Using it:**
+- **Add a shipment** — enter the shipment details, pick the *current stage*, and
+  fill in a date/time for each stage as it happens. Stages left blank show to the
+  customer as "Pending".
+- **Stage names are editable per shipment**, so you can match the real route
+  ("In Salang", "Hairatan Customs Clearance") instead of generic labels.
+- **WhatsApp button** — enter the number with country code (e.g.
+  `923001234567`). Leave it blank to hide the button for that shipment.
+- **Edit** a shipment as it moves along; **Delete** removes it and its timeline.
+
+> Replaces the old PHP/MySQL tracker that used to live in `src/Tracker/`. PHP
+> cannot run on Vercel, so it was rewritten as Astro pages backed by Postgres.
+
+---
 
 ## 1. Add your real images
 
@@ -120,4 +162,12 @@ src/layouts/          ← BaseLayout (head, SEO, header/footer)
 src/components/        ← Header, Footer, Eyebrow, ImageFrame
 src/pages/            ← one file per page (index, about, services, routes, gallery, contact)
 src/pages/api/contact.ts ← form → Resend email (server route)
+
+── shipment tracker ──
+db/tracker-schema.sql       ← reference schema (created automatically at runtime)
+src/lib/session.ts          ← signed-cookie sessions, shared by both admin panels
+src/lib/tracker/            ← db connection, queries, auth, form parsing
+src/pages/tracking/         ← public page + admin (index, new, [id])
+src/pages/api/tracker/      ← tracker admin login / logout
+src/components/tracker/     ← details panel, timeline, shipment form
 ```

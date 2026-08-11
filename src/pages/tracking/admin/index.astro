@@ -1,0 +1,172 @@
+---
+/**
+ * Tracker admin — login screen + shipment dashboard.
+ * Replaces src/Tracker/admin/login.php and admin/dashboard.php.
+ *
+ * This panel is completely separate from the website content admin at /admin:
+ * different password (TRACKER_ADMIN_PASSWORD), different cookie.
+ */
+import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
+import { SITE } from '../../../consts';
+import { isTrackerAdmin, trackerPassword } from '../../../lib/tracker/auth';
+import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
+import { listShipments, STEP_COUNT, type ShipmentSummary } from '../../../lib/tracker/shipments';
+
+export const prerender = false;
+
+const authed = await isTrackerAdmin(Astro.request);
+const params = Astro.url.searchParams;
+
+/* ---------- logged out: show the login form ---------- */
+const loginErrors: Record<string, string> = {
+  '1': 'Wrong password.',
+  origin: 'That request looked unsafe, so it was blocked. Please try again.',
+  unconfigured: 'The tracker admin password is not set. Add TRACKER_ADMIN_PASSWORD in your Vercel environment variables.',
+};
+const loginError = loginErrors[params.get('error') ?? ''] ?? '';
+
+/* ---------- logged in: load the dashboard ---------- */
+const search = (params.get('q') ?? '').trim();
+let shipments: ShipmentSummary[] = [];
+let loadError = '';
+
+if (authed) {
+  if (!isConfigured()) {
+    loadError = DB_NOT_CONFIGURED;
+  } else {
+    try {
+      shipments = await listShipments(search);
+    } catch (e) {
+      console.error('Tracker dashboard failed to load:', e);
+      loadError = 'Could not read the shipments table. Check that the database is reachable.';
+    }
+  }
+}
+
+const notice = params.has('saved')
+  ? 'Shipment saved successfully.'
+  : params.has('deleted')
+    ? 'Shipment deleted.'
+    : '';
+
+// The badge shows the shipment's real current-stage title. The PHP looked this
+// up in a hardcoded list, so custom stage names were never displayed.
+const badgeClass = (s: ShipmentSummary) =>
+  s.current_step >= STEP_COUNT ? 'badge-done' : s.current_step >= 1 ? 'badge-transit' : 'badge-idle';
+---
+
+{
+  !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Shipment Tracker</h1>
+        <p class="lede">Sign in to add and update shipments.</p>
+
+        {loginError && <div class="alert alert-err">{loginError}</div>}
+        {!trackerPassword() && !loginError && (
+          <div class="alert alert-err">
+            No tracker password is set yet. Add <code>TRACKER_ADMIN_PASSWORD</code> to your
+            environment variables.
+          </div>
+        )}
+
+        <form method="post" action="/api/tracker/login">
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required autofocus />
+          </div>
+          <button class="btn btn-primary" type="submit">Log in</button>
+        </form>
+
+        <a class="back" href="/">← Back to {SITE.name}</a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout title="Shipments">
+      <div class="page-head">
+        <h1>Shipments</h1>
+        <a href="/tracking/admin/new" class="btn btn-primary">+ Add new shipment</a>
+      </div>
+
+      {notice && <div class="alert alert-ok">{notice}</div>}
+      {loadError && <div class="alert alert-err">{loadError}</div>}
+
+      <div class="card">
+        <form method="get" style="margin-bottom:18px;max-width:420px;">
+          <div class="field">
+            <label for="q">Search</label>
+            <input
+              id="q"
+              name="q"
+              type="search"
+              value={search}
+              placeholder="Tracking #, invoice #, or customer name"
+            />
+          </div>
+        </form>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Tracking #</th>
+                <th>Customer</th>
+                <th>Route</th>
+                <th>Status</th>
+                <th>Est. delivery</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shipments.length === 0 && (
+                <tr>
+                  <td colspan="6" class="empty">
+                    {loadError
+                      ? 'Shipments could not be loaded.'
+                      : search
+                        ? `No shipments match "${search}".`
+                        : 'No shipments yet. Use “Add new shipment” to create the first one.'}
+                  </td>
+                </tr>
+              )}
+              {shipments.map((s) => (
+                <tr>
+                  <td>
+                    <strong>{s.tracking_number}</strong>
+                    <span class="sub">{s.invoice_number}</span>
+                  </td>
+                  <td>{s.customer_name}</td>
+                  <td>
+                    {s.origin} → {s.destination}
+                  </td>
+                  <td>
+                    <span class={`badge ${badgeClass(s)}`}>
+                      {s.current_step_title ?? `Step ${s.current_step}`}
+                    </span>
+                  </td>
+                  <td>{s.estimated_delivery}</td>
+                  <td class="actions">
+                    <a class="btn btn-edit" href={`/tracking/admin/${s.id}`}>
+                      Edit
+                    </a>
+                    <form
+                      method="post"
+                      action={`/tracking/admin/${s.id}`}
+                      onsubmit={`return confirm('Delete shipment ${s.tracking_number}? This cannot be undone.');`}
+                    >
+                      <input type="hidden" name="intent" value="delete" />
+                      <button class="btn btn-danger" type="submit">
+                        Delete
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </TrackerAdminLayout>
+  )
+}

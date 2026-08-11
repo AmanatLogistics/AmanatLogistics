@@ -1,0 +1,70 @@
+---
+/**
+ * "Shipment Details" panel on the public tracking page — the label/value list
+ * plus the WhatsApp button (ported from src/Tracker/index.php).
+ */
+import type { Shipment } from '../../lib/tracker/shipments';
+
+interface Props {
+  shipment: Shipment;
+}
+const { shipment } = Astro.props;
+
+const rows: [string, string | number][] = [
+  ['Tracking Number', shipment.tracking_number],
+  ['Invoice Number', shipment.invoice_number],
+  ['Customer Name', shipment.customer_name],
+  ['Origin', shipment.origin],
+  ['Destination', shipment.destination],
+  ['Total Packages', shipment.total_packages],
+  ['Total Weight', shipment.total_weight],
+  ['Shipping Method', shipment.shipping_method],
+  ['Booking Date', shipment.booking_date],
+  ['Estimated Delivery', shipment.estimated_delivery],
+];
+
+// wa.me only accepts digits. The PHP used a numeric literal as the array key
+// here, so this link always rendered empty — hence the explicit guard.
+const waDigits = (shipment.whatsapp_number ?? '').replace(/\D/g, '');
+---
+
+<div class="rounded-xl border border-line bg-paper p-6 md:p-7">
+  <h2 class="m-0 mb-5 flex items-center gap-2.5 font-serif text-[19px] font-bold text-plum">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"
+        stroke="currentColor"
+        stroke-width="1.7"
+        stroke-linejoin="round"></path>
+      <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+    </svg>
+    Shipment Details
+  </h2>
+
+  <dl class="m-0">
+    {
+      rows.map(([label, value]) => (
+        <div class="flex items-start justify-between gap-4 border-b border-line py-3 last:border-b-0">
+          <dt class="text-[14px] text-muted">{label}</dt>
+          <dd class="m-0 text-right text-[14px] font-semibold text-ink">{value || '—'}</dd>
+        </div>
+      ))
+    }
+  </dl>
+
+  {
+    waDigits && (
+      <a
+        href={`https://wa.me/${waDigits}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="mt-5 flex items-center justify-center gap-2 rounded-lg bg-[#25D366] px-4 py-3 text-[14.5px] font-semibold text-white transition-colors hover:bg-[#1eb757]"
+      >
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 1.67c2.2 0 4.27.86 5.83 2.42a8.2 8.2 0 0 1 2.41 5.82c0 4.54-3.7 8.24-8.25 8.24a8.23 8.23 0 0 1-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.26-8.24Zm-2.6 4.1c-.16 0-.42.06-.64.3-.22.24-.85.83-.85 2.02s.87 2.34 1 2.5c.12.17 1.7 2.6 4.13 3.64.58.25 1.03.4 1.38.51.58.19 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.16.2-.57.2-1.05.14-1.16-.06-.1-.22-.16-.46-.28-.24-.12-1.44-.71-1.66-.79-.22-.08-.39-.12-.55.12-.16.24-.63.79-.77.95-.14.16-.28.18-.52.06-.24-.12-1.03-.38-1.96-1.21-.72-.65-1.21-1.44-1.36-1.68-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.19-.47-.39-.4-.54-.41h-.46Z" />
+        </svg>
+        Chat on WhatsApp
+      </a>
+    )
+  }
+</div>

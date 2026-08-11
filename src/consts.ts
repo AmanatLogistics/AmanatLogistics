@@ -26,6 +26,7 @@ export const NAV = [
   { label: 'About', href: '/about' },
   { label: 'Services', href: '/services' },
   { label: 'Routes & Coverage', href: '/routes' },
+  { label: 'Track Shipment', href: '/tracking' },
   { label: 'Gallery', href: '/gallery' },
   { label: 'Contact', href: '/contact' },
 ];
@@ -132,6 +133,7 @@ export const DEFAULT_CONTENT = {
     routes: { eyebrow: 'Where We Ship', title: 'Routes & Coverage', subtitle: 'Established export corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.' },
     gallery: { eyebrow: 'Our Work in Pictures', title: 'Gallery', subtitle: 'Our products, our facilities, and our shipments — real photography builds real trust.' },
     contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.' },
+    tracking: { eyebrow: 'Shipment Tracking', title: 'Track Your Shipment', subtitle: 'Enter your tracking number or invoice number to follow your consignment from our Kandahar warehouse right through to delivery.' },
   },
   // Services page — three freight-mode cards
   freightModes: [

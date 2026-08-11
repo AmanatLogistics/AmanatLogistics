@@ -1,0 +1,139 @@
+---
+/**
+ * "Shipment Progress" panel — the vertical 8-step timeline from
+ * src/Tracker/index.php, with completed / active / pending states.
+ */
+import type { ShipmentStep } from '../../lib/tracker/shipments';
+
+interface Props {
+  steps: ShipmentStep[];
+  currentStep: number;
+}
+const { steps, currentStep } = Astro.props;
+
+const statusLabel =
+  steps.find((s) => s.step_number === currentStep)?.step_title ?? 'Pending';
+
+const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep ? 'active' : 'pending');
+---
+
+<div class="rounded-xl border border-line bg-paper p-6 md:p-7">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="m-0 flex items-center gap-2.5 font-serif text-[19px] font-bold text-plum">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M2 7h11v9H2V7Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+        <path d="M13 10h4l3 3v3h-7v-6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+        <circle cx="6.5" cy="17.5" r="1.8" stroke="currentColor" stroke-width="1.7"></circle>
+        <circle cx="16.5" cy="17.5" r="1.8" stroke="currentColor" stroke-width="1.7"></circle>
+      </svg>
+      Shipment Progress
+    </h2>
+    <p class="m-0 text-[14px] text-muted">
+      Current Status: <span class="font-bold text-accent-deep">{statusLabel}</span>
+    </p>
+  </div>
+
+  <ol class="tk-timeline m-0 list-none p-0">
+    {
+      steps.map((s) => (
+        <li class={`tk-step tk-${state(s.step_number)} relative pb-8 pl-[52px] last:pb-0`}>
+          <span class="tk-dot" aria-hidden="true">
+            {state(s.step_number) === 'completed' && (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="m5 12.5 4.5 4.5L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            )}
+            {state(s.step_number) === 'active' && (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M2 7h11v9H2V7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+                <path d="M13 10h4l3 3v3h-7v-6Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+              </svg>
+            )}
+            {state(s.step_number) === 'pending' && (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.2" />
+                <path d="M12 7v5.2l3.2 2" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+              </svg>
+            )}
+          </span>
+
+          <h3 class="tk-title m-0 text-[15px] font-bold">
+            {s.step_number}. {s.step_title}
+          </h3>
+          <p class="tk-time m-0 mt-0.5 text-[12.5px] font-semibold">
+            {s.step_date ? `${s.step_date}${s.step_time ? ` · ${s.step_time}` : ''}` : 'Pending'}
+          </p>
+          <p class="m-0 mt-1 text-[13.5px] leading-relaxed text-muted">{s.step_description}</p>
+        </li>
+      ))
+    }
+  </ol>
+</div>
+
+<style>
+  /* States are driven by classes rather than utilities so the connecting line
+     and the dot stay in sync from one rule each. */
+  .tk-timeline {
+    --tk-done: #2e6b0e;
+    --tk-active: var(--color-accent);
+    --tk-idle: #c9bda6;
+  }
+
+  /* Connecting line, drawn from each step down to the next. */
+  .tk-step::before {
+    content: '';
+    position: absolute;
+    left: 17px;
+    top: 38px;
+    bottom: -4px;
+    width: 2px;
+    background: var(--color-line);
+  }
+  .tk-step:last-child::before {
+    display: none;
+  }
+  .tk-completed::before {
+    background: var(--tk-done);
+  }
+
+  .tk-dot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    height: 36px;
+    width: 36px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--tk-idle);
+  }
+
+  .tk-completed .tk-dot {
+    background: var(--tk-done);
+  }
+  .tk-active .tk-dot {
+    background: var(--tk-active);
+    box-shadow: 0 0 0 4px rgba(192, 135, 46, 0.18);
+  }
+  .tk-pending .tk-dot {
+    background: #eee5d3;
+    color: #a4937a;
+  }
+
+  .tk-completed .tk-title,
+  .tk-completed .tk-time {
+    color: var(--tk-done);
+  }
+  .tk-active .tk-title,
+  .tk-active .tk-time {
+    color: var(--color-accent-deep);
+  }
+  .tk-pending .tk-title {
+    color: var(--color-muted);
+  }
+  .tk-pending .tk-time {
+    color: #a4937a;
+  }
+</style>

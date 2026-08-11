@@ -1,0 +1,98 @@
+---
+/**
+ * Add a shipment — replaces src/Tracker/admin/add.php.
+ * Handles its own POST, then redirects (post/redirect/get) so a refresh can't
+ * submit the same shipment twice.
+ */
+import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
+import ShipmentForm from '../../../components/tracker/ShipmentForm.astro';
+import { isTrackerAdmin } from '../../../lib/tracker/auth';
+import { isSameOrigin } from '../../../lib/session';
+import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
+import { parseShipmentForm } from '../../../lib/tracker/form';
+import {
+  blankSteps,
+  createShipment,
+  trackingNumberTaken,
+  SHIPPING_METHODS,
+  type ShipmentInput,
+  type ShipmentStep,
+} from '../../../lib/tracker/shipments';
+
+export const prerender = false;
+
+const authed = await isTrackerAdmin(Astro.request);
+
+const emptyShipment: ShipmentInput = {
+  tracking_number: '',
+  invoice_number: '',
+  customer_name: '',
+  origin: '',
+  destination: '',
+  total_packages: 1,
+  total_weight: '',
+  shipping_method: SHIPPING_METHODS[0],
+  booking_date: '',
+  estimated_delivery: '',
+  whatsapp_number: '',
+  current_step: 1,
+};
+
+let data: ShipmentInput = emptyShipment;
+let steps: ShipmentStep[] = blankSteps();
+let error: string | null = null;
+
+if (authed && Astro.request.method === 'POST') {
+  if (!isSameOrigin(Astro.request)) {
+    error = 'That request looked unsafe, so it was blocked. Please try again.';
+  } else if (!isConfigured()) {
+    error = DB_NOT_CONFIGURED;
+  } else {
+    const parsed = parseShipmentForm(await Astro.request.formData());
+    // Keep what was typed so a validation error never empties the form.
+    data = parsed.data;
+    steps = parsed.steps;
+    error = parsed.error;
+
+    if (!error) {
+      try {
+        if (await trackingNumberTaken(data.tracking_number)) {
+          error = 'A shipment with that tracking number already exists.';
+        } else {
+          await createShipment(data, steps);
+          return Astro.redirect('/tracking/admin?saved=1', 303);
+        }
+      } catch (e) {
+        console.error('Creating shipment failed:', e);
+        error = 'Could not save the shipment. Please try again.';
+      }
+    }
+  }
+}
+---
+
+{
+  !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Session expired</h1>
+        <p class="lede">Please log in again to add a shipment.</p>
+        <a class="btn btn-primary" href="/tracking/admin" style="width:100%;justify-content:center;">
+          Go to login
+        </a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout title="Add shipment">
+      <div class="page-head">
+        <h1>Add new shipment</h1>
+        <a class="btn btn-soft" href="/tracking/admin">← Back to shipments</a>
+      </div>
+
+      <div class="card">
+        <ShipmentForm data={data} steps={steps} error={error} submitLabel="Save shipment" />
+      </div>
+    </TrackerAdminLayout>
+  )
+}
