@@ -4,15 +4,18 @@
  * src/Tracker/index.php, with completed / active / pending states.
  */
 import type { ShipmentStep } from '../../lib/tracker/shipments';
+import { t, type Lang } from '../../lib/tracker/i18n';
 
 interface Props {
+  /** Steps with titles/descriptions already translated by the page. */
   steps: ShipmentStep[];
   currentStep: number;
+  lang: Lang;
 }
-const { steps, currentStep } = Astro.props;
+const { steps, currentStep, lang } = Astro.props;
 
 const statusLabel =
-  steps.find((s) => s.step_number === currentStep)?.step_title ?? 'Pending';
+  steps.find((s) => s.step_number === currentStep)?.step_title ?? t(lang, 'pending');
 
 const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep ? 'active' : 'pending');
 ---
@@ -26,17 +29,17 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
         <circle cx="6.5" cy="17.5" r="1.8" stroke="currentColor" stroke-width="1.7"></circle>
         <circle cx="16.5" cy="17.5" r="1.8" stroke="currentColor" stroke-width="1.7"></circle>
       </svg>
-      Shipment Progress
+      {t(lang, 'shipmentProgress')}
     </h2>
     <p class="m-0 text-[14px] text-muted">
-      Current Status: <span class="font-bold text-accent-deep">{statusLabel}</span>
+      {t(lang, 'currentStatus')}: <span class="font-bold text-accent-deep">{statusLabel}</span>
     </p>
   </div>
 
   <ol class="tk-timeline m-0 list-none p-0">
     {
       steps.map((s) => (
-        <li class={`tk-step tk-${state(s.step_number)} relative pb-8 pl-[52px] last:pb-0`}>
+        <li class={`tk-step tk-${state(s.step_number)} relative pb-8 ps-[52px] last:pb-0`}>
           <span class="tk-dot" aria-hidden="true">
             {state(s.step_number) === 'completed' && (
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -61,7 +64,13 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
             {s.step_number}. {s.step_title}
           </h3>
           <p class="tk-time m-0 mt-0.5 text-[12.5px] font-semibold">
-            {s.step_date ? `${s.step_date}${s.step_time ? ` · ${s.step_time}` : ''}` : 'Pending'}
+            {/* <bdi> isolates the date so its digits keep LTR order in a Pashto
+                page, without dragging the paragraph's alignment with it. */}
+            {s.step_date ? (
+              <bdi>{`${s.step_date}${s.step_time ? ` ${s.step_time}` : ''}`}</bdi>
+            ) : (
+              t(lang, 'pending')
+            )}
           </p>
           <p class="m-0 mt-1 text-[13.5px] leading-relaxed text-muted">{s.step_description}</p>
         </li>
@@ -72,18 +81,23 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
 
 <style>
   /* States are driven by classes rather than utilities so the connecting line
-     and the dot stay in sync from one rule each. */
+     and the dot stay in sync from one rule each.
+
+     Note the list items use ps-* (padding-inline-start) and the rules below use
+     inset-inline-start, so the whole timeline mirrors itself when the page is
+     rendered right-to-left for Pashto. */
   .tk-timeline {
     --tk-done: #2e6b0e;
     --tk-active: var(--color-accent);
     --tk-idle: #c9bda6;
   }
 
-  /* Connecting line, drawn from each step down to the next. */
+  /* Connecting line, drawn from each step down to the next.
+     Logical inline-start so the rail flips side in the RTL (Pashto) layout. */
   .tk-step::before {
     content: '';
     position: absolute;
-    left: 17px;
+    inset-inline-start: 17px;
     top: 38px;
     bottom: -4px;
     width: 2px;
@@ -98,7 +112,7 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
 
   .tk-dot {
     position: absolute;
-    left: 0;
+    inset-inline-start: 0;
     top: 0;
     display: flex;
     height: 36px;

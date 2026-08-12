@@ -67,6 +67,10 @@ const ogImage = new URL(seo.ogImage, SITE.domain).href;
       })}
     />
 
+    <!-- Per-page additions to <head> (the tracking page uses this to load an
+         Arabic-script font only when it is showing Pashto). -->
+    <slot name="head" />
+
     <!-- App-like navigation: swap pages without a full reload -->
     <ClientRouter />
   </head>

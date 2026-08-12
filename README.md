@@ -93,6 +93,32 @@ temporarily unavailable rather than erroring.
   `923001234567`). Leave it blank to hide the button for that shipment.
 - **Edit** a shipment as it moves along; **Delete** removes it and its timeline.
 
+### Pashto (پښتو)
+
+The tracking page has an **English / پښتو** button in the top-right of the
+tracking card. Switching flips the page to Pashto and lays it out right-to-left,
+and the choice is remembered for the customer's next visit. Only the tracking
+page is translated — the rest of the site stays English.
+
+Everything a customer normally sees is translated in the code: all the labels
+plus the eight standard shipment stages and their descriptions. **This needs no
+setup and costs nothing.**
+
+The one gap: a stage *you rename by hand* in the admin to something non-standard
+has no written translation, so it stays in English. If you want those covered
+too, add a free Azure Translator key:
+
+```
+AZURE_TRANSLATOR_KEY=…
+AZURE_TRANSLATOR_REGION=westeurope
+```
+
+Azure portal → Create a **Translator** resource → *Keys and Endpoint*. The free
+tier is 2 million characters a month, far beyond what this site uses — and
+because the standard stages are already translated in code, they never hit the
+API at all. If the key is missing or the service is unreachable, the page still
+loads and simply shows that text in English.
+
 > Replaces the old PHP/MySQL tracker that used to live in `src/Tracker/`. PHP
 > cannot run on Vercel, so it was rewritten as Astro pages backed by Postgres.
 
@@ -167,6 +193,8 @@ src/pages/api/contact.ts ← form → Resend email (server route)
 db/tracker-schema.sql       ← reference schema (created automatically at runtime)
 src/lib/session.ts          ← signed-cookie sessions, shared by both admin panels
 src/lib/tracker/            ← db connection, queries, auth, form parsing
+src/lib/tracker/i18n.ts     ← English + Pashto wording (edit the Pashto here)
+src/lib/tracker/translate.ts ← optional Azure fallback for renamed stages
 src/pages/tracking/         ← public page + admin (index, new, [id])
 src/pages/api/tracker/      ← tracker admin login / logout
 src/components/tracker/     ← details panel, timeline, shipment form
