@@ -34,30 +34,30 @@ export const htmlLang: Record<Lang, string> = { en: 'en', ps: 'ps' };
 
 const STRINGS = {
   // Page header
-  eyebrow: { en: 'Shipment Tracking', ps: 'د محمولې تعقیب' },
-  pageTitle: { en: 'Track Your Shipment', ps: 'خپله محموله تعقیب کړئ' },
+  eyebrow: { en: 'Shipment Tracking', ps: 'د اجناسو تعقیب' },
+  pageTitle: { en: 'Track Your Shipment', ps: 'خپل اجناس تعقیب کړئ' },
   pageSubtitle: {
     en: 'Enter your tracking number or invoice number to follow your consignment from our Kandahar warehouse right through to delivery.',
-    ps: 'د خپلې محمولې د تعقیب لپاره، زموږ د کندهار له ګودام څخه تر سپارلو پورې، خپل د تعقیب نمبر یا د بیل نمبر ولیکئ.',
+    ps: 'د خپلو اجناسو د تعقیب لپاره، زموږ د کندهار له ګودام څخه تر سپارلو پورې، خپل د تعقیب نمبر یا د بیل نمبر ولیکئ.',
   },
 
   // Search
-  cardTitle: { en: 'Track Your Shipment', ps: 'خپله محموله تعقیب کړئ' },
+  cardTitle: { en: 'Track Your Shipment', ps: 'خپل اجناس تعقیب کړئ' },
   searchLabel: { en: 'Tracking number or invoice number', ps: 'د تعقیب نمبر یا د بیل نمبر' },
   searchPlaceholder: {
     en: 'Enter Tracking Number or Invoice Number',
     ps: 'د تعقیب نمبر یا د بیل نمبر ولیکئ',
   },
-  trackNow: { en: 'Track Now', ps: 'اوس یې وپلټئ' },
+  trackNow: { en: 'Track Now', ps: 'پلټل' },
 
   // States
   emptyState: {
     en: 'Enter your tracking or invoice number above to see your shipment status.',
-    ps: 'د خپلې محمولې د حالت لیدو لپاره پورته خپل د تعقیب یا بیل نمبر ولیکئ.',
+    ps: 'د خپل اجناسو د حالت لیدو لپاره پورته خپل د تعقیب یا بیل نمبر ولیکئ.',
   },
   notFound: {
     en: 'No shipment found for',
-    ps: 'هېڅ محموله ونه موندل شوه د',
+    ps: 'هیڅ ونه موندل سوه ',
   },
   notFoundHint: {
     en: 'Please check the tracking or invoice number and try again.',
@@ -65,7 +65,7 @@ const STRINGS = {
   },
   unavailable: {
     en: 'Tracking is not available right now. Please contact us and we will check your shipment for you.',
-    ps: 'تعقیب اوس مهال شتون نه لري. مهرباني وکړئ زموږ سره اړیکه ونیسئ، موږ به ستاسو محموله وګورو.',
+    ps: 'تعقیب اوس مهال شتون نه لري. مهرباني وکړئ زموږ سره اړیکه ونیسئ.',
   },
   lookupFailed: {
     en: 'We could not reach the tracking system just now. Please try again in a moment.',
@@ -73,26 +73,26 @@ const STRINGS = {
   },
 
   // Details panel
-  shipmentDetails: { en: 'Shipment Details', ps: 'د محمولې جزئیات' },
+  shipmentDetails: { en: 'Shipment Details', ps: 'د اجناسو جزئیات' },
   trackingNumber: { en: 'Tracking Number', ps: 'د تعقیب نمبر' },
   invoiceNumber: { en: 'Invoice Number', ps: 'د بیل نمبر' },
   customerName: { en: 'Customer Name', ps: 'د پیرودونکي نوم' },
   origin: { en: 'Origin', ps: 'د پیل ځای' },
-  destination: { en: 'Destination', ps: 'د رسېدو ځای' },
-  totalPackages: { en: 'Total Packages', ps: 'ټولې بستې' },
-  totalWeight: { en: 'Total Weight', ps: 'ټول وزن' },
-  shippingMethod: { en: 'Shipping Method', ps: 'د لېږد طریقه' },
-  bookingDate: { en: 'Booking Date', ps: 'د ثبت نېټه' },
-  estimatedDelivery: { en: 'Estimated Delivery', ps: 'د رسېدو اټکل شوې نېټه' },
-  whatsapp: { en: 'Chat on WhatsApp', ps: 'په واټساپ کې خبرې وکړئ' },
+  destination: { en: 'Destination', ps: 'د رسیدو ځای' },
+  totalPackages: { en: 'Total Packages', ps: 'جمله کاټنان' },
+  totalWeight: { en: 'Total Weight', ps: 'جمله وزن' },
+  shippingMethod: { en: 'Shipping Method', ps: 'د لیږد طریقه' },
+  bookingDate: { en: 'Booking Date', ps: 'د ثبت نیټه' },
+  estimatedDelivery: { en: 'Estimated Delivery', ps: 'د رسیدو اټکل سوې نیټه' },
+  whatsapp: { en: 'Chat on WhatsApp', ps: 'په واتسف کی اړیکه ونیسی' },
 
   // Timeline
-  shipmentProgress: { en: 'Shipment Progress', ps: 'د محمولې پرمختګ' },
+  shipmentProgress: { en: 'Shipment Progress', ps: 'د اجناسو د لیږدولو جریان' },
   currentStatus: { en: 'Current Status', ps: 'اوسنی حالت' },
   pending: { en: 'Pending', ps: 'په تمه' },
 
   // Footer note
-  cantFind: { en: "Can't find your shipment?", ps: 'خپله محموله نه مومئ؟' },
+  cantFind: { en: "Can't find your shipment?", ps: 'ستاسی اجناس ثبت نه لری؟' },
   contactTeam: { en: 'Contact our team', ps: 'زموږ ټیم سره اړیکه ونیسئ' },
   andWeLook: { en: "and we'll look into it.", ps: 'او موږ به یې وګورو.' },
 } satisfies Record<string, Record<Lang, string>>;
@@ -119,34 +119,34 @@ export function t(lang: Lang, key: StringKey): string {
  */
 const CONTENT_PS: Record<string, string> = {
   // Stage names
-  'shipment received': 'محموله ترلاسه شوه',
+  'shipment received': 'اجناس ترلاسه شوه',
   'custon clearnce': 'ګمرکي پروسه',
-  'custom clearance': 'ګمرکي پروسه',
-  'departed origin': 'له مبدأ څخه روانه شوه',
-  'in salang': 'په سالنګ کې',
+  'kandahar custom clearance': 'کندهار کمرګ پروسه',
+  'departed origin': 'له کندهار څخه اجناس واستول سول',
+  'in salang': ' اجناس په سالنک کی دی',
   'hairatan customs clearance': 'د حیرتان ګمرکي پروسه',
-  'in transit': 'په لاره کې',
-  'tashkent airport': 'د تاشکند هوايي ډګر',
-  delivered: 'وسپارل شوه',
+  'in transit': 'اجناس د ازبکستان پر باډر دی',
+  'tashkent airport': 'اجناس د تاشکند هوايي ډګر',
+  'delivered': 'وسپارل سوه',
 
   // Stage descriptions
   'we have received your shipment at our origin office.':
-    'موږ ستاسو محموله زموږ په ابتدايي دفتر کې ترلاسه کړه.',
-  'your shipment waiting for shipment clearence.': 'ستاسو محموله د ګمرکي پروسې په تمه ده.',
-  'your shipment waiting for shipment clearance.': 'ستاسو محموله د ګمرکي پروسې په تمه ده.',
-  'your shipment has departed from origin.': 'ستاسو محموله له مبدأ څخه روانه شوه.',
-  'your shipment is passing salang pass.': 'ستاسو محموله د سالنګ له کوتلې تېرېږي.',
+    'موږ ستاسو اجناس زموږ د کندهار په دفتر کې ترلاسه کړه.',
+  'your shipment waiting for shipment clearence.': 'ستاسو اجناس د ګمرکي پروسې په تمه دی.',
+  'your shipment waiting for shipment clearance.': 'ستاسو اجناس د ګمرکي پروسې په تمه دی.',
+  'your shipment has departed from origin.': 'ستاسو اجناس له کندهار  څخه روانه سوه.',
+  'your shipment is passing salang pass.': 'ستاسو اجناس د سالنګ له کوتل څخه تیرېږي.',
   'your shipment is pending hairatan customs clearance.':
-    'ستاسو محموله د حیرتان د ګمرک د پروسې په تمه ده.',
-  'your shipment is in transit to tashkent.': 'ستاسو محموله تاشکند ته په لاره کې ده.',
-  'your shipment is in tashkent airport.': 'ستاسو محموله د تاشکند په هوايي ډګر کې ده.',
-  'your shipment has been delivered.': 'ستاسو محموله وسپارل شوه.',
+    'ستاسو اجناس د حیرتان د ګمرک د پروسې په تمه دی.',
+  'your shipment is in transit to tashkent.': 'ستاسو اجناس تاشکند ته په لاره کې دۍ.',
+  'your shipment is in tashkent airport.': 'ستاسو اجناس د تاشکند په هوايي ډګر کې دۍ.',
+  'your shipment has been delivered.': 'ستاسو اجناس وسپارل سوه.',
 
   // Shipping methods (the four the admin can choose)
-  'sea freight': 'بحري لېږد',
-  'air freight': 'هوايي لېږد',
-  'land freight': 'ځمکنی لېږد',
-  express: 'چټک لېږد',
+  'sea freight': 'سمندری لیږد',
+  'air freight': 'هوايي لیږد',
+  'land freight': 'ځمکنی لیږد',
+  'express': 'چټک لیږد',
 };
 
 /**
