@@ -57,12 +57,12 @@ export const SHIPPING_METHODS = ['Sea Freight', 'Air Freight', 'Land Freight', '
  */
 export const DEFAULT_STEPS: { step_title: string; step_description: string }[] = [
   { step_title: 'Shipment Received', step_description: 'We have received your shipment at our origin office.' },
-  { step_title: 'Origin Warehouse', step_description: 'Your shipment is at our origin warehouse.' },
+  { step_title: 'Custon Clearnce', step_description: 'Your shipment Waiting For Shipment Clearence.' },
   { step_title: 'Departed Origin', step_description: 'Your shipment has departed from origin.' },
-  { step_title: 'In Transit', step_description: 'Your shipment is in transit to destination.' },
-  { step_title: 'Customs Clearance', step_description: 'Your shipment is pending customs clearance.' },
-  { step_title: 'Destination Warehouse', step_description: 'Your shipment will arrive at destination warehouse.' },
-  { step_title: 'Out for Delivery', step_description: 'Your shipment is out for delivery.' },
+  { step_title: 'In Salang', step_description: 'Your shipment is Passing Salang Pass.' },
+  { step_title: 'Hairatan Customs Clearance', step_description: 'Your shipment is pending Hairatan customs clearance.' },
+  { step_title: 'In Transit', step_description: 'Your shipment is In Transit To Tashkent.' },
+  { step_title: 'Tashkent Airport', step_description: 'Your shipment is In Tashkent Airport.' },
   { step_title: 'Delivered', step_description: 'Your shipment has been delivered.' },
 ];
 
