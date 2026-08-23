@@ -22,6 +22,8 @@
   --err-bg: #fbe9e9;
   --info: #1450c9;
   --info-bg: #eaf1ff;
+  --late: #a35b00;
+  --late-bg: #fdf0dd;
 }
 
 * {
@@ -219,6 +221,7 @@ tbody tr:hover td {
 }
 td.actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .sub {
@@ -252,6 +255,11 @@ td.actions {
 .badge-idle {
   background: #f1ece2;
   color: #5c5044;
+}
+.badge-late {
+  margin-left: 6px;
+  background: var(--late-bg);
+  color: var(--late);
 }
 
 /* ---------------- forms ---------------- */
@@ -405,4 +413,153 @@ td.actions {
   font-size: 12.5px;
   text-align: center;
   color: var(--muted);
+}
+
+/* ============================================================
+   Dashboard — stat tiles, filters, row status
+   ============================================================ */
+
+.page-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Tiles are links: each one applies its own status filter to the table. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (max-width: 900px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 460px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--tone, var(--line));
+  border-radius: 11px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+}
+.stat:hover {
+  border-color: var(--tone, var(--gold));
+  box-shadow: 0 4px 14px rgba(44, 24, 32, 0.08);
+}
+/* The selected filter — also the one place colour fills the whole tile. */
+.stat.is-active {
+  background: var(--tone-bg, var(--cream));
+  border-color: var(--tone, var(--gold));
+  box-shadow: inset 0 0 0 1px var(--tone, var(--gold));
+}
+.stat-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.stat-value {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--tone, var(--burg));
+}
+.stat-note {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.stat-all {
+  --tone: var(--burg);
+  --tone-bg: #f6eef1;
+}
+.stat-idle {
+  --tone: #5c5044;
+  --tone-bg: #f1ece2;
+}
+.stat-transit {
+  --tone: var(--info);
+  --tone-bg: var(--info-bg);
+}
+.stat-done {
+  --tone: var(--ok);
+  --tone-bg: var(--ok-bg);
+}
+.stat-late {
+  --tone: var(--late);
+  --tone-bg: var(--late-bg);
+}
+
+/* ---------------- filter bar ---------------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.filter-bar .field {
+  flex: 1 1 200px;
+  max-width: 340px;
+}
+.filter-bar .btn {
+  padding: 10px 16px;
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* ---------------- row status ---------------- */
+.btn-ok {
+  padding: 7px 13px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  white-space: nowrap;
+}
+.btn-ok:hover {
+  background: #ddedcc;
+}
+
+/* Thin bar under the status badge: how far along the 8 stages it is. */
+.progress {
+  display: block;
+  width: 116px;
+  height: 4px;
+  margin-top: 6px;
+  border-radius: 4px;
+  background: #ece4d6;
+  overflow: hidden;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--gold);
+}
+
+td.is-late {
+  font-weight: 700;
+  color: var(--late);
 }

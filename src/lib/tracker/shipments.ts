@@ -141,12 +141,16 @@ export async function findById(
 }
 
 /**
- * Dashboard list, optionally filtered (dashboard.php). Joins in the *actual*
- * title of the current step — the PHP looked it up in a hardcoded array, so a
- * shipment on step 4 always displayed "In Transit" even when its real stage was
- * named something else.
+ * Dashboard list, optionally filtered by search term and/or status bucket
+ * (dashboard.php). Joins in the *actual* title of the current step — the PHP
+ * looked it up in a hardcoded array, so a shipment on step 4 always displayed
+ * "In Transit" even when its real stage was named something else.
+ *
+ * The status test is written as one OR-chain of `param = 'literal' AND …`
+ * rather than built by string concatenation, so the filter stays a bound
+ * parameter and an unexpected value can only match nothing.
  */
-export async function listShipments(query = ''): Promise<ShipmentSummary[]> {
+export async function listShipments(query = '', status: Status | '' = ''): Promise<ShipmentSummary[]> {
   await ensureSchema();
   const sql = db();
   const q = query.trim();
@@ -164,10 +168,20 @@ export async function listShipments(query = ''): Promise<ShipmentSummary[]> {
     FROM shipments s
     LEFT JOIN shipment_steps st
       ON st.shipment_id = s.id AND st.step_number = s.current_step
-    WHERE ${q} = ''
-       OR s.tracking_number ILIKE ${like}
-       OR s.invoice_number  ILIKE ${like}
-       OR s.customer_name   ILIKE ${like}
+    WHERE (
+            ${q} = ''
+         OR s.tracking_number ILIKE ${like}
+         OR s.invoice_number  ILIKE ${like}
+         OR s.customer_name   ILIKE ${like}
+          )
+      AND (
+            ${status} = ''
+         OR (${status} = 'pending'  AND s.current_step <= 1)
+         OR (${status} = 'transit'  AND s.current_step >  1 AND s.current_step < ${STEP_COUNT})
+         OR (${status} = 'received' AND s.current_step >= ${STEP_COUNT})
+         OR (${status} = 'overdue'  AND s.current_step <  ${STEP_COUNT}
+                                    AND s.estimated_delivery < ${today()}::date)
+          )
     ORDER BY s.created_at DESC
   `) as ShipmentSummary[];
 }
@@ -289,4 +303,124 @@ export async function deleteShipment(id: number): Promise<void> {
   await ensureSchema();
   const sql = db();
   await sql`DELETE FROM shipments WHERE id = ${id}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Status                                                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Dashboard status buckets, derived from current_step — there is no status
+ * column, and adding one would let it drift out of sync with the timeline the
+ * customer actually sees.
+ *
+ *   pending   step 1        booked, sitting at the origin office
+ *   transit   steps 2..7    moving
+ *   received  step 8        the final stage — delivered / received
+ *
+ * `overdue` is deliberately NOT one of these: it overlaps them (a shipment is
+ * overdue when it is past its ETA and not yet received), so it is a filter and
+ * a count of its own rather than a fourth bucket.
+ */
+export const STATUSES = ['pending', 'transit', 'received', 'overdue'] as const;
+export type Status = (typeof STATUSES)[number];
+
+export const STATUS_LABEL: Record<Status, string> = {
+  pending: 'Pending',
+  transit: 'In Transit',
+  received: 'Received',
+  overdue: 'Overdue',
+};
+
+/** Narrow an untrusted ?status= value to a real bucket, or '' for "all". */
+export function asStatus(value: string): Status | '' {
+  return (STATUSES as readonly string[]).includes(value) ? (value as Status) : '';
+}
+
+export function statusOf(s: Pick<Shipment, 'current_step'>): Exclude<Status, 'overdue'> {
+  if (s.current_step >= STEP_COUNT) return 'received';
+  return s.current_step <= 1 ? 'pending' : 'transit';
+}
+
+/** Past its estimated delivery date and still not received. */
+export function isOverdue(s: Pick<Shipment, 'current_step' | 'estimated_delivery'>): boolean {
+  if (s.current_step >= STEP_COUNT) return false;
+  // Both sides are 'YYYY-MM-DD', which compares correctly as a string.
+  return Boolean(s.estimated_delivery) && s.estimated_delivery < today();
+}
+
+/** Today as 'YYYY-MM-DD' in local time (not UTC — a UTC date can be tomorrow). */
+export function today(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export interface StatusCounts {
+  total: number;
+  pending: number;
+  transit: number;
+  received: number;
+  overdue: number;
+}
+
+/**
+ * Counts for the dashboard tiles. Takes the same search term as listShipments
+ * but NOT the status filter, so the tiles keep showing the full breakdown of
+ * whatever is being searched while one of them is selected.
+ */
+export async function countShipments(query = ''): Promise<StatusCounts> {
+  await ensureSchema();
+  const sql = db();
+  const q = query.trim();
+  const like = `%${q}%`;
+
+  const rows = (await sql`
+    SELECT
+      count(*)::int AS total,
+      count(*) FILTER (WHERE current_step <= 1)::int                AS pending,
+      count(*) FILTER (WHERE current_step > 1
+                         AND current_step < ${STEP_COUNT})::int     AS transit,
+      count(*) FILTER (WHERE current_step >= ${STEP_COUNT})::int    AS received,
+      count(*) FILTER (WHERE current_step < ${STEP_COUNT}
+                         AND estimated_delivery < ${today()}::date)::int AS overdue
+    FROM shipments
+    WHERE ${q} = ''
+       OR tracking_number ILIKE ${like}
+       OR invoice_number  ILIKE ${like}
+       OR customer_name   ILIKE ${like}
+  `) as StatusCounts[];
+
+  return rows[0];
+}
+
+/**
+ * One-click "received" from the dashboard: jump to the final stage and stamp
+ * it with today's date and time.
+ *
+ * Only the final step is stamped. Earlier stages left blank keep showing their
+ * date as "Pending" rather than being back-filled with a date they did not
+ * happen on — the customer's timeline still ticks them off, because it draws
+ * completed/active from current_step, not from the dates.
+ */
+export async function markReceived(id: number): Promise<void> {
+  await ensureSchema();
+  const sql = db();
+  const now = new Date();
+  const time = `${((now.getHours() + 11) % 12) + 1}:${String(now.getMinutes()).padStart(2, '0')} ${
+    now.getHours() < 12 ? 'AM' : 'PM'
+  }`;
+
+  await sql.transaction([
+    sql`
+      UPDATE shipments
+      SET current_step = ${STEP_COUNT}, updated_at = now()
+      WHERE id = ${id}
+    `,
+    sql`
+      UPDATE shipment_steps
+      SET step_date = ${today()}::date, step_time = ${time}
+      WHERE shipment_id = ${id} AND step_number = ${STEP_COUNT} AND step_date IS NULL
+    `,
+  ]);
 }

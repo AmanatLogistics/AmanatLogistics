@@ -93,6 +93,27 @@ temporarily unavailable rather than erroring.
   `923001234567`). Leave it blank to hide the button for that shipment.
 - **Edit** a shipment as it moves along; **Delete** removes it and its timeline.
 
+**The dashboard at a glance:**
+
+- **Five counters across the top** — All / Pending / In Transit / Received /
+  Overdue. Each one is also a **filter**: click "In Transit" to list only the
+  shipments still moving. The counters always show the full picture, so you can
+  see how many are in transit while looking at the received ones.
+- **Filter and search together** — type a tracking number, invoice number, or
+  customer name and pick a status; the two combine. "Clear" resets both.
+- **"✓ OK — Received"** on each row marks that shipment delivered in one click:
+  it jumps to the final stage and stamps today's date and time on it. Received
+  shipments show a green badge and lose the button. It asks for confirmation
+  first, and re-clicking never overwrites the original delivery date.
+- **Status meanings** — *Pending* is stage 1 (booked, not moving yet), *In
+  Transit* is stages 2–7, *Received* is the final stage 8. *Overdue* is any
+  shipment past its estimated delivery date that has not been received; it also
+  shows an orange badge on the row and highlights the date.
+
+These come from each shipment's current stage — there is no separate status to
+keep up to date, so the dashboard can never disagree with the timeline the
+customer sees.
+
 ### Pashto (پښتو)
 
 The tracking page has an **English / پښتو** button in the top-right of the

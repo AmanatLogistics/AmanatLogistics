@@ -10,8 +10,21 @@ import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
 import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
 import { SITE } from '../../../consts';
 import { isTrackerAdmin, trackerPassword } from '../../../lib/tracker/auth';
+import { isSameOrigin } from '../../../lib/session';
 import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
-import { listShipments, STEP_COUNT, type ShipmentSummary } from '../../../lib/tracker/shipments';
+import {
+  asStatus,
+  countShipments,
+  isOverdue,
+  listShipments,
+  markReceived,
+  statusOf,
+  STATUS_LABEL,
+  STEP_COUNT,
+  type ShipmentSummary,
+  type Status,
+  type StatusCounts,
+} from '../../../lib/tracker/shipments';
 
 export const prerender = false;
 
@@ -26,17 +39,57 @@ const loginErrors: Record<string, string> = {
 };
 const loginError = loginErrors[params.get('error') ?? ''] ?? '';
 
-/* ---------- logged in: load the dashboard ---------- */
+/* ---------- logged in: filters, actions, dashboard ---------- */
 const search = (params.get('q') ?? '').trim();
+// Anything unrecognised in ?status= falls back to "all" rather than erroring.
+const status = asStatus(params.get('status') ?? '');
+
 let shipments: ShipmentSummary[] = [];
+let counts: StatusCounts = { total: 0, pending: 0, transit: 0, received: 0, overdue: 0 };
 let loadError = '';
+let actionError = '';
+
+/**
+ * The "Received" button posts back to this same URL, so the redirect can send
+ * the user straight back to the filter they were looking at (post/redirect/get,
+ * so a refresh never re-fires the action).
+ */
+if (authed && Astro.request.method === 'POST') {
+  if (!isSameOrigin(Astro.request)) {
+    actionError = 'That request looked unsafe, so it was blocked. Please try again.';
+  } else if (!isConfigured()) {
+    actionError = DB_NOT_CONFIGURED;
+  } else {
+    const form = await Astro.request.formData();
+    const id = Number.parseInt(String(form.get('id') ?? ''), 10);
+
+    if (form.get('intent') === 'receive' && Number.isInteger(id) && id > 0) {
+      try {
+        await markReceived(id);
+        const back = new URL(Astro.url);
+        back.searchParams.delete('saved');
+        back.searchParams.delete('deleted');
+        back.searchParams.set('received', '1');
+        return Astro.redirect(back.pathname + back.search, 303);
+      } catch (e) {
+        console.error('Marking shipment received failed:', e);
+        actionError = 'Could not mark that shipment as received. Please try again.';
+      }
+    }
+  }
+}
 
 if (authed) {
   if (!isConfigured()) {
     loadError = DB_NOT_CONFIGURED;
   } else {
     try {
-      shipments = await listShipments(search);
+      // Counts ignore the status filter on purpose: the tiles keep showing the
+      // full breakdown of the current search while one of them is selected.
+      [shipments, counts] = await Promise.all([
+        listShipments(search, status),
+        countShipments(search),
+      ]);
     } catch (e) {
       console.error('Tracker dashboard failed to load:', e);
       loadError = 'Could not read the shipments table. Check that the database is reachable.';
@@ -44,16 +97,38 @@ if (authed) {
   }
 }
 
-const notice = params.has('saved')
-  ? 'Shipment saved successfully.'
-  : params.has('deleted')
-    ? 'Shipment deleted.'
-    : '';
+const notice = params.has('received')
+  ? 'Shipment marked as received.'
+  : params.has('saved')
+    ? 'Shipment saved successfully.'
+    : params.has('deleted')
+      ? 'Shipment deleted.'
+      : '';
 
-// The badge shows the shipment's real current-stage title. The PHP looked this
-// up in a hardcoded list, so custom stage names were never displayed.
-const badgeClass = (s: ShipmentSummary) =>
-  s.current_step >= STEP_COUNT ? 'badge-done' : s.current_step >= 1 ? 'badge-transit' : 'badge-idle';
+/** Tile / select link that keeps the current search but swaps the status. */
+const filterHref = (next: Status | '') => {
+  const url = new URLSearchParams();
+  if (search) url.set('q', search);
+  if (next) url.set('status', next);
+  const qs = url.toString();
+  return qs ? `/tracking/admin?${qs}` : '/tracking/admin';
+};
+
+const tiles: { key: Status | ''; label: string; value: number; tone: string; note: string }[] = [
+  { key: '', label: 'All shipments', value: counts.total, tone: 'all', note: 'Everything on file' },
+  { key: 'pending', label: 'Pending', value: counts.pending, tone: 'idle', note: 'Booked, not moving yet' },
+  { key: 'transit', label: 'In Transit', value: counts.transit, tone: 'transit', note: 'On the way' },
+  { key: 'received', label: 'Received', value: counts.received, tone: 'done', note: 'Delivered to customer' },
+  { key: 'overdue', label: 'Overdue', value: counts.overdue, tone: 'late', note: 'Past ETA, not received' },
+];
+
+const emptyMessage = () => {
+  if (loadError) return 'Shipments could not be loaded.';
+  if (search && status) return `No "${STATUS_LABEL[status]}" shipments match "${search}".`;
+  if (search) return `No shipments match "${search}".`;
+  if (status) return `No "${STATUS_LABEL[status]}" shipments right now.`;
+  return 'No shipments yet. Use "Add new shipment" to create the first one.';
+};
 ---
 
 {
@@ -85,15 +160,38 @@ const badgeClass = (s: ShipmentSummary) =>
   ) : (
     <TrackerAdminLayout title="Shipments">
       <div class="page-head">
-        <h1>Shipments</h1>
+        <div>
+          <h1>Shipments</h1>
+          <p class="page-sub">
+            {search || status
+              ? `Showing ${shipments.length} of ${counts.total} shipment${counts.total === 1 ? '' : 's'}.`
+              : 'An overview of every consignment and where it has reached.'}
+          </p>
+        </div>
         <a href="/tracking/admin/new" class="btn btn-primary">+ Add new shipment</a>
       </div>
 
       {notice && <div class="alert alert-ok">{notice}</div>}
+      {actionError && <div class="alert alert-err">{actionError}</div>}
       {loadError && <div class="alert alert-err">{loadError}</div>}
 
+      {/* Stat tiles double as the status filter — clicking one filters the table. */}
+      <div class="stat-grid">
+        {tiles.map((tile) => (
+          <a
+            class={`stat stat-${tile.tone}${tile.key === status ? ' is-active' : ''}`}
+            href={filterHref(tile.key)}
+            aria-current={tile.key === status ? 'true' : undefined}
+          >
+            <span class="stat-label">{tile.label}</span>
+            <span class="stat-value">{tile.value}</span>
+            <span class="stat-note">{tile.note}</span>
+          </a>
+        ))}
+      </div>
+
       <div class="card">
-        <form method="get" style="margin-bottom:18px;max-width:420px;">
+        <form method="get" class="filter-bar">
           <div class="field">
             <label for="q">Search</label>
             <input
@@ -104,6 +202,27 @@ const badgeClass = (s: ShipmentSummary) =>
               placeholder="Tracking #, invoice #, or customer name"
             />
           </div>
+          <div class="field">
+            <label for="status">Status</label>
+            {/* Submits on change, so the filter needs no extra click; the
+                button below keeps it working without JavaScript. */}
+            <select id="status" name="status" onchange="this.form.submit()">
+              <option value="" selected={status === ''}>
+                All statuses
+              </option>
+              {(Object.keys(STATUS_LABEL) as Status[]).map((key) => (
+                <option value={key} selected={status === key}>
+                  {STATUS_LABEL[key]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button class="btn btn-soft" type="submit">Apply</button>
+          {(search || status) && (
+            <a class="btn btn-ghost" href="/tracking/admin">
+              Clear
+            </a>
+          )}
         </form>
 
         <div class="table-scroll">
@@ -122,47 +241,69 @@ const badgeClass = (s: ShipmentSummary) =>
               {shipments.length === 0 && (
                 <tr>
                   <td colspan="6" class="empty">
-                    {loadError
-                      ? 'Shipments could not be loaded.'
-                      : search
-                        ? `No shipments match "${search}".`
-                        : 'No shipments yet. Use “Add new shipment” to create the first one.'}
+                    {emptyMessage()}
                   </td>
                 </tr>
               )}
-              {shipments.map((s) => (
-                <tr>
-                  <td>
-                    <strong>{s.tracking_number}</strong>
-                    <span class="sub">{s.invoice_number}</span>
-                  </td>
-                  <td>{s.customer_name}</td>
-                  <td>
-                    {s.origin} → {s.destination}
-                  </td>
-                  <td>
-                    <span class={`badge ${badgeClass(s)}`}>
-                      {s.current_step_title ?? `Step ${s.current_step}`}
-                    </span>
-                  </td>
-                  <td>{s.estimated_delivery}</td>
-                  <td class="actions">
-                    <a class="btn btn-edit" href={`/tracking/admin/${s.id}`}>
-                      Edit
-                    </a>
-                    <form
-                      method="post"
-                      action={`/tracking/admin/${s.id}`}
-                      onsubmit={`return confirm('Delete shipment ${s.tracking_number}? This cannot be undone.');`}
-                    >
-                      <input type="hidden" name="intent" value="delete" />
-                      <button class="btn btn-danger" type="submit">
-                        Delete
-                      </button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
+              {shipments.map((s) => {
+                const bucket = statusOf(s);
+                const late = isOverdue(s);
+                return (
+                  <tr>
+                    <td>
+                      <strong>{s.tracking_number}</strong>
+                      <span class="sub">{s.invoice_number}</span>
+                    </td>
+                    <td>{s.customer_name}</td>
+                    <td>
+                      {s.origin} → {s.destination}
+                    </td>
+                    <td>
+                      <span class={`badge badge-${bucket === 'received' ? 'done' : bucket === 'transit' ? 'transit' : 'idle'}`}>
+                        {STATUS_LABEL[bucket]}
+                      </span>
+                      {late && <span class="badge badge-late">Overdue</span>}
+                      {/* The real stage name, not a hardcoded one — a renamed
+                          stage like "In Salang" still reads correctly here. */}
+                      <span class="sub">
+                        {s.current_step_title ?? `Step ${s.current_step}`} · step {s.current_step} of{' '}
+                        {STEP_COUNT}
+                      </span>
+                      <span class="progress" aria-hidden="true">
+                        <i style={`width:${Math.round((s.current_step / STEP_COUNT) * 100)}%`} />
+                      </span>
+                    </td>
+                    <td class={late ? 'is-late' : undefined}>{s.estimated_delivery}</td>
+                    <td class="actions">
+                      {bucket !== 'received' && (
+                        <form
+                          method="post"
+                          onsubmit={`return confirm('Mark ${s.tracking_number} as received? This completes the customer\\'s timeline.');`}
+                        >
+                          <input type="hidden" name="intent" value="receive" />
+                          <input type="hidden" name="id" value={s.id} />
+                          <button class="btn btn-ok" type="submit" title="Mark as received">
+                            ✓ OK — Received
+                          </button>
+                        </form>
+                      )}
+                      <a class="btn btn-edit" href={`/tracking/admin/${s.id}`}>
+                        Edit
+                      </a>
+                      <form
+                        method="post"
+                        action={`/tracking/admin/${s.id}`}
+                        onsubmit={`return confirm('Delete shipment ${s.tracking_number}? This cannot be undone.');`}
+                      >
+                        <input type="hidden" name="intent" value="delete" />
+                        <button class="btn btn-danger" type="submit">
+                          Delete
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
