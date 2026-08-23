@@ -29,6 +29,11 @@
 * {
   box-sizing: border-box;
 }
+/* Several things here are display:flex/inline-flex, which outranks the browser's
+   own [hidden] rule — so the script's hidden toggles need this to bite. */
+[hidden] {
+  display: none !important;
+}
 html,
 body {
   margin: 0;
@@ -222,6 +227,7 @@ tbody tr:hover td {
 td.actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
 }
 .sub {
@@ -417,7 +423,19 @@ td.actions {
 
 /* ============================================================
    Dashboard — stat tiles, filters, row status
+
+   The whole shipment list is in the page and filtered in the browser, so
+   the rules below do the hiding. `.dash[data-filter]` is what makes the
+   filter work with JavaScript switched off; the script sets [hidden] on
+   rows once it takes over.
    ============================================================ */
+
+.dash[data-filter='pending'] tr[data-row]:not([data-status='pending']),
+.dash[data-filter='transit'] tr[data-row]:not([data-status='transit']),
+.dash[data-filter='received'] tr[data-row]:not([data-status='received']),
+.dash[data-filter='overdue'] tr[data-row]:not([data-overdue='1']) {
+  display: none;
+}
 
 .page-sub {
   margin: 6px 0 0;
@@ -425,41 +443,57 @@ td.actions {
   color: var(--muted);
 }
 
-/* Tiles are links: each one applies its own status filter to the table. */
+/* ---------------- stat tiles ---------------- */
+/* Each tile is a link that applies its own status filter. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
-@media (max-width: 900px) {
+@media (max-width: 940px) {
   .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 460px) {
+@media (max-width: 380px) {
   .stat-grid {
     grid-template-columns: 1fr;
   }
 }
 
 .stat {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 15px 16px;
+  overflow: hidden;
   border: 1px solid var(--line);
-  border-top: 3px solid var(--tone, var(--line));
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--paper);
   color: var(--ink);
   text-decoration: none;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s;
+}
+/* The tone stripe down the side, rather than a heavy border on every tile. */
+.stat::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--tone, var(--line));
 }
 .stat:hover {
   border-color: var(--tone, var(--gold));
-  box-shadow: 0 4px 14px rgba(44, 24, 32, 0.08);
+  box-shadow: 0 6px 18px rgba(44, 24, 32, 0.09);
+  transform: translateY(-1px);
 }
-/* The selected filter — also the one place colour fills the whole tile. */
+.stat:focus-visible {
+  outline: 2px solid var(--tone, var(--gold));
+  outline-offset: 2px;
+}
+/* The selected filter — the one place colour fills the whole tile. */
 .stat.is-active {
   background: var(--tone-bg, var(--cream));
   border-color: var(--tone, var(--gold));
@@ -473,9 +507,10 @@ td.actions {
   color: var(--muted);
 }
 .stat-value {
-  font-size: 27px;
+  font-size: 28px;
   font-weight: 800;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
   color: var(--tone, var(--burg));
 }
 .stat-note {
@@ -485,7 +520,7 @@ td.actions {
 
 .stat-all {
   --tone: var(--burg);
-  --tone-bg: #f6eef1;
+  --tone-bg: #f7eef2;
 }
 .stat-idle {
   --tone: #5c5044;
@@ -504,23 +539,73 @@ td.actions {
   --tone-bg: var(--late-bg);
 }
 
-/* ---------------- filter bar ---------------- */
-.filter-bar {
+/* ---------------- toolbar ---------------- */
+.toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 12px;
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
-.filter-bar .field {
-  flex: 1 1 200px;
-  max-width: 340px;
+.toolbar .field-search {
+  flex: 1 1 260px;
+  max-width: 380px;
 }
-.filter-bar .btn {
-  padding: 10px 16px;
+.toolbar .field {
+  flex: 0 0 auto;
 }
+.toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-wrap input {
+  width: 100%;
+  padding-left: 34px;
+  padding-right: 30px;
+}
+/* Safari draws its own ✕; the styled one below replaces it everywhere. */
+.search-wrap input::-webkit-search-cancel-button {
+  display: none;
+}
+.search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.search-clear {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #e6ddcd;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear:hover {
+  background: var(--gold);
+  color: #fff;
+}
+
 .btn-ghost {
   background: transparent;
   border-color: transparent;
@@ -532,6 +617,21 @@ td.actions {
 }
 
 /* ---------------- row status ---------------- */
+/* No sticky header here: .table-scroll is the scroll container, so a sticky
+   <th> is offset inside the table and covers the first rows instead of
+   docking under the topbar. */
+.th-actions {
+  text-align: right;
+}
+
+.status-cell {
+  display: block;
+}
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .btn-ok {
   padding: 7px 13px;
   background: var(--ok-bg);
@@ -541,13 +641,17 @@ td.actions {
 .btn-ok:hover {
   background: #ddedcc;
 }
-
+.btn-ok:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
 /* Thin bar under the status badge: how far along the 8 stages it is. */
 .progress {
   display: block;
-  width: 116px;
+  width: 118px;
+  max-width: 100%;
   height: 4px;
-  margin-top: 6px;
+  margin-top: 7px;
   border-radius: 4px;
   background: #ece4d6;
   overflow: hidden;
@@ -557,9 +661,116 @@ td.actions {
   height: 100%;
   border-radius: 4px;
   background: var(--gold);
+  transition: width 0.35s ease;
+}
+.progress i.bar-done {
+  background: var(--ok);
+}
+.progress i.bar-transit {
+  background: var(--info);
+}
+.progress i.bar-idle {
+  background: #a99b88;
 }
 
 td.is-late {
   font-weight: 700;
   color: var(--late);
+}
+
+/* A moment of colour so the row you just completed is easy to follow. */
+@keyframes just-received {
+  from {
+    background: var(--ok-bg);
+  }
+  to {
+    background: transparent;
+  }
+}
+tr.just-received td {
+  animation: just-received 1.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat,
+  .progress i,
+  tr.just-received td {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---------------- narrow screens: rows become cards ---------------- */
+@media (max-width: 760px) {
+  .table-scroll {
+    overflow-x: visible;
+  }
+  table,
+  tbody,
+  tr[data-row],
+  tr[data-row] td {
+    display: block;
+    width: 100%;
+  }
+  thead {
+    display: none;
+  }
+  tr[data-row] {
+    margin-bottom: 12px;
+    padding: 4px 2px;
+    border: 1px solid var(--line);
+    border-radius: 11px;
+  }
+  tr[data-row] td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid var(--line);
+    text-align: right;
+  }
+  /* The header each cell loses with the table layout. */
+  tr[data-row] td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+  }
+  tr[data-row] td.actions {
+    justify-content: flex-end;
+    border-bottom: none;
+  }
+  tr[data-row] td.actions::before {
+    content: none;
+  }
+  /* The status cell holds three things; stacked and right-aligned they read
+     far better than squeezed into the label/value row. */
+  tr[data-row] .status-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    min-width: 0;
+  }
+  tr[data-row] .progress {
+    width: 100%;
+    max-width: 150px;
+    margin-top: 2px;
+  }
+  tr[data-row] td.actions {
+    padding-top: 12px;
+  }
+  /* Full-width controls beat two cramped half-width ones. */
+  .toolbar .field,
+  .toolbar .field-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .toolbar-end {
+    margin-left: 0;
+    width: 100%;
+  }
 }

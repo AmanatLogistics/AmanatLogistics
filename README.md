@@ -99,12 +99,19 @@ temporarily unavailable rather than erroring.
   Overdue. Each one is also a **filter**: click "In Transit" to list only the
   shipments still moving. The counters always show the full picture, so you can
   see how many are in transit while looking at the received ones.
+- **Nothing reloads.** The whole list is already in the page, so clicking a
+  counter, typing in the search box, or sorting is instant. The address bar
+  still updates, so a filtered view can be bookmarked or shared, and reloading
+  it brings back the same view.
 - **Filter and search together** — type a tracking number, invoice number, or
-  customer name and pick a status; the two combine. "Clear" resets both.
-- **"✓ OK — Received"** on each row marks that shipment delivered in one click:
-  it jumps to the final stage and stamps today's date and time on it. Received
-  shipments show a green badge and lose the button. It asks for confirmation
-  first, and re-clicking never overwrites the original delivery date.
+  customer name and pick a status; the two combine, and results appear as you
+  type. "Clear filters" resets both. Press `/` to jump to the search box.
+- **Sort** by newest, delivery date, how far along, or customer name.
+- **"✓ Received"** on each row marks that shipment delivered in one click: it
+  jumps to the final stage and stamps today's date and time on it. The row
+  updates in place — green badge, full progress bar, button gone — without
+  reloading. It asks for confirmation first, and re-clicking never overwrites
+  the original delivery date.
 - **Status meanings** — *Pending* is stage 1 (booked, not moving yet), *In
   Transit* is stages 2–7, *Received* is the final stage 8. *Overdue* is any
   shipment past its estimated delivery date that has not been received; it also
@@ -113,6 +120,11 @@ temporarily unavailable rather than erroring.
 These come from each shipment's current stage — there is no separate status to
 keep up to date, so the dashboard can never disagree with the timeline the
 customer sees.
+
+The panel still works with JavaScript turned off: the counters are ordinary
+links, `?status=` and `?q=` are applied by the server, and "Received" falls back
+to a normal form submission. Only the live search, sorting, and the
+no-reload behaviour need scripting.
 
 ### Pashto (پښتو)
 

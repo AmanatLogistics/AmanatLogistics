@@ -141,20 +141,19 @@ export async function findById(
 }
 
 /**
- * Dashboard list, optionally filtered by search term and/or status bucket
- * (dashboard.php). Joins in the *actual* title of the current step — the PHP
- * looked it up in a hardcoded array, so a shipment on step 4 always displayed
- * "In Transit" even when its real stage was named something else.
+ * Dashboard list — every shipment, newest first. Joins in the *actual* title of
+ * the current step; the PHP looked it up in a hardcoded array, so a shipment on
+ * step 4 always displayed "In Transit" even when its real stage was named
+ * something else.
  *
- * The status test is written as one OR-chain of `param = 'literal' AND …`
- * rather than built by string concatenation, so the filter stays a bound
- * parameter and an unexpected value can only match nothing.
+ * Filtering is no longer done here. The dashboard sends the whole list to the
+ * browser and filters it there, so switching between "In Transit" and
+ * "Received" is instant instead of a page load. At this tracker's scale (a few
+ * hundred consignments) that is one small query instead of one per click.
  */
-export async function listShipments(query = '', status: Status | '' = ''): Promise<ShipmentSummary[]> {
+export async function listShipments(): Promise<ShipmentSummary[]> {
   await ensureSchema();
   const sql = db();
-  const q = query.trim();
-  const like = `%${q}%`;
 
   // Columns are spelled out (rather than reusing SHIPMENT_COLUMNS) because the
   // join makes bare `id` ambiguous between the two tables.
@@ -168,20 +167,6 @@ export async function listShipments(query = '', status: Status | '' = ''): Promi
     FROM shipments s
     LEFT JOIN shipment_steps st
       ON st.shipment_id = s.id AND st.step_number = s.current_step
-    WHERE (
-            ${q} = ''
-         OR s.tracking_number ILIKE ${like}
-         OR s.invoice_number  ILIKE ${like}
-         OR s.customer_name   ILIKE ${like}
-          )
-      AND (
-            ${status} = ''
-         OR (${status} = 'pending'  AND s.current_step <= 1)
-         OR (${status} = 'transit'  AND s.current_step >  1 AND s.current_step < ${STEP_COUNT})
-         OR (${status} = 'received' AND s.current_step >= ${STEP_COUNT})
-         OR (${status} = 'overdue'  AND s.current_step <  ${STEP_COUNT}
-                                    AND s.estimated_delivery < ${today()}::date)
-          )
     ORDER BY s.created_at DESC
   `) as ShipmentSummary[];
 }
@@ -364,34 +349,23 @@ export interface StatusCounts {
   overdue: number;
 }
 
+/** The text the dashboard search box matches a row against. */
+export function searchText(s: ShipmentSummary): string {
+  return `${s.tracking_number} ${s.invoice_number} ${s.customer_name}`.toLowerCase();
+}
+
 /**
- * Counts for the dashboard tiles. Takes the same search term as listShipments
- * but NOT the status filter, so the tiles keep showing the full breakdown of
- * whatever is being searched while one of them is selected.
+ * Counts for the dashboard tiles, computed from the rows already loaded rather
+ * than by a second query. `overdue` overlaps the other three by design, so the
+ * buckets do not sum to `total`.
  */
-export async function countShipments(query = ''): Promise<StatusCounts> {
-  await ensureSchema();
-  const sql = db();
-  const q = query.trim();
-  const like = `%${q}%`;
-
-  const rows = (await sql`
-    SELECT
-      count(*)::int AS total,
-      count(*) FILTER (WHERE current_step <= 1)::int                AS pending,
-      count(*) FILTER (WHERE current_step > 1
-                         AND current_step < ${STEP_COUNT})::int     AS transit,
-      count(*) FILTER (WHERE current_step >= ${STEP_COUNT})::int    AS received,
-      count(*) FILTER (WHERE current_step < ${STEP_COUNT}
-                         AND estimated_delivery < ${today()}::date)::int AS overdue
-    FROM shipments
-    WHERE ${q} = ''
-       OR tracking_number ILIKE ${like}
-       OR invoice_number  ILIKE ${like}
-       OR customer_name   ILIKE ${like}
-  `) as StatusCounts[];
-
-  return rows[0];
+export function countBy(rows: ShipmentSummary[]): StatusCounts {
+  const counts: StatusCounts = { total: rows.length, pending: 0, transit: 0, received: 0, overdue: 0 };
+  for (const row of rows) {
+    counts[statusOf(row)]++;
+    if (isOverdue(row)) counts.overdue++;
+  }
+  return counts;
 }
 
 /**
