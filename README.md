@@ -116,6 +116,11 @@ temporarily unavailable rather than erroring.
   Transit* is stages 2–7, *Received* is the final stage 8. *Overdue* is any
   shipment past its estimated delivery date that has not been received; it also
   shows an orange badge on the row and highlights the date.
+- **Delivery dates read plainly** ("15 Aug 2026"), with a note underneath when
+  one needs attention — "10 days late", "due today", "due in 2 days". Anything
+  further out, or already delivered, says nothing.
+- **On a phone or tablet** each shipment becomes a card instead of a row, so
+  nothing is cut off and there is no sideways scrolling.
 
 These come from each shipment's current stage — there is no separate status to
 keep up to date, so the dashboard can never disagree with the timeline the

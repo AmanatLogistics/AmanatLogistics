@@ -19,6 +19,8 @@ import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
 import {
   asStatus,
   countBy,
+  dueHint,
+  formatDate,
   isOverdue,
   listShipments,
   searchText,
@@ -140,7 +142,7 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
         />
       )}
 
-      <div class="dash" data-filter={status} data-total={counts.total}>
+      <div class="dash" data-filter={status} data-load-error={loadError ? '1' : '0'}>
         <div class="page-head">
           <div>
             <h1>Shipments</h1>
@@ -275,12 +277,20 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                       data-customer={s.customer_name.toLowerCase()}
                     >
                       <td data-label="Tracking #">
-                        <strong>{s.tracking_number}</strong>
-                        <span class="sub">{s.invoice_number}</span>
+                        <span class="cell">
+                          <strong>{s.tracking_number}</strong>
+                          <span class="sub">{s.invoice_number}</span>
+                        </span>
                       </td>
                       <td data-label="Customer">{s.customer_name}</td>
-                      <td data-label="Route">
-                        {s.origin} → {s.destination}
+                      {/* One wrapper, so the card layout's label/value pair stays a
+                          pair instead of spreading the arrow across the row. */}
+                      <td data-label="Route" class="route">
+                        <span class="route-inner">
+                          <span>{s.origin}</span>
+                          <span class="arrow" aria-hidden="true">→</span>
+                          <span>{s.destination}</span>
+                        </span>
                       </td>
                       <td data-label="Status">
                         <span class="status-cell">
@@ -308,9 +318,16 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                         </span>
                       </td>
                       <td data-label="Est. delivery" class={late ? 'is-late' : undefined} data-eta-cell>
-                        {s.estimated_delivery}
+                        <span class="cell">
+                          <span class="date">{formatDate(s.estimated_delivery)}</span>
+                          <span class="sub" data-due-hint>{dueHint(s.estimated_delivery, bucket === 'received')}</span>
+                        </span>
                       </td>
+                      {/* The buttons sit in their own flex box rather than the cell
+                          itself: a display:flex <td> drops out of the table's row
+                          layout and its bottom border stops lining up. */}
                       <td class="actions">
+                        <div class="actions-inner">
                         <form method="post" action="/api/tracker/receive" data-receive hidden={bucket === 'received'}>
                           <input type="hidden" name="id" value={s.id} />
                           <button class="btn btn-ok" type="submit" title="Mark as received">
@@ -330,6 +347,7 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                             Delete
                           </button>
                         </form>
+                        </div>
                       </td>
                     </tr>
                   );

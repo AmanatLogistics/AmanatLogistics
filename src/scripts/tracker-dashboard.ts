@@ -96,7 +96,11 @@ export function initDashboard(): void {
 
     if (emptyRow && emptyText) {
       emptyRow.hidden = shown > 0;
-      if (all.length === 0) {
+      // When the list failed to load, the server's message is the useful one —
+      // "no shipments yet" would claim the table is empty when it is unknown.
+      if (dash.dataset.loadError === '1') {
+        /* leave the server's wording in place */
+      } else if (all.length === 0) {
         emptyText.textContent = 'No shipments yet. Use "Add new shipment" to create the first one.';
       } else if (query && filter) {
         emptyText.textContent = `No "${STATUS_LABEL[filter]}" shipments match "${query}".`;
@@ -161,6 +165,9 @@ export function initDashboard(): void {
     }
     row.querySelector('[data-late-badge]')?.setAttribute('hidden', '');
     row.querySelector('[data-eta-cell]')?.classList.remove('is-late');
+    // "3 days late" no longer applies once it has arrived.
+    const dueHint = row.querySelector<HTMLElement>('[data-due-hint]');
+    if (dueHint) dueHint.textContent = '';
     row.querySelector('[data-receive]')?.setAttribute('hidden', '');
 
     const bar = row.querySelector<HTMLElement>('[data-bar]');

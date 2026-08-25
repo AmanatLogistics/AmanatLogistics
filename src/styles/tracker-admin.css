@@ -204,12 +204,38 @@ table {
   border-collapse: collapse;
   font-size: 13.5px;
 }
+/* The action buttons are a fixed amount of content, so the column is sized to
+   fit them exactly (width:1% + nowrap is the shrink-to-fit idiom) and the text
+   columns share what is left. Percentages were tried first and could not hold:
+   whatever share suits 1440px leaves the buttons spilling over the date at
+   960px. */
+th.th-actions,
+td.actions {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Otherwise a long customer name loses out to a long route. */
+th:nth-child(2) {
+  min-width: 110px;
+}
+/* An overdue row is taller than the others by one line — that line is the
+   "10 days late" note under its date, which is worth the space. */
 th,
 td {
   padding: 12px 10px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
+}
+th {
+  white-space: nowrap;
+}
+/* Fixed layout cannot grow a column to fit, so a long name breaks rather than
+   spilling into the next column. Scoped to the free-text cells: on a flex row
+   of buttons this same rule shrinks each one to a single character. */
+td[data-label='Customer'],
+td[data-label='Route'] {
+  overflow-wrap: anywhere;
 }
 th {
   font-size: 11.5px;
@@ -225,15 +251,34 @@ tbody tr:hover td {
   background: #fbf8f2;
 }
 td.actions {
+  text-align: right;
+}
+.actions-inner {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
+}
+td.actions .btn {
+  padding: 7px 11px;
 }
 .sub {
   display: block;
   margin-top: 2px;
   font-size: 12px;
+  color: var(--muted);
+}
+td strong,
+td .date {
+  white-space: nowrap;
+}
+/* Each place name stays intact; the pair may wrap at the arrow. */
+.route-inner span {
+  white-space: nowrap;
+}
+.route .arrow {
+  margin: 0 3px;
   color: var(--muted);
 }
 .empty {
@@ -244,10 +289,11 @@ td.actions {
 
 .badge {
   display: inline-block;
-  padding: 4px 11px;
+  padding: 4px 9px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 .badge-done {
@@ -447,19 +493,9 @@ td.actions {
 /* Each tile is a link that applies its own status filter. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
   gap: 12px;
   margin-bottom: 20px;
-}
-@media (max-width: 940px) {
-  .stat-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 380px) {
-  .stat-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .stat {
@@ -606,6 +642,11 @@ td.actions {
   color: #fff;
 }
 
+.btn:focus-visible,
+.search-clear:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .btn-ghost {
   background: transparent;
   border-color: transparent;
@@ -624,13 +665,18 @@ td.actions {
   text-align: right;
 }
 
+/* Every cell keeps its contents in one wrapper. In the table that changes
+   nothing; in the card layout it means the label/value pair stays a pair
+   instead of each child being spread across the row. */
+.cell,
 .status-cell {
   display: block;
 }
 .badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
 }
 .btn-ok {
   padding: 7px 13px;
@@ -699,8 +745,11 @@ tr.just-received td {
   }
 }
 
-/* ---------------- narrow screens: rows become cards ---------------- */
-@media (max-width: 760px) {
+/* ---------------- narrow screens: rows become cards ----------------
+   The table needs about 1010px before the action buttons start being clipped,
+   so cards take over above that rather than leaving a sideways scroll with a
+   half-visible Delete button. */
+@media (max-width: 1024px) {
   .table-scroll {
     overflow-x: visible;
   }
@@ -740,11 +789,14 @@ tr.just-received td {
     text-align: left;
   }
   tr[data-row] td.actions {
-    justify-content: flex-end;
+    display: block;
     border-bottom: none;
   }
   tr[data-row] td.actions::before {
     content: none;
+  }
+  tr[data-row] .actions-inner {
+    justify-content: flex-end;
   }
   /* The status cell holds three things; stacked and right-aligned they read
      far better than squeezed into the label/value row. */
@@ -762,6 +814,26 @@ tr.just-received td {
   }
   tr[data-row] td.actions {
     padding-top: 12px;
+  }
+  /* Column sizing is a table-layout concern only. */
+  th.th-actions,
+  td.actions,
+  th:nth-child(2) {
+    width: auto;
+    min-width: 0;
+    white-space: normal;
+  }
+  /* In the table a place name must not break; in a card there is room below,
+     so let a long one wrap rather than push past the screen edge. */
+  tr[data-row] .cell,
+  tr[data-row] .route-inner {
+    text-align: right;
+  }
+  tr[data-row] .route-inner span {
+    white-space: normal;
+  }
+  tr[data-row] td.actions .btn {
+    padding: 8px 13px;
   }
   /* Full-width controls beat two cramped half-width ones. */
   .toolbar .field,

@@ -341,6 +341,44 @@ export function today(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** '2026-08-15' → '15 Aug 2026'. Anything unexpected is passed through as-is. */
+export function formatDate(iso: string): string {
+  const m = DATE_RE.exec(iso ?? '');
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : (iso ?? '');
+}
+
+/**
+ * Whole days from today to `iso` — negative when it has passed. Both dates are
+ * reduced to a UTC midnight before subtracting, so a clock change cannot make
+ * the difference land on the wrong day.
+ */
+export function daysUntil(iso: string): number | null {
+  const target = DATE_RE.exec(iso ?? '');
+  const now = DATE_RE.exec(today());
+  if (!target || !now) return null;
+  const a = Date.UTC(Number(target[1]), Number(target[2]) - 1, Number(target[3]));
+  const b = Date.UTC(Number(now[1]), Number(now[2]) - 1, Number(now[3]));
+  return Math.round((a - b) / 86_400_000);
+}
+
+/**
+ * The small note under a delivery date. Silent for shipments that have arrived,
+ * and for dates far enough out that there is nothing to act on.
+ */
+export function dueHint(iso: string, received: boolean): string {
+  if (received) return '';
+  const days = daysUntil(iso);
+  if (days === null) return '';
+  const plural = (n: number) => (n === 1 ? 'day' : 'days');
+  if (days < 0) return `${-days} ${plural(-days)} late`;
+  if (days === 0) return 'due today';
+  if (days <= 3) return `due in ${days} ${plural(days)}`;
+  return '';
+}
+
 export interface StatusCounts {
   total: number;
   pending: number;
