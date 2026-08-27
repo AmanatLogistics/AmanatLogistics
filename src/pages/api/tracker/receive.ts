@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { isTrackerAdmin } from '../../../lib/tracker/auth';
 import { isSameOrigin } from '../../../lib/session';
 import { isConfigured } from '../../../lib/tracker/db';
-import { markReceived, STEP_COUNT, today } from '../../../lib/tracker/shipments';
+import { daysBetween, formatDate, markReceived, STEP_COUNT, today } from '../../../lib/tracker/shipments';
 
 export const prerender = false;
 
@@ -38,6 +38,8 @@ export const POST: APIRoute = async ({ request }) => {
   const form = await request.formData();
   const id = Number.parseInt(String(form.get('id') ?? ''), 10);
   if (!Number.isInteger(id) || id <= 0) return fail(400, 'Unknown shipment.');
+  // Sent by the page so the row can show "4 days late" without a reload.
+  const estimated = String(form.get('estimated') ?? '');
 
   try {
     await markReceived(id);
@@ -47,9 +49,17 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   if (wantsJson) {
-    return new Response(JSON.stringify({ ok: true, id, current_step: STEP_COUNT, date: today() }), {
-      headers: { 'Content-Type': 'application/json' },
-    });
+    // Labels are formatted here so the page has one source of date wording.
+    const date = today();
+    const days = estimated ? daysBetween(estimated, date) : null;
+    const unit = (n: number) => (n === 1 ? 'day' : 'days');
+    const gapLabel =
+      days === null ? '' : days === 0 ? 'on time' : days > 0 ? `${days} ${unit(days)} late` : `${-days} ${unit(-days)} early`;
+
+    return new Response(
+      JSON.stringify({ ok: true, id, current_step: STEP_COUNT, date, dateLabel: formatDate(date), gapLabel }),
+      { headers: { 'Content-Type': 'application/json' } },
+    );
   }
 
   // Back where the button was pressed, so the filter in the URL survives.

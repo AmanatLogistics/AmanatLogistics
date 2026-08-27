@@ -74,7 +74,8 @@ other.
 1. **Database.** On Vercel: **Storage → Create Database → Neon → Connect to
    project.** Neon's free plan is plenty for this. `DATABASE_URL` is then set
    automatically and the tracker creates its own tables on first use — there is
-   no SQL to import. (`db/tracker-schema.sql` documents the tables if you ever
+   no SQL to import. It also adds new columns to an existing database by itself,
+   so upgrading never needs a manual migration. (`db/tracker-schema.sql` documents the tables if you ever
    want to create them by hand.)
 2. **Password.** Set `TRACKER_ADMIN_PASSWORD` in Vercel → Settings →
    Environment Variables. Local dev fallback: `tracker123`.
@@ -85,10 +86,14 @@ temporarily unavailable rather than erroring.
 
 **Using it:**
 - **Add a shipment** — enter the shipment details, pick the *current stage*, and
-  fill in a date/time for each stage as it happens. Stages left blank show to the
-  customer as "Pending".
+  fill in a date for each stage as it happens. Stages left blank show to the
+  customer as "Pending". Stages carry a date only — no time of day.
 - **Stage names are editable per shipment**, so you can match the real route
   ("In Salang", "Hairatan Customs Clearance") instead of generic labels.
+- **Estimated vs actual delivery** — every shipment has both. *Estimated
+  delivery* is required when you create it; *actual delivery* stays blank until
+  the consignment arrives, and the "Received" button fills it in with today's
+  date. You can also set or correct it by hand on the edit form.
 - **WhatsApp button** — enter the number with country code (e.g.
   `923001234567`). Leave it blank to hide the button for that shipment.
 - **Edit** a shipment as it moves along; **Delete** removes it and its timeline.
@@ -108,16 +113,19 @@ temporarily unavailable rather than erroring.
   type. "Clear filters" resets both. Press `/` to jump to the search box.
 - **Sort** by newest, delivery date, how far along, or customer name.
 - **"✓ Received"** on each row marks that shipment delivered in one click: it
-  jumps to the final stage and stamps today's date and time on it. The row
-  updates in place — green badge, full progress bar, button gone — without
+  jumps to the final stage and records today as the actual delivery date. The
+  row updates in place — green badge, full progress bar, button gone — without
   reloading. It asks for confirmation first, and re-clicking never overwrites
-  the original delivery date.
+  the delivery date that is already there.
+- **Two date columns side by side** — *Est. delivery* and *Actual delivery*,
+  with the difference underneath ("5 days late", "3 days early", "on time"), so
+  it is obvious at a glance which shipments ran to plan.
 - **Status meanings** — *Pending* is stage 1 (booked, not moving yet), *In
   Transit* is stages 2–7, *Received* is the final stage 8. *Overdue* is any
   shipment past its estimated delivery date that has not been received; it also
   shows an orange badge on the row and highlights the date.
-- **Delivery dates read plainly** ("15 Aug 2026"), with a note underneath when
-  one needs attention — "10 days late", "due today", "due in 2 days". Anything
+- **Delivery dates read plainly** ("15 Aug 2026"), with a note under the
+  estimate when one needs attention — "10 days late", "due today", "due in 2 days". Anything
   further out, or already delivered, says nothing.
 - **On a phone or tablet** each shipment becomes a card instead of a row, so
   nothing is cut off and there is no sideways scrolling.

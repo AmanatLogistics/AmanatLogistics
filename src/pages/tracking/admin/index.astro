@@ -19,6 +19,7 @@ import { isConfigured, DB_NOT_CONFIGURED } from '../../../lib/tracker/db';
 import {
   asStatus,
   countBy,
+  daysBetween,
   dueHint,
   formatDate,
   isOverdue,
@@ -102,6 +103,16 @@ const tiles: { key: Status | ''; label: string; value: number; tone: string; not
   { key: 'received', label: 'Received', value: counts.received, tone: 'done', note: 'Delivered to customer' },
   { key: 'overdue', label: 'Overdue', value: counts.overdue, tone: 'late', note: 'Past ETA, not received' },
 ];
+
+/** "on time" / "4 days late" / "2 days early", comparing actual with estimated. */
+const deliveryGap = (s: ShipmentSummary): string => {
+  if (!s.actual_delivery || !s.estimated_delivery) return '';
+  const days = daysBetween(s.estimated_delivery, s.actual_delivery);
+  if (days === null) return '';
+  const unit = (n: number) => (n === 1 ? 'day' : 'days');
+  if (days === 0) return 'on time';
+  return days > 0 ? `${days} ${unit(days)} late` : `${-days} ${unit(-days)} early`;
+};
 
 const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
   bucket === 'received' ? 'done' : bucket === 'transit' ? 'transit' : 'idle';
@@ -256,6 +267,7 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                   <th>Route</th>
                   <th>Status</th>
                   <th>Est. delivery</th>
+                  <th>Actual delivery</th>
                   <th class="th-actions">Actions</th>
                 </tr>
               </thead>
@@ -323,6 +335,16 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                           <span class="sub" data-due-hint>{dueHint(s.estimated_delivery, bucket === 'received')}</span>
                         </span>
                       </td>
+                      <td data-label="Actual delivery" data-actual-cell>
+                        <span class="cell">
+                          {/* Blank until it arrives — an em dash reads better than
+                              an empty cell in a row of dates. */}
+                          <span class="date" data-actual-date>
+                            {s.actual_delivery ? formatDate(s.actual_delivery) : '—'}
+                          </span>
+                          <span class="sub" data-actual-gap>{deliveryGap(s)}</span>
+                        </span>
+                      </td>
                       {/* The buttons sit in their own flex box rather than the cell
                           itself: a display:flex <td> drops out of the table's row
                           layout and its bottom border stops lining up. */}
@@ -330,6 +352,7 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                         <div class="actions-inner">
                         <form method="post" action="/api/tracker/receive" data-receive hidden={bucket === 'received'}>
                           <input type="hidden" name="id" value={s.id} />
+                          <input type="hidden" name="estimated" value={s.estimated_delivery} />
                           <button class="btn btn-ok" type="submit" title="Mark as received">
                             ✓ Received
                           </button>
@@ -353,7 +376,7 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                   );
                 })}
                 <tr data-empty hidden={shipments.length > 0}>
-                  <td colspan="6" class="empty" data-empty-text>
+                  <td colspan="7" class="empty" data-empty-text>
                     {loadError
                       ? 'Shipments could not be loaded.'
                       : 'No shipments yet. Use "Add new shipment" to create the first one.'}

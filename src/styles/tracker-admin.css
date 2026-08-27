@@ -108,7 +108,8 @@ body {
 
 /* ---------------- shell ---------------- */
 .wrap {
-  max-width: 1150px;
+  /* Seven columns need the room; the forms inside are grid-capped anyway. */
+  max-width: 1240px;
   margin: 0 auto;
   padding: 26px 20px 90px;
 }
@@ -407,10 +408,7 @@ td .date {
 .step-card .field + .field {
   margin-top: 9px;
 }
-.step-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 9px;
+.step-date {
   margin-top: 9px;
 }
 
@@ -746,10 +744,10 @@ tr.just-received td {
 }
 
 /* ---------------- narrow screens: rows become cards ----------------
-   The table needs about 1010px before the action buttons start being clipped,
-   so cards take over above that rather than leaving a sideways scroll with a
-   half-visible Delete button. */
-@media (max-width: 1024px) {
+   The table needs about 1100px before it starts scrolling sideways, so cards
+   take over below that rather than leaving a scroll with a half-visible
+   Delete button. */
+@media (max-width: 1100px) {
   .table-scroll {
     overflow-x: visible;
   }

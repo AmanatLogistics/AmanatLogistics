@@ -7,6 +7,10 @@
 -- documentation, and for anyone who prefers to create the tables by hand —
 -- paste it into the Neon SQL Editor.
 --
+-- Stages carry a date only. An earlier version also stored a free-text time of
+-- day per stage; it was dropped as noise. A `step_time` column left over from
+-- that in an existing database is simply ignored.
+--
 -- The original `admins` table is intentionally gone: the admin panel now
 -- authenticates against the TRACKER_ADMIN_PASSWORD environment variable, so
 -- there are no password hashes to store and no public setup page to delete.
@@ -24,6 +28,7 @@ CREATE TABLE IF NOT EXISTS shipments (
     shipping_method    TEXT NOT NULL DEFAULT 'Sea Freight',
     booking_date       DATE NOT NULL,
     estimated_delivery DATE NOT NULL,
+    actual_delivery    DATE,          -- when it really arrived; NULL until then
     whatsapp_number    TEXT,
     current_step       SMALLINT NOT NULL DEFAULT 1,  -- 1..8, drives the timeline
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -41,7 +46,6 @@ CREATE TABLE IF NOT EXISTS shipment_steps (
     step_title       TEXT NOT NULL,
     step_description TEXT NOT NULL DEFAULT '',
     step_date        DATE,          -- NULL until the stage is reached ("Pending")
-    step_time        TEXT,          -- free text, e.g. '10:30 AM'
     UNIQUE (shipment_id, step_number)
 );
 

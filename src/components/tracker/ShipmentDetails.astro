@@ -3,7 +3,7 @@
  * "Shipment Details" panel on the public tracking page — the label/value list
  * plus the WhatsApp button (ported from the original tracker's index.php).
  */
-import type { Shipment } from '../../lib/tracker/shipments';
+import { formatDate, type Shipment } from '../../lib/tracker/shipments';
 import { t, type Lang } from '../../lib/tracker/i18n';
 
 interface Props {
@@ -23,9 +23,14 @@ const rows: [string, string | number][] = [
   [t(lang, 'totalPackages'), shipment.total_packages],
   [t(lang, 'totalWeight'), shipment.total_weight],
   [t(lang, 'shippingMethod'), shippingMethod],
-  [t(lang, 'bookingDate'), shipment.booking_date],
-  [t(lang, 'estimatedDelivery'), shipment.estimated_delivery],
+  [t(lang, 'bookingDate'), formatDate(shipment.booking_date)],
+  [t(lang, 'estimatedDelivery'), formatDate(shipment.estimated_delivery)],
 ];
+
+// Only worth a row once it has actually arrived.
+if (shipment.actual_delivery) {
+  rows.push([t(lang, 'actualDelivery'), formatDate(shipment.actual_delivery)]);
+}
 
 // wa.me only accepts digits. The PHP used a numeric literal as the array key
 // here, so this link always rendered empty — hence the explicit guard.

@@ -3,7 +3,7 @@
  * "Shipment Progress" panel — the vertical 8-step timeline from
  * src/Tracker/index.php, with completed / active / pending states.
  */
-import type { ShipmentStep } from '../../lib/tracker/shipments';
+import { formatDate, type ShipmentStep } from '../../lib/tracker/shipments';
 import { t, type Lang } from '../../lib/tracker/i18n';
 
 interface Props {
@@ -67,7 +67,7 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
             {/* <bdi> isolates the date so its digits keep LTR order in a Pashto
                 page, without dragging the paragraph's alignment with it. */}
             {s.step_date ? (
-              <bdi>{`${s.step_date}${s.step_time ? ` ${s.step_time}` : ''}`}</bdi>
+              <bdi>{formatDate(s.step_date)}</bdi>
             ) : (
               t(lang, 'pending')
             )}

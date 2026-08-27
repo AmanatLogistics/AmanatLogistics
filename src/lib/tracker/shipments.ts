@@ -18,8 +18,6 @@ export interface ShipmentStep {
   step_description: string;
   /** 'YYYY-MM-DD', or null while the stage has not been reached. */
   step_date: string | null;
-  /** Free text, e.g. '10:30 AM'. */
-  step_time: string | null;
 }
 
 export interface Shipment {
@@ -34,6 +32,8 @@ export interface Shipment {
   shipping_method: string;
   booking_date: string;
   estimated_delivery: string;
+  /** When it actually arrived. 'YYYY-MM-DD', or null until it does. */
+  actual_delivery: string | null;
   whatsapp_number: string | null;
   current_step: number;
 }
@@ -73,7 +73,6 @@ export function blankSteps(): ShipmentStep[] {
     step_title: s.step_title,
     step_description: s.step_description,
     step_date: null,
-    step_time: null,
   }));
 }
 
@@ -82,7 +81,8 @@ const SHIPMENT_COLUMNS = `
   id, tracking_number, invoice_number, customer_name, origin, destination,
   total_packages, total_weight, shipping_method, whatsapp_number, current_step,
   to_char(booking_date, 'YYYY-MM-DD')       AS booking_date,
-  to_char(estimated_delivery, 'YYYY-MM-DD') AS estimated_delivery
+  to_char(estimated_delivery, 'YYYY-MM-DD') AS estimated_delivery,
+  to_char(actual_delivery, 'YYYY-MM-DD')    AS actual_delivery
 `;
 
 /* ------------------------------------------------------------------ */
@@ -92,7 +92,7 @@ const SHIPMENT_COLUMNS = `
 async function stepsFor(shipmentId: number): Promise<ShipmentStep[]> {
   const sql = db();
   return (await sql`
-    SELECT step_number, step_title, step_description, step_time,
+    SELECT step_number, step_title, step_description,
            to_char(step_date, 'YYYY-MM-DD') AS step_date
     FROM shipment_steps
     WHERE shipment_id = ${shipmentId}
@@ -163,6 +163,7 @@ export async function listShipments(): Promise<ShipmentSummary[]> {
            s.shipping_method, s.whatsapp_number, s.current_step,
            to_char(s.booking_date, 'YYYY-MM-DD')       AS booking_date,
            to_char(s.estimated_delivery, 'YYYY-MM-DD') AS estimated_delivery,
+           to_char(s.actual_delivery, 'YYYY-MM-DD')    AS actual_delivery,
            st.step_title AS current_step_title
     FROM shipments s
     LEFT JOIN shipment_steps st
@@ -194,7 +195,7 @@ export async function trackingNumberTaken(trackingNumber: string, exceptId = 0):
  */
 const STEP_RECORD = `s(
   step_number smallint, step_title text, step_description text,
-  step_date date, step_time text
+  step_date date
 )`;
 
 const stepsJson = (steps: ShipmentStep[]) =>
@@ -205,7 +206,6 @@ const stepsJson = (steps: ShipmentStep[]) =>
       step_description: s.step_description,
       // '' would fail the ::date cast — an unreached stage must be null.
       step_date: s.step_date || null,
-      step_time: s.step_time || null,
     })),
   );
 
@@ -218,19 +218,20 @@ export async function createShipment(data: ShipmentInput, steps: ShipmentStep[])
       INSERT INTO shipments (
         tracking_number, invoice_number, customer_name, origin, destination,
         total_packages, total_weight, shipping_method, booking_date,
-        estimated_delivery, whatsapp_number, current_step
+        estimated_delivery, actual_delivery, whatsapp_number, current_step
       ) VALUES (
         ${data.tracking_number}, ${data.invoice_number}, ${data.customer_name},
         ${data.origin}, ${data.destination}, ${data.total_packages},
         ${data.total_weight}, ${data.shipping_method}, ${data.booking_date},
-        ${data.estimated_delivery}, ${data.whatsapp_number}, ${data.current_step}
+        ${data.estimated_delivery}, ${data.actual_delivery}, ${data.whatsapp_number},
+        ${data.current_step}
       )
       RETURNING id
     ), new_steps AS (
       INSERT INTO shipment_steps (
-        shipment_id, step_number, step_title, step_description, step_date, step_time
+        shipment_id, step_number, step_title, step_description, step_date
       )
-      SELECT ins.id, s.step_number, s.step_title, s.step_description, s.step_date, s.step_time
+      SELECT ins.id, s.step_number, s.step_title, s.step_description, s.step_date
       FROM ins, jsonb_to_recordset(${stepsJson(steps)}::jsonb) AS ${sql.unsafe(STEP_RECORD)}
     )
     SELECT id FROM ins
@@ -263,6 +264,7 @@ export async function updateShipment(
         shipping_method = ${data.shipping_method},
         booking_date    = ${data.booking_date},
         estimated_delivery = ${data.estimated_delivery},
+        actual_delivery = ${data.actual_delivery},
         whatsapp_number = ${data.whatsapp_number},
         current_step    = ${data.current_step},
         updated_at      = now()
@@ -270,15 +272,14 @@ export async function updateShipment(
     `,
     sql`
       INSERT INTO shipment_steps (
-        shipment_id, step_number, step_title, step_description, step_date, step_time
+        shipment_id, step_number, step_title, step_description, step_date
       )
-      SELECT ${id}, s.step_number, s.step_title, s.step_description, s.step_date, s.step_time
+      SELECT ${id}, s.step_number, s.step_title, s.step_description, s.step_date
       FROM jsonb_to_recordset(${stepsJson(steps)}::jsonb) AS ${sql.unsafe(STEP_RECORD)}
       ON CONFLICT (shipment_id, step_number) DO UPDATE SET
         step_title       = EXCLUDED.step_title,
         step_description = EXCLUDED.step_description,
-        step_date        = EXCLUDED.step_date,
-        step_time        = EXCLUDED.step_time
+        step_date        = EXCLUDED.step_date
     `,
   ]);
 }
@@ -350,6 +351,15 @@ export function formatDate(iso: string): string {
   return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : (iso ?? '');
 }
 
+/** Whole days from `from` to `to`; negative when `to` is the earlier date. */
+export function daysBetween(from: string, to: string): number | null {
+  const a = DATE_RE.exec(from ?? '');
+  const b = DATE_RE.exec(to ?? '');
+  if (!a || !b) return null;
+  const ms = (m: RegExpExecArray) => Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Math.round((ms(b) - ms(a)) / 86_400_000);
+}
+
 /**
  * Whole days from today to `iso` — negative when it has passed. Both dates are
  * reduced to a UTC midnight before subtracting, so a clock change cannot make
@@ -407,31 +417,32 @@ export function countBy(rows: ShipmentSummary[]): StatusCounts {
 }
 
 /**
- * One-click "received" from the dashboard: jump to the final stage and stamp
- * it with today's date and time.
+ * One-click "received" from the dashboard: jump to the final stage and record
+ * today as the actual delivery date.
  *
- * Only the final step is stamped. Earlier stages left blank keep showing their
- * date as "Pending" rather than being back-filled with a date they did not
- * happen on — the customer's timeline still ticks them off, because it draws
- * completed/active from current_step, not from the dates.
+ * Both writes are guarded so a second click cannot rewrite a date that is
+ * already there — the first one is the real one. Only the final step is
+ * stamped; earlier stages left blank keep showing "Pending" rather than being
+ * back-filled with a date they did not happen on. The customer's timeline
+ * still ticks them off, because it draws completed/active from current_step,
+ * not from the dates.
  */
 export async function markReceived(id: number): Promise<void> {
   await ensureSchema();
   const sql = db();
-  const now = new Date();
-  const time = `${((now.getHours() + 11) % 12) + 1}:${String(now.getMinutes()).padStart(2, '0')} ${
-    now.getHours() < 12 ? 'AM' : 'PM'
-  }`;
+  const when = today();
 
   await sql.transaction([
     sql`
       UPDATE shipments
-      SET current_step = ${STEP_COUNT}, updated_at = now()
+      SET current_step   = ${STEP_COUNT},
+          actual_delivery = coalesce(actual_delivery, ${when}::date),
+          updated_at     = now()
       WHERE id = ${id}
     `,
     sql`
       UPDATE shipment_steps
-      SET step_date = ${today()}::date, step_time = ${time}
+      SET step_date = ${when}::date
       WHERE shipment_id = ${id} AND step_number = ${STEP_COUNT} AND step_date IS NULL
     `,
   ]);

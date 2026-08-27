@@ -84,6 +84,7 @@ const STRINGS = {
   shippingMethod: { en: 'Shipping Method', ps: 'د لیږد طریقه' },
   bookingDate: { en: 'Booking Date', ps: 'د ثبت نیټه' },
   estimatedDelivery: { en: 'Estimated Delivery', ps: 'د رسیدو اټکل سوې نیټه' },
+  actualDelivery: { en: 'Actual Delivery', ps: 'د رسیدو اصلي نیټه' },
   whatsapp: { en: 'Chat on WhatsApp', ps: 'په واتسف کی اړیکه ونیسی' },
 
   // Timeline

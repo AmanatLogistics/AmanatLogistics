@@ -28,6 +28,8 @@ const asDate = (value: string): string | null =>
 export function parseShipmentForm(form: FormData): ParsedForm {
   const bookingDate = asDate(str(form, 'booking_date'));
   const estimatedDelivery = asDate(str(form, 'estimated_delivery'));
+  // Optional: blank until the consignment actually arrives.
+  const actualDelivery = asDate(str(form, 'actual_delivery'));
 
   const method = str(form, 'shipping_method');
   const packages = Number.parseInt(str(form, 'total_packages'), 10);
@@ -47,6 +49,7 @@ export function parseShipmentForm(form: FormData): ParsedForm {
       : SHIPPING_METHODS[0],
     booking_date: bookingDate ?? '',
     estimated_delivery: estimatedDelivery ?? '',
+    actual_delivery: actualDelivery,
     whatsapp_number: str(form, 'whatsapp_number') || null,
     current_step:
       Number.isFinite(currentStep) && currentStep >= 1 && currentStep <= STEP_COUNT
@@ -62,7 +65,6 @@ export function parseShipmentForm(form: FormData): ParsedForm {
       step_title: str(form, `step_title_${n}`) || DEFAULT_STEPS[i].step_title,
       step_description: str(form, `step_description_${n}`),
       step_date: asDate(str(form, `step_date_${n}`)),
-      step_time: str(form, `step_time_${n}`) || null,
     };
   });
 

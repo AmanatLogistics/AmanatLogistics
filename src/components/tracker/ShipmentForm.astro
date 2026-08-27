@@ -112,13 +112,26 @@ const { data, steps, submitLabel, error = null } = Astro.props;
         required
       />
     </div>
+    <div class="field">
+      <label for="actual_delivery">Actual delivery</label>
+      <input
+        id="actual_delivery"
+        name="actual_delivery"
+        type="date"
+        value={data.actual_delivery ?? ''}
+      />
+      <span class="hint">
+        Leave blank until it arrives. The “Received” button on the shipments list fills this in
+        with today's date.
+      </span>
+    </div>
   </div>
 
   <div class="section-title">
     Progress timeline
     <span class="note">
-      Fill in the date and time as each stage happens. Leave a stage blank and the customer sees
-      it as “Pending”. Stage names are editable, so you can match the real route.
+      Fill in the date as each stage happens. Leave a stage blank and the customer sees it as
+      “Pending”. Stage names are editable, so you can match the real route.
     </span>
   </div>
 
@@ -143,25 +156,14 @@ const { data, steps, submitLabel, error = null } = Astro.props;
               value={s.step_description}
             />
           </div>
-          <div class="step-row">
-            <div class="field">
-              <label for={`step_date_${s.step_number}`}>Date</label>
-              <input
-                id={`step_date_${s.step_number}`}
-                name={`step_date_${s.step_number}`}
-                type="date"
-                value={s.step_date ?? ''}
-              />
-            </div>
-            <div class="field">
-              <label for={`step_time_${s.step_number}`}>Time</label>
-              <input
-                id={`step_time_${s.step_number}`}
-                name={`step_time_${s.step_number}`}
-                value={s.step_time ?? ''}
-                placeholder="10:30 AM"
-              />
-            </div>
+          <div class="field step-date">
+            <label for={`step_date_${s.step_number}`}>Date</label>
+            <input
+              id={`step_date_${s.step_number}`}
+              name={`step_date_${s.step_number}`}
+              type="date"
+              value={s.step_date ?? ''}
+            />
           </div>
         </div>
       ))

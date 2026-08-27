@@ -71,6 +71,7 @@ export function ensureSchema(): Promise<void> {
           shipping_method    TEXT NOT NULL DEFAULT 'Sea Freight',
           booking_date       DATE NOT NULL,
           estimated_delivery DATE NOT NULL,
+          actual_delivery    DATE,
           whatsapp_number    TEXT,
           current_step       SMALLINT NOT NULL DEFAULT 1,
           created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -85,13 +86,15 @@ export function ensureSchema(): Promise<void> {
           step_title       TEXT NOT NULL,
           step_description TEXT NOT NULL DEFAULT '',
           step_date        DATE,
-          step_time        TEXT,
           UNIQUE (shipment_id, step_number)
         )
       `;
       // Customers may search by invoice number; tracking_number is already
       // indexed by its UNIQUE constraint.
       await sql`CREATE INDEX IF NOT EXISTS shipments_invoice_idx ON shipments (invoice_number)`;
+      // Added after the first release, so it arrives as an ALTER for databases
+      // that already exist. IF NOT EXISTS keeps this a no-op from then on.
+      await sql`ALTER TABLE shipments ADD COLUMN IF NOT EXISTS actual_delivery DATE`;
     })().catch((e) => {
       schemaReady = null; // let the next request retry a transient failure
       throw e;

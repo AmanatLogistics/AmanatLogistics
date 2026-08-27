@@ -154,7 +154,7 @@ export function initDashboard(): void {
 
   /* ---------------- "Received", in place ---------------- */
 
-  const markReceivedInRow = (row: HTMLElement): void => {
+  const markReceivedInRow = (row: HTMLElement, dateLabel: string, gapLabel: string): void => {
     row.dataset.status = 'received';
     row.dataset.overdue = '0';
 
@@ -179,6 +179,12 @@ export function initDashboard(): void {
     const total = row.dataset.stepTotal ?? '8';
     if (stage) stage.textContent = `Delivered · step ${total} of ${total}`;
     row.dataset.step = total;
+
+    // It arrived today, so that is now the actual delivery date.
+    const actual = row.querySelector<HTMLElement>('[data-actual-date]');
+    if (actual) actual.textContent = dateLabel;
+    const gap = row.querySelector<HTMLElement>('[data-actual-gap]');
+    if (gap) gap.textContent = gapLabel;
 
     row.classList.add('just-received');
     window.setTimeout(() => row.classList.remove('just-received'), 1200);
@@ -213,7 +219,7 @@ export function initDashboard(): void {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? 'Could not save that change.');
 
-      markReceivedInRow(row);
+      markReceivedInRow(row, data.dateLabel ?? '', data.gapLabel ?? '');
       apply();
       say(`${tracking} marked as received.`);
     } catch (error) {
