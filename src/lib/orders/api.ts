@@ -1,40 +1,47 @@
 /**
  * Orders section — the Google Sheets backend.
  *
- * The sheet is the only database here; a Google Apps Script web app
- * (google-apps-script/orders-api.gs) is the API in front of it. Every call goes
- * out from the Astro server, never the browser, so the shared token stays on
- * the server side.
+ * Reads the SHIPMENTS sheet of the Amanat Shipment Control Tracker through a
+ * Google Apps Script web app (google-apps-script/orders-api.gs). Every call
+ * goes out from the Astro server, never the browser, so the shared token stays
+ * server-side.
  *
- * Nothing here touches Postgres: the existing shipment tracker keeps its own
- * database, and this section keeps the sheet.
+ * Nothing here touches Postgres: the shipment tracker keeps its own database,
+ * and this section keeps the sheet.
  */
 import { env } from '../store';
 
 export const SHEETS_NOT_CONFIGURED =
   'Google Sheets is not connected yet. Deploy google-apps-script/orders-api.gs as a web app, then set SHEETS_API_URL and SHEETS_API_TOKEN.';
 
+/** One row of SHIPMENTS, as the Apps Script hands it over. */
 export interface SheetOrder {
+  /** Sheet row number — the record's id for editing. */
   row: number;
   order_id: string;
   invoice_number: string;
   tracking_number: string;
-  customer_name: string;
-  phone: string;
-  whatsapp_number: string;
-  product: string;
-  quantity: string;
-  weight: string;
-  origin: string;
-  destination: string;
-  shipping_method: string;
-  order_date: string;
-  estimated_delivery: string;
-  actual_delivery: string;
-  stage: number;
-  status: string;
-  notes: string;
+  invoice_date: string;
+  commodity: string;
+  cartons: string;
+  gross_weight: string;
+  kdr_plate: string;
+  tas_plate: string;
+  awb_no: string;
+  flight_no: string;
+  flight_date: string;
+  /** The sheet's own status wording, when it has one. */
+  current_status: string;
+  /** Fourteen entries, 'YYYY-MM-DD' or ''. */
   stage_dates: string[];
+  /** Highest stage with a date; 0 means booked only. */
+  stage: number;
+}
+
+export interface OrdersResult {
+  orders: SheetOrder[];
+  /** False when the sheet has no Tracking No column to keep codes in. */
+  trackingColumn: boolean;
 }
 
 export function apiUrl(): string | undefined {
@@ -70,13 +77,15 @@ async function call(params: Record<string, string>): Promise<any> {
   return data;
 }
 
-/** Every order in the sheet, newest rows last (sheet order). */
-export async function listOrders(): Promise<SheetOrder[]> {
+export async function listOrders(): Promise<OrdersResult> {
   const data = await call({ action: 'list' });
-  return Array.isArray(data.orders) ? data.orders.map(normalise) : [];
+  return {
+    orders: Array.isArray(data.orders) ? data.orders.map(normalise) : [],
+    trackingColumn: data.trackingColumn !== false,
+  };
 }
 
-/** One order, by tracking number or invoice number — the tracker's own concept. */
+/** One shipment by tracking number or ACCI invoice number. */
 export async function findOrder(code: string): Promise<SheetOrder | null> {
   const trimmed = code.trim();
   if (!trimmed) return null;
@@ -84,15 +93,11 @@ export async function findOrder(code: string): Promise<SheetOrder | null> {
   return data.order ? normalise(data.order) : null;
 }
 
-/**
- * One order by its sheet id. The Apps Script has no by-id endpoint on purpose:
- * the list is a single read either way, and one fewer branch is one fewer
- * thing to keep in step.
- */
+/** One shipment by its sheet row, for the edit form. */
 export async function findOrderById(id: string): Promise<SheetOrder | null> {
   const wanted = id.trim();
   if (!wanted) return null;
-  const orders = await listOrders();
+  const { orders } = await listOrders();
   return orders.find((o) => o.order_id === wanted) ?? null;
 }
 
@@ -119,28 +124,24 @@ export async function updateOrder(id: string, fields: Record<string, string>): P
 function normalise(raw: any): SheetOrder {
   const text = (v: unknown) => (v == null ? '' : String(v));
   const stageDates: string[] = Array.isArray(raw?.stage_dates) ? raw.stage_dates.map(text) : [];
-  while (stageDates.length < 8) stageDates.push('');
+  while (stageDates.length < 14) stageDates.push('');
 
   return {
     row: Number(raw?.row) || 0,
     order_id: text(raw?.order_id),
     invoice_number: text(raw?.invoice_number),
     tracking_number: text(raw?.tracking_number),
-    customer_name: text(raw?.customer_name),
-    phone: text(raw?.phone),
-    whatsapp_number: text(raw?.whatsapp_number),
-    product: text(raw?.product),
-    quantity: text(raw?.quantity),
-    weight: text(raw?.weight),
-    origin: text(raw?.origin),
-    destination: text(raw?.destination),
-    shipping_method: text(raw?.shipping_method),
-    order_date: text(raw?.order_date),
-    estimated_delivery: text(raw?.estimated_delivery),
-    actual_delivery: text(raw?.actual_delivery),
-    stage: Math.min(8, Math.max(1, Number(raw?.stage) || 1)),
-    status: text(raw?.status),
-    notes: text(raw?.notes),
-    stage_dates: stageDates.slice(0, 8),
+    invoice_date: text(raw?.invoice_date),
+    commodity: text(raw?.commodity),
+    cartons: text(raw?.cartons),
+    gross_weight: text(raw?.gross_weight),
+    kdr_plate: text(raw?.kdr_plate),
+    tas_plate: text(raw?.tas_plate),
+    awb_no: text(raw?.awb_no),
+    flight_no: text(raw?.flight_no),
+    flight_date: text(raw?.flight_date),
+    current_status: text(raw?.current_status),
+    stage_dates: stageDates.slice(0, 14),
+    stage: Math.min(14, Math.max(0, Number(raw?.stage) || 0)),
   };
 }

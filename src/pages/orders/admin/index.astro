@@ -1,10 +1,11 @@
 ---
 /**
- * Orders admin — login screen + order list, backed by Google Sheets.
+ * Orders admin — the SHIPMENTS sheet, in the tracker's own panel.
  *
- * Structurally the same page as /tracking/admin: the same layout, stylesheet,
- * stat tiles, filter bar, table markup and client script. Only the data source
- * differs, so the two panels stay visually identical for free.
+ * Structurally the same page as /tracking/admin: same layout, stylesheet, stat
+ * tiles, filter bar, table markup and client script. What differs is the data
+ * and its shape — fourteen stages from Kandahar to Delhi, read from Google
+ * Sheets rather than Postgres.
  *
  * Separate password (ORDERS_ADMIN_PASSWORD) and separate cookie, so a session
  * here is not a session for the website admin or the shipment tracker.
@@ -14,19 +15,23 @@ import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
 import { SITE } from '../../../consts';
 import { isOrdersAdmin, ordersPassword } from '../../../lib/orders/auth';
 import { isConfigured, listOrders, SHEETS_NOT_CONFIGURED, type SheetOrder } from '../../../lib/orders/api';
-import { searchText, stageTitle, toShipment } from '../../../lib/orders/model';
 import {
-  asStatus,
-  countBy,
-  daysBetween,
-  dueHint,
-  formatDate,
-  isOverdue,
-  statusOf,
-  STATUS_LABEL,
-  STEP_COUNT,
-  type Status,
-} from '../../../lib/tracker/shipments';
+  asGroup,
+  countByGroup,
+  formatCount,
+  formatWeight,
+  groupOf,
+  GROUPS,
+  GROUP_LABEL,
+  GROUP_NOTE,
+  GROUP_TONE,
+  ORDER_STAGE_COUNT,
+  searchText,
+  stageDate,
+  stageTitle,
+  type Group,
+} from '../../../lib/orders/model';
+import { formatDate } from '../../../lib/tracker/shipments';
 
 export const prerender = false;
 
@@ -42,10 +47,11 @@ const loginErrors: Record<string, string> = {
 const loginError = loginErrors[params.get('error') ?? ''] ?? '';
 
 /* ---------- logged in ---------- */
-const status = asStatus(params.get('status') ?? '');
+const status = asGroup(params.get('status') ?? '');
 const search = (params.get('q') ?? '').trim();
 
 let orders: SheetOrder[] = [];
+let trackingColumn = true;
 let loadError = '';
 
 if (authed) {
@@ -53,27 +59,30 @@ if (authed) {
     loadError = SHEETS_NOT_CONFIGURED;
   } else {
     try {
-      orders = await listOrders();
+      const result = await listOrders();
+      orders = result.orders;
+      trackingColumn = result.trackingColumn;
     } catch (e) {
-      console.error('Orders sheet failed to load:', e);
+      console.error('SHIPMENTS sheet failed to load:', e);
       loadError = 'Could not read the Google Sheet. Check that the Apps Script web app is deployed and the token matches.';
     }
   }
 }
 
-// Every status rule comes from the shipment tracker, so the two sections
-// bucket, badge and flag a record identically.
-const shipments = orders.map(toShipment);
-const counts = countBy(shipments);
+const counts = countByGroup(orders);
 
-const notice = params.has('saved') ? 'Order saved to the sheet.' : '';
+const notice = params.has('saved')
+  ? 'Shipment saved to the sheet.'
+  : params.has('delivered')
+    ? 'Marked delivered to Delhi.'
+    : '';
 const actionError = params.get('error') === 'receive'
-  ? 'Could not mark that order as received. Please try again.'
+  ? 'Could not update the sheet. Please try again.'
   : '';
 
 const cssSafeSearch = search.toLowerCase().replace(/[^a-z0-9 @._-]/g, '').slice(0, 60);
 
-const filterHref = (next: Status | '') => {
+const filterHref = (next: Group | '') => {
   const url = new URLSearchParams();
   if (search) url.set('q', search);
   if (next) url.set('status', next);
@@ -81,33 +90,25 @@ const filterHref = (next: Status | '') => {
   return qs ? `/orders/admin?${qs}` : '/orders/admin';
 };
 
-const tiles: { key: Status | ''; label: string; value: number; tone: string; note: string }[] = [
-  { key: '', label: 'All orders', value: counts.total, tone: 'all', note: 'Everything in the sheet' },
-  { key: 'pending', label: 'Pending', value: counts.pending, tone: 'idle', note: 'Booked, not moving yet' },
-  { key: 'transit', label: 'In Transit', value: counts.transit, tone: 'transit', note: 'On the way' },
-  { key: 'received', label: 'Received', value: counts.received, tone: 'done', note: 'Delivered to customer' },
-  { key: 'overdue', label: 'Overdue', value: counts.overdue, tone: 'late', note: 'Past ETA, not received' },
+// The workbook's own seven groups, plus a total.
+const tiles: { key: Group | ''; label: string; value: number; tone: string; note: string }[] = [
+  { key: '', label: 'All shipments', value: counts.total, tone: 'all', note: 'Everything in the sheet' },
+  ...GROUPS.map((g) => ({
+    key: g,
+    label: GROUP_LABEL[g],
+    value: counts[g],
+    tone: GROUP_TONE[g],
+    note: GROUP_NOTE[g],
+  })),
 ];
-
-const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
-  bucket === 'received' ? 'done' : bucket === 'transit' ? 'transit' : 'idle';
-
-const deliveryGap = (order: SheetOrder): string => {
-  if (!order.actual_delivery || !order.estimated_delivery) return '';
-  const days = daysBetween(order.estimated_delivery, order.actual_delivery);
-  if (days === null) return '';
-  const unit = (n: number) => (n === 1 ? 'day' : 'days');
-  if (days === 0) return 'on time';
-  return days > 0 ? `${days} ${unit(days)} late` : `${-days} ${unit(-days)} early`;
-};
 ---
 
 {
   !authed ? (
     <TrackerAdminLogin>
       <div class="login-box">
-        <h1>Orders</h1>
-        <p class="lede">Sign in to view and update orders.</p>
+        <h1>Shipments</h1>
+        <p class="lede">Sign in to view and update the shipment sheet.</p>
 
         {loginError && <div class="alert alert-err">{loginError}</div>}
         {!ordersPassword() && !loginError && (
@@ -129,7 +130,7 @@ const deliveryGap = (order: SheetOrder): string => {
       </div>
     </TrackerAdminLogin>
   ) : (
-    <TrackerAdminLayout title="Orders">
+    <TrackerAdminLayout title="Shipments">
       {cssSafeSearch && (
         <style
           id="nojs-search"
@@ -137,12 +138,12 @@ const deliveryGap = (order: SheetOrder): string => {
         />
       )}
 
-      <div class="dash" data-noun="order" data-filter={status} data-load-error={loadError ? '1' : '0'}>
+      <div class="dash" data-noun="shipment" data-filter={status} data-load-error={loadError ? '1' : '0'}>
         <div class="page-head">
           <div>
-            <h1>Orders</h1>
-            <p class="page-sub" data-summary data-default="Live from the Google Sheet — every order and where it has reached.">
-              Live from the Google Sheet — every order and where it has reached.
+            <h1>Shipments</h1>
+            <p class="page-sub" data-summary data-default="Live from the Google Sheet — one row per ACCI invoice, Kandahar to Delhi.">
+              Live from the Google Sheet — one row per ACCI invoice, Kandahar to Delhi.
             </p>
           </div>
           <div class="head-actions">
@@ -160,8 +161,14 @@ const deliveryGap = (order: SheetOrder): string => {
         </div>
         {actionError && <div class="alert alert-err">{actionError}</div>}
         {loadError && <div class="alert alert-err">{loadError}</div>}
+        {!loadError && !trackingColumn && orders.length > 0 && (
+          <div class="alert alert-err">
+            The sheet has no <code>Tracking No</code> column, so tracking numbers cannot be saved.
+            Add one to SHIPMENTS and press Refresh — the script will fill it in.
+          </div>
+        )}
 
-        <div class="stat-grid">
+        <div class="stat-grid stat-grid-wide">
           {tiles.map((tile) => (
             <a
               class={`stat stat-${tile.tone}${tile.key === status ? ' is-active' : ''}`}
@@ -194,7 +201,7 @@ const deliveryGap = (order: SheetOrder): string => {
                   type="search"
                   value={search}
                   autocomplete="off"
-                  placeholder="Invoice #, tracking #, customer, product"
+                  placeholder="Invoice #, tracking #, commodity, plate, AWB"
                 />
                 <button class="search-clear" type="button" data-clear-search hidden aria-label="Clear search">
                   ×
@@ -203,14 +210,14 @@ const deliveryGap = (order: SheetOrder): string => {
             </div>
 
             <div class="field">
-              <label for="status">Status</label>
+              <label for="status">Stage</label>
               <select id="status" name="status" data-status-select>
                 <option value="" selected={status === ''}>
-                  All statuses
+                  All stages
                 </option>
-                {(Object.keys(STATUS_LABEL) as Status[]).map((key) => (
-                  <option value={key} selected={status === key}>
-                    {STATUS_LABEL[key]}
+                {GROUPS.map((g) => (
+                  <option value={g} selected={status === g}>
+                    {GROUP_LABEL[g]}
                   </option>
                 ))}
               </select>
@@ -220,9 +227,9 @@ const deliveryGap = (order: SheetOrder): string => {
               <label for="sort">Sort by</label>
               <select id="sort" data-sort>
                 <option value="newest">Sheet order</option>
-                <option value="eta">Delivery date</option>
+                <option value="eta">Invoice date</option>
                 <option value="progress">Furthest along</option>
-                <option value="customer">Customer A–Z</option>
+                <option value="customer">Commodity A–Z</option>
               </select>
             </div>
 
@@ -247,86 +254,85 @@ const deliveryGap = (order: SheetOrder): string => {
               <thead>
                 <tr>
                   <th>Invoice / Tracking</th>
-                  <th>Customer</th>
-                  <th>Product</th>
-                  <th>Route</th>
-                  <th>Status</th>
-                  <th>Est. delivery</th>
-                  <th>Actual delivery</th>
+                  <th>Commodity</th>
+                  <th>Cartons / Weight</th>
+                  <th>Trucks</th>
+                  <th>Stage</th>
+                  <th>Air leg</th>
                   <th class="th-actions">Actions</th>
                 </tr>
               </thead>
               <tbody data-rows>
                 {orders.map((order, i) => {
-                  const shipment = shipments[i];
-                  const bucket = statusOf(shipment);
-                  const late = isOverdue(shipment);
+                  const group = groupOf(order.stage);
+                  const tone = GROUP_TONE[group];
                   return (
                     <tr
                       data-row
                       data-id={order.order_id}
-                      data-status={bucket}
-                      data-overdue={late ? '1' : '0'}
+                      data-status={group}
+                      data-overdue="0"
                       data-search={searchText(order)}
                       data-seq={i}
-                      data-eta={order.estimated_delivery}
+                      data-eta={order.invoice_date}
                       data-step={order.stage}
-                      data-step-total={STEP_COUNT}
-                      data-customer={order.customer_name.toLowerCase()}
+                      data-step-total={ORDER_STAGE_COUNT}
+                      data-customer={order.commodity.toLowerCase()}
                     >
                       <td data-label="Invoice / Tracking">
                         <span class="cell">
-                          <strong>{order.invoice_number || '—'}</strong>
-                          <span class="sub">{order.tracking_number}</span>
+                          <strong>{order.invoice_number}</strong>
+                          <span class="sub">{order.tracking_number || '— no code —'}</span>
                         </span>
                       </td>
-                      <td data-label="Customer">{order.customer_name || '—'}</td>
-                      <td data-label="Product">{order.product || '—'}</td>
-                      <td data-label="Route" class="route">
-                        <span class="route-inner">
-                          <span>{order.origin || '—'}</span>
-                          <span class="arrow" aria-hidden="true">→</span>
-                          <span>{order.destination || '—'}</span>
+                      <td data-label="Commodity">
+                        <span class="cell">
+                          {order.commodity || '—'}
+                          <span class="sub">{formatDate(order.invoice_date)}</span>
                         </span>
                       </td>
-                      <td data-label="Status">
+                      <td data-label="Cartons / Weight">
+                        <span class="cell">
+                          {formatCount(order.cartons) || '—'}
+                          <span class="sub">{formatWeight(order.gross_weight)}</span>
+                        </span>
+                      </td>
+                      <td data-label="Trucks">
+                        <span class="cell">
+                          {order.kdr_plate || '—'}
+                          <span class="sub">{order.tas_plate ? `TAS ${order.tas_plate}` : ''}</span>
+                        </span>
+                      </td>
+                      <td data-label="Stage">
                         <span class="status-cell">
                           <span class="badges">
-                            <span class={`badge badge-${badgeTone(bucket)}`} data-badge>
-                              {STATUS_LABEL[bucket]}
-                            </span>
-                            <span class="badge badge-late" data-late-badge hidden={!late}>
-                              Overdue
+                            <span class={`badge badge-${tone}`} data-badge>
+                              {GROUP_LABEL[group]}
                             </span>
                           </span>
+                          {/* The stage the sheet's own dates put it on. */}
                           <span class="sub" data-stage>
-                            {stageTitle(order)} · step {order.stage} of {STEP_COUNT}
+                            {order.stage >= 1 ? `${order.stage}. ` : ''}
+                            {stageTitle(order)}
+                            {stageDate(order) ? ` · ${formatDate(stageDate(order))}` : ''}
                           </span>
                           <span class="progress" aria-hidden="true">
                             <i
                               data-bar
-                              class={`bar-${badgeTone(bucket)}`}
-                              style={`width:${Math.round((order.stage / STEP_COUNT) * 100)}%`}
+                              class={`bar-${tone}`}
+                              style={`width:${Math.round((order.stage / ORDER_STAGE_COUNT) * 100)}%`}
                             />
                           </span>
                         </span>
                       </td>
-                      <td data-label="Est. delivery" class={late ? 'is-late' : undefined} data-eta-cell>
+                      <td data-label="Air leg">
                         <span class="cell">
-                          <span class="date">
-                            {order.estimated_delivery ? formatDate(order.estimated_delivery) : '—'}
+                          {order.awb_no || '—'}
+                          <span class="sub">
+                            {[order.flight_no, order.flight_date ? formatDate(order.flight_date) : '']
+                              .filter(Boolean)
+                              .join(' · ')}
                           </span>
-                          <span class="sub" data-due-hint>
-                            {dueHint(order.estimated_delivery, bucket === 'received')}
-                          </span>
-                        </span>
-                      </td>
-                      <td data-label="Actual delivery" data-actual-cell>
-                        <span class="cell">
-                          <span class="date" data-actual-date>
-                            {order.actual_delivery ? formatDate(order.actual_delivery) : '—'}
-                          </span>
-                          <span class="sub" data-actual-gap>{deliveryGap(order)}</span>
                         </span>
                       </td>
                       <td class="actions">
@@ -335,12 +341,11 @@ const deliveryGap = (order: SheetOrder): string => {
                             method="post"
                             action="/api/orders/receive"
                             data-receive
-                            hidden={bucket === 'received'}
+                            hidden={order.stage >= ORDER_STAGE_COUNT}
                           >
                             <input type="hidden" name="id" value={order.order_id} />
-                            <input type="hidden" name="estimated" value={order.estimated_delivery} />
-                            <button class="btn btn-ok" type="submit" title="Mark as received">
-                              ✓ Received
+                            <button class="btn btn-ok" type="submit" title="Mark delivered to Delhi">
+                              ✓ Delivered
                             </button>
                           </form>
                           <a class="btn btn-edit" href={`/orders/admin/${encodeURIComponent(order.order_id)}`}>
@@ -352,10 +357,10 @@ const deliveryGap = (order: SheetOrder): string => {
                   );
                 })}
                 <tr data-empty hidden={orders.length > 0}>
-                  <td colspan="8" class="empty" data-empty-text>
+                  <td colspan="7" class="empty" data-empty-text>
                     {loadError
-                      ? 'Orders could not be loaded.'
-                      : 'No orders in the sheet yet. Add a row and press Refresh.'}
+                      ? 'Shipments could not be loaded.'
+                      : 'No shipments in the sheet yet. Add a row and press Refresh.'}
                   </td>
                 </tr>
               </tbody>

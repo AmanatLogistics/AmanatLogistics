@@ -1,10 +1,10 @@
 ---
 /**
- * Edit one order — writes straight back to the Google Sheet.
+ * Edit one shipment — writes straight back to the SHIPMENTS sheet.
  *
- * Uses the tracker admin's layout, stylesheet and form furniture, so it reads
- * as the same panel. Fields the sheet has no column for are simply ignored by
- * the Apps Script, so a trimmed-down sheet still saves cleanly.
+ * Only the columns the website tracks are offered. Everything else in the
+ * workbook (S.No, trip IDs, the formula columns, Remarks) is left untouched:
+ * the Apps Script writes the row back with those cells exactly as it read them.
  */
 import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
 import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
@@ -17,8 +17,7 @@ import {
   updateOrder,
   type SheetOrder,
 } from '../../../lib/orders/api';
-import { stageTitle } from '../../../lib/orders/model';
-import { DEFAULT_STEPS, STEP_COUNT } from '../../../lib/tracker/shipments';
+import { ORDER_STAGES, ORDER_STAGE_COUNT, stageTitle } from '../../../lib/orders/model';
 
 export const prerender = false;
 
@@ -28,12 +27,13 @@ const id = decodeURIComponent(Astro.params.id ?? '');
 let order: SheetOrder | null = null;
 let error: string | null = null;
 
-/** Only what the form offers; the Apps Script ignores anything else. */
-const FIELDS = [
-  'invoice_number', 'customer_name', 'phone', 'whatsapp_number', 'product',
-  'quantity', 'weight', 'origin', 'destination', 'shipping_method',
-  'order_date', 'estimated_delivery', 'actual_delivery', 'notes',
+/** Plain text columns the form offers. */
+const TEXT_FIELDS = [
+  'invoice_number', 'commodity', 'cartons', 'gross_weight',
+  'kdr_plate', 'tas_plate', 'awb_no', 'flight_no',
 ] as const;
+/** Date columns, kept to what <input type="date"> produces. */
+const DATE_FIELDS = ['invoice_date', 'flight_date'] as const;
 
 const asDate = (value: string) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '');
 
@@ -46,7 +46,7 @@ if (authed) {
     try {
       order = await findOrderById(id);
     } catch (e) {
-      console.error('Loading order failed:', e);
+      console.error('Loading shipment failed:', e);
       error = 'Could not read the Google Sheet. Please try again.';
     }
     if (!order && !error) return Astro.redirect('/orders/admin', 303);
@@ -57,33 +57,29 @@ if (authed) {
       } else {
         const form = await Astro.request.formData();
         const fields: Record<string, string> = {};
-        for (const field of FIELDS) {
-          const raw = String(form.get(field) ?? '').trim();
-          fields[field] = field.endsWith('_date') || field.endsWith('_delivery') ? asDate(raw) : raw;
-        }
-
-        const stage = Number.parseInt(String(form.get('stage') ?? ''), 10);
-        fields.stage = String(Number.isFinite(stage) && stage >= 1 && stage <= STEP_COUNT ? stage : 1);
-        fields.status = DEFAULT_STEPS[Number(fields.stage) - 1]?.step_title ?? '';
-
-        // Per-stage dates, saved only where the sheet has those columns.
-        for (let n = 1; n <= STEP_COUNT; n++) {
+        for (const field of TEXT_FIELDS) fields[field] = String(form.get(field) ?? '').trim();
+        for (const field of DATE_FIELDS) fields[field] = asDate(String(form.get(field) ?? '').trim());
+        for (let n = 1; n <= ORDER_STAGE_COUNT; n++) {
           fields[`stage_date_${n}`] = asDate(String(form.get(`stage_date_${n}`) ?? '').trim());
         }
 
         if (!fields.invoice_number) {
-          error = 'An invoice number is required — it is what the tracking number is built from.';
-          order = { ...order, ...fields, stage: Number(fields.stage) } as SheetOrder;
+          error = 'An ACCI invoice number is required — it is what the tracking number is built from.';
         } else {
           try {
             await updateOrder(id, fields);
             return Astro.redirect('/orders/admin?saved=1', 303);
           } catch (e) {
-            console.error('Saving order failed:', e);
+            console.error('Saving shipment failed:', e);
             error = 'Could not write to the Google Sheet. Please try again.';
-            order = { ...order, ...fields, stage: Number(fields.stage) } as SheetOrder;
           }
         }
+        // Keep what was typed so an error never empties the form.
+        order = {
+          ...order,
+          ...fields,
+          stage_dates: Array.from({ length: ORDER_STAGE_COUNT }, (_, i) => fields[`stage_date_${i + 1}`]),
+        } as SheetOrder;
       }
     }
   }
@@ -95,37 +91,37 @@ if (authed) {
     <TrackerAdminLogin>
       <div class="login-box">
         <h1>Session expired</h1>
-        <p class="lede">Please log in again to edit this order.</p>
+        <p class="lede">Please log in again to edit this shipment.</p>
         <a class="btn btn-primary" href="/orders/admin" style="width:100%;justify-content:center;">
           Go to login
         </a>
       </div>
     </TrackerAdminLogin>
   ) : (
-    <TrackerAdminLayout title="Edit order">
+    <TrackerAdminLayout title="Edit shipment">
       <div class="page-head">
-        <h1>{order ? `Edit — ${order.invoice_number || order.tracking_number}` : 'Edit order'}</h1>
-        <a class="btn btn-soft" href="/orders/admin">← Back to orders</a>
+        <h1>{order ? `Edit — ${order.invoice_number}` : 'Edit shipment'}</h1>
+        <a class="btn btn-soft" href="/orders/admin">← Back to shipments</a>
       </div>
 
       <div class="card">
         {!order ? (
-          <div class="alert alert-err">{error ?? 'Order not found.'}</div>
+          <div class="alert alert-err">{error ?? 'Shipment not found.'}</div>
         ) : (
           <form method="post">
             {error && <div class="alert alert-err">{error}</div>}
 
             <div class="section-title">
-              Order details
+              Shipment details
               <span class="note">
-                Saved straight to row {order.row} of the Google Sheet. The tracking number is
-                built from the invoice number and its sequence, and is not editable here.
+                Saved to row {order.row} of the SHIPMENTS sheet. Columns this page does not show —
+                trip IDs, the status formulas, remarks — are written back untouched.
               </span>
             </div>
 
             <div class="form-grid">
               <div class="field">
-                <label for="invoice_number">Invoice number *</label>
+                <label for="invoice_number">ACCI invoice no *</label>
                 <input id="invoice_number" name="invoice_number" value={order.invoice_number} required />
               </div>
               <div class="field">
@@ -137,92 +133,69 @@ if (authed) {
                 </span>
               </div>
               <div class="field">
-                <label for="customer_name">Customer name</label>
-                <input id="customer_name" name="customer_name" value={order.customer_name} />
+                <label for="invoice_date">ACCI invoice date (booked)</label>
+                <input id="invoice_date" name="invoice_date" type="date" value={order.invoice_date} />
               </div>
               <div class="field">
-                <label for="phone">Phone</label>
-                <input id="phone" name="phone" value={order.phone} />
+                <label for="commodity">Commodity</label>
+                <input id="commodity" name="commodity" value={order.commodity} />
               </div>
               <div class="field">
-                <label for="whatsapp_number">WhatsApp number</label>
-                <input id="whatsapp_number" name="whatsapp_number" value={order.whatsapp_number} placeholder="e.g. 923001234567" />
-                <span class="hint">With country code, digits only. Leave blank to hide the button.</span>
+                <label for="cartons">Cartons / pkgs</label>
+                <input id="cartons" name="cartons" value={order.cartons} inputmode="numeric" />
               </div>
               <div class="field">
-                <label for="product">Product</label>
-                <input id="product" name="product" value={order.product} />
+                <label for="gross_weight">Gross weight (kg)</label>
+                <input id="gross_weight" name="gross_weight" value={order.gross_weight} inputmode="decimal" />
               </div>
               <div class="field">
-                <label for="quantity">Quantity</label>
-                <input id="quantity" name="quantity" value={order.quantity} />
+                <label for="kdr_plate">KDR truck plate</label>
+                <input id="kdr_plate" name="kdr_plate" value={order.kdr_plate} />
               </div>
               <div class="field">
-                <label for="weight">Total weight</label>
-                <input id="weight" name="weight" value={order.weight} placeholder="e.g. 120.5 KG" />
+                <label for="tas_plate">TAS truck plate</label>
+                <input id="tas_plate" name="tas_plate" value={order.tas_plate} />
               </div>
               <div class="field">
-                <label for="origin">Origin</label>
-                <input id="origin" name="origin" value={order.origin} />
+                <label for="awb_no">AWB no</label>
+                <input id="awb_no" name="awb_no" value={order.awb_no} />
               </div>
               <div class="field">
-                <label for="destination">Destination</label>
-                <input id="destination" name="destination" value={order.destination} />
+                <label for="flight_no">Flight no</label>
+                <input id="flight_no" name="flight_no" value={order.flight_no} />
               </div>
               <div class="field">
-                <label for="shipping_method">Shipping method</label>
-                <input id="shipping_method" name="shipping_method" value={order.shipping_method} />
+                <label for="flight_date">Flight date</label>
+                <input id="flight_date" name="flight_date" type="date" value={order.flight_date} />
               </div>
               <div class="field">
-                <label for="stage">Current stage</label>
-                <select id="stage" name="stage">
-                  {DEFAULT_STEPS.map((step, i) => (
-                    <option value={i + 1} selected={order.stage === i + 1}>
-                      {i + 1}. {step.step_title}
-                    </option>
-                  ))}
-                </select>
+                <label>Current stage</label>
+                <input value={order.stage >= 1 ? `${order.stage}. ${stageTitle(order)}` : stageTitle(order)} readonly />
                 <span class="hint">
-                  Everything before this shows as completed; everything after, as pending. Currently
-                  “{stageTitle(order)}”.
+                  Worked out from the dates below — the highest stage with a date. Fill a date in to
+                  move the shipment on.
                 </span>
-              </div>
-              <div class="field">
-                <label for="order_date">Order date</label>
-                <input id="order_date" name="order_date" type="date" value={order.order_date} />
-              </div>
-              <div class="field">
-                <label for="estimated_delivery">Estimated delivery</label>
-                <input id="estimated_delivery" name="estimated_delivery" type="date" value={order.estimated_delivery} />
-              </div>
-              <div class="field">
-                <label for="actual_delivery">Actual delivery</label>
-                <input id="actual_delivery" name="actual_delivery" type="date" value={order.actual_delivery} />
-                <span class="hint">The “Received” button on the orders list fills this in with today's date.</span>
-              </div>
-              <div class="field">
-                <label for="notes">Notes</label>
-                <input id="notes" name="notes" value={order.notes} />
               </div>
             </div>
 
             <div class="section-title">
-              Progress timeline
+              The fourteen stages
               <span class="note">
-                Optional. These save only if the sheet has “Stage 1 Date” … “Stage {STEP_COUNT} Date”
-                columns; without them the customer still sees the stage the order has reached.
+                Kandahar → Hairatan → Termez → Tashkent → Delhi. Leave a stage blank and the
+                customer sees it as “Pending”. Route KDR skips stage 7; route HRTN skips stages 1
+                and 2 — leaving those blank is correct, not missing data.
               </span>
             </div>
 
             <div class="steps-grid">
-              {DEFAULT_STEPS.map((step, i) => (
+              {ORDER_STAGES.map((stage, i) => (
                 <div class="step-card">
-                  <h4>Step {i + 1}</h4>
+                  <h4>Stage {stage.n}</h4>
                   <div class="field">
-                    <label for={`stage_date_${i + 1}`}>{step.step_title}</label>
+                    <label for={`stage_date_${stage.n}`}>{stage.title}</label>
                     <input
-                      id={`stage_date_${i + 1}`}
-                      name={`stage_date_${i + 1}`}
+                      id={`stage_date_${stage.n}`}
+                      name={`stage_date_${stage.n}`}
                       type="date"
                       value={order.stage_dates[i] ?? ''}
                     />

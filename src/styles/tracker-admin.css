@@ -24,6 +24,14 @@
   --info-bg: #eaf1ff;
   --late: #a35b00;
   --late-bg: #fdf0dd;
+  /* The Shipment Control Tracker colour-codes its status column by leg; these
+     three complete that key alongside grey/amber/blue/green above. */
+  --teal: #0f6b63;
+  --teal-bg: #e2f2f0;
+  --purple: #5b3a8e;
+  --purple-bg: #efe9f8;
+  --orange: #a8501a;
+  --orange-bg: #fbe9dd;
 }
 
 * {
@@ -310,9 +318,20 @@ td .date {
   color: #5c5044;
 }
 .badge-late {
-  margin-left: 6px;
   background: var(--late-bg);
   color: var(--late);
+}
+.badge-teal {
+  background: var(--teal-bg);
+  color: var(--teal);
+}
+.badge-purple {
+  background: var(--purple-bg);
+  color: var(--purple);
+}
+.badge-orange {
+  background: var(--orange-bg);
+  color: var(--orange);
 }
 
 /* ---------------- forms ---------------- */
@@ -495,6 +514,21 @@ td .date {
   gap: 12px;
   margin-bottom: 20px;
 }
+/* Eight tiles (the Orders section's seven legs plus a total) land as 7 + 1 on
+   a wide screen, which reads as a mistake. Four and four is balanced. */
+.stat-grid-wide {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 900px) {
+  .stat-grid-wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 420px) {
+  .stat-grid-wide {
+    grid-template-columns: 1fr;
+  }
+}
 
 .stat {
   position: relative;
@@ -571,6 +605,18 @@ td .date {
 .stat-late {
   --tone: var(--late);
   --tone-bg: var(--late-bg);
+}
+.stat-teal {
+  --tone: var(--teal);
+  --tone-bg: var(--teal-bg);
+}
+.stat-purple {
+  --tone: var(--purple);
+  --tone-bg: var(--purple-bg);
+}
+.stat-orange {
+  --tone: var(--orange);
+  --tone-bg: var(--orange-bg);
 }
 
 /* ---------------- toolbar ---------------- */
@@ -731,6 +777,10 @@ td .date {
 .progress i.bar-idle {
   background: #a99b88;
 }
+.progress i.bar-late   { background: var(--late); }
+.progress i.bar-teal   { background: var(--teal); }
+.progress i.bar-purple { background: var(--purple); }
+.progress i.bar-orange { background: var(--orange); }
 
 td.is-late {
   font-weight: 700;

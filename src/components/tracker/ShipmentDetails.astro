@@ -11,10 +11,18 @@ interface Props {
   lang: Lang;
   /** Shipping method, already translated by the page. */
   shippingMethod: string;
+  /** Panel heading; defaults to the tracker's own wording. */
+  title?: string;
+  /**
+   * Label/value pairs to show instead of the shipment's own. The Orders
+   * section passes its sheet's fields through here, so both sections share
+   * this panel rather than owning a copy of the same markup.
+   */
+  rows?: [string, string | number][];
 }
-const { shipment, lang, shippingMethod } = Astro.props;
+const { shipment, lang, shippingMethod, title, rows: override } = Astro.props;
 
-const rows: [string, string | number][] = [
+const defaultRows: [string, string | number][] = [
   [t(lang, 'trackingNumber'), shipment.tracking_number],
   [t(lang, 'invoiceNumber'), shipment.invoice_number],
   [t(lang, 'customerName'), shipment.customer_name],
@@ -29,8 +37,10 @@ const rows: [string, string | number][] = [
 
 // Only worth a row once it has actually arrived.
 if (shipment.actual_delivery) {
-  rows.push([t(lang, 'actualDelivery'), formatDate(shipment.actual_delivery)]);
+  defaultRows.push([t(lang, 'actualDelivery'), formatDate(shipment.actual_delivery)]);
 }
+
+const rows = override ?? defaultRows;
 
 // wa.me only accepts digits. The PHP used a numeric literal as the array key
 // here, so this link always rendered empty — hence the explicit guard.
@@ -47,7 +57,7 @@ const waDigits = (shipment.whatsapp_number ?? '').replace(/\D/g, '');
         stroke-linejoin="round"></path>
       <path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
     </svg>
-    {t(lang, 'shipmentDetails')}
+    {title ?? t(lang, 'shipmentDetails')}
   </h2>
 
   <dl class="m-0">

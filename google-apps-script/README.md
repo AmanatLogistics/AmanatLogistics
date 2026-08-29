@@ -1,75 +1,73 @@
-# Orders — Google Sheets backend
+# Orders — the SHIPMENTS sheet as the backend
 
-The Orders section of the tracker (`/orders` and `/orders/admin`) keeps its data
-in a Google Sheet. `orders-api.gs` is the whole backend: the website never talks
-to Google directly, it calls this script.
+The Orders section of the site (`/orders` and `/orders/admin`) reads the
+**SHIPMENTS** sheet of *Amanat_Shipment_Control_Tracker*. `orders-api.gs` is the
+whole backend: the website never talks to Google directly, it calls this script.
 
-The existing shipment tracker is untouched and keeps its own Postgres database.
+Written against that workbook as it actually is — its header row, its fourteen
+stage columns, its `11-Aug-26` dates, its `-` placeholders and its comma'd
+weights. The existing shipment tracker at `/tracking` is untouched and keeps its
+own Postgres database.
 
 ---
 
-## 1. Prepare the sheet
+## What it reads
 
-Create a Google Sheet and name the first tab **Orders**. Put these headers in
-row 1 — order them however you like, and leave out any you don't need:
+Columns are matched **by name**, so they can be reordered and the sheet can hold
+any number of other columns — they are read past and left alone.
 
-| Header | Meaning |
+| Column in SHIPMENTS | Used for |
 | --- | --- |
-| `Order ID` | Your own reference. Falls back to the row number. |
-| `Invoice Number` | **The only field that matters.** The tracking number is built from it. |
-| `Tracking Number` | Leave blank — the script fills it in. Type one yourself and it is kept. |
-| `Customer Name`, `Phone`, `WhatsApp` | Who the order is for. |
-| `Product`, `Quantity`, `Weight` | What is in it. |
-| `Origin`, `Destination`, `Shipping Method` | Where it is going. |
-| `Order Date`, `Estimated Delivery`, `Actual Delivery` | Dates. Any common format. |
-| `Stage` | 1–8, driving the progress timeline. Blank means 1. |
-| `Status`, `Notes` | Free text. `Status` is rewritten when you save from the admin. |
-| `Stage 1 Date` … `Stage 8 Date` | Optional. Per-stage dates for the timeline. |
+| `ACCI INVOICE NO` | the key; the only column that must have a value |
+| `ACCI Invoice Date (booked)` | stage 0 — the shipment exists from here |
+| `Commodity`, `Cartons / Pkgs`, `Gross Weight (kg)` | what is in it |
+| `KDR Truck Plate`, `TAS Truck Plate` | the two trucks |
+| `1 …` through `14 …` | the fourteen stage dates |
+| `AWB No`, `Flight No`, `Flight Date` | the air leg |
+| `CURRENT STATUS …` | read only, never written |
+| **`Tracking No`** | **you need to add this one** — see below |
 
-Headers are matched by name, ignoring case, spaces and punctuation, so
-`Invoice No`, `invoice_number` and `INVOICE #` all work. Columns the script does
-not recognise are left alone, and a completely blank row is skipped.
+A stage column is recognised by the number it starts with, so `3  Departed
+Kandahar` is stage 3 whatever the rest of the wording says.
 
-## 2. Deploy the script
+Everything else in the workbook — `S.No`, `Customer / Consignee`, the trip IDs,
+`Stage No`, `Days in Stage`, `ALERT`, `Remarks`, `DATA CHECK` — is ignored by the
+website and **written back untouched** when a row is saved.
 
-1. In the sheet: **Extensions → Apps Script**, and paste in `orders-api.gs`.
-2. **Project Settings → Script Properties → Add script property**
-   `API_TOKEN` = a long random string you invent.
-3. **Deploy → New deployment → Web app**
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-4. Copy the `/exec` URL it gives you.
+### The one column to add
 
-"Anyone" is safe: every request must carry the token, and the script answers
-nothing without it. The token lives on the Astro server and never reaches a
-browser.
+Add a column headed **`Tracking No`** to SHIPMENTS. The script fills it in and
+never clears it. Without it the site still works, but it cannot keep the
+tracking numbers it issues, and the admin shows a warning saying so.
 
-## 3. Point the website at it
+## How far along a shipment is
 
-Set these in `.env` locally and in Vercel → Settings → Environment Variables:
+The stage is the **highest numbered date column that has a date** — never a
+count of filled cells. That is what makes both customs routes work:
 
-```
-SHEETS_API_URL=https://script.google.com/macros/s/…/exec
-SHEETS_API_TOKEN=the same string you put in API_TOKEN
-ORDERS_ADMIN_PASSWORD=a strong password for /orders/admin
-```
+- **Route KDR** — cleared in Kandahar first, so stage 7 stays empty.
+- **Route HRTN** — the inland leg runs first, so stages 1 and 2 stay empty.
 
-`ORDERS_ADMIN_PASSWORD` must be different from `ADMIN_PASSWORD` and
-`TRACKER_ADMIN_PASSWORD`: the three panels have separate cookies, so a session
-for one is never a session for another. Local dev falls back to `orders123`.
+Counting filled cells would under-report both. Leaving those cells blank is
+correct, not missing data, and the timeline shows them as passed rather than
+pending once the shipment is beyond them.
 
-## 4. Redeploy after editing the script
+The seven groups the dashboard filters by are the workbook's own colour key:
 
-Apps Script serves the deployed version, not the file you are looking at. After
-changing `orders-api.gs`: **Deploy → Manage deployments → edit (pencil) → Version:
-New version → Deploy**. The `/exec` URL stays the same.
-
----
+| Group | Stages |
+| --- | --- |
+| Booked | 0 — invoice raised |
+| Kandahar | 1–2 |
+| To Hairatan | 3–6 |
+| Hairatan | 7–9 |
+| Uzbekistan | 10–11 |
+| Tashkent Airport | 12–13 |
+| Delivered | 14 |
 
 ## Tracking numbers
 
-The format is **`AM-0031-INV-062`**, and both halves come from the sheet — no
-value is ever typed into the code by hand:
+The format is **`AM-0031-INV-062`** — both halves come from the sheet, nothing
+is typed into the code by hand:
 
 ```
   AM  -  0031  -  INV  -  062
@@ -79,47 +77,75 @@ prefix  sequence      the invoice's number
 
 - **The sequence** is a four-digit running number, one higher than the highest
   already in the sheet. `AM-0031-…` is followed by `AM-0032-…`.
-- **The invoice part** is the number out of the invoice itself: `RN-062` gives
-  `062`, keeping the leading zero exactly as the invoice writes it. The series
-  prefix (`RN-`) is not repeated in the tracking number.
+- **The invoice part** is the number out of the ACCI invoice: `RN-062` gives
+  `062`, `RM-055` gives `055`. The series prefix is not repeated.
 
-| Invoice | Next code issued |
+| ACCI invoice | Code issued |
 | --- | --- |
+| `RM-055` | `AM-0001-INV-055` |
+| `PN-025` | `AM-0009-INV-025` |
 | `RN-062` | `AM-0031-INV-062` |
-| `RN-063` | `AM-0032-INV-063` |
-| `RN-007` | `AM-0033-INV-007` |
-| `INV-1042` | `AM-0034-INV-1042` |
-| *(no digits)* | falls back to the invoice's letters, or the row number |
 
-A code is generated **once** and written straight back into the Tracking Number
-column, so it is fixed from then on and later reads simply use what is there.
-That is what keeps codes stable when rows are sorted, filtered or deleted —
-nothing is recalculated from a row's position. A code you type in yourself is
-always kept; if it is not in the `AM-…-INV-…` shape it simply does not move the
-counter.
+A code is issued **once** and written straight back to `Tracking No`, so it is
+fixed from then on and later reads simply use what is there. That is what keeps
+codes stable when rows are sorted, filtered or deleted — nothing is ever
+recomputed from a row's position. A code you type in yourself is kept, and one
+that is not in the `AM-…-INV-…` shape does not move the counter, so an office
+that has already numbered some rows carries on from where it left off.
 
-To change the format, edit the four constants at the top of `orders-api.gs`
-(`TRACKING_PREFIX`, `TRACKING_SEGMENT`, `SEQUENCE_PAD`, `SEQUENCE_START`). The
-parser that reads existing codes back is built from the same constants, so the
-two cannot fall out of step.
+**Note on repeated invoice numbers.** SHIPMENTS currently has some invoice
+numbers on more than one row (`FF-003`, `MS-020`, `PH-032`). Each row still gets
+its own unique code, because each takes its own sequence. But a customer
+searching by *invoice* number is shown the first matching row — if those are
+genuinely separate shipments, give the customer the tracking number instead.
+
+## Deploying
+
+1. In the sheet: **Extensions → Apps Script**, and paste in `orders-api.gs`.
+2. **Project Settings → Script Properties → Add script property**
+   `API_TOKEN` = a long random string you invent.
+3. **Deploy → New deployment → Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+4. Copy the `/exec` URL.
+
+"Anyone" is safe: every request must carry the token, and the script answers
+nothing without it. The token stays on the Astro server; a browser never sees it.
+
+Then set these in `.env` locally and in Vercel → Settings → Environment Variables:
+
+```
+SHEETS_API_URL=https://script.google.com/macros/s/…/exec
+SHEETS_API_TOKEN=the same string you put in API_TOKEN
+ORDERS_ADMIN_PASSWORD=a strong password for /orders/admin
+```
+
+`ORDERS_ADMIN_PASSWORD` must differ from `ADMIN_PASSWORD` and
+`TRACKER_ADMIN_PASSWORD`: the three panels have separate cookies, so a session
+for one is never a session for another. Local dev falls back to `orders123`.
+
+**After editing the script**, Apps Script keeps serving the deployed version:
+**Deploy → Manage deployments → edit (pencil) → Version: New version → Deploy**.
+The `/exec` URL stays the same.
 
 ## Reads and writes
 
-- The whole sheet is read in one `getDataRange()` call per request.
-- Missing tracking numbers are written back in a **single** `setValues` call
-  covering the whole block, not one call per row. Once every row has a code,
-  reading writes nothing at all.
-- Saving an order writes that one row in one call.
+- The sheet is read in one `getDataRange()` call per request.
+- New tracking numbers are written back in a **single** `setValues` covering the
+  whole block, not one call per row. Once every row has a code, reading writes
+  nothing at all.
+- Saving a shipment writes that one row in one call, with every column the
+  website does not manage left exactly as it was read.
 - Writes take a script lock, so two admins saving at once cannot interleave.
 
 ## Endpoints
 
 | Request | Answer |
 | --- | --- |
-| `GET  ?token=…&action=list` | `{ ok: true, orders: [...] }` |
-| `GET  ?token=…&action=find&code=…` | `{ ok: true, order: {...} \| null }` — matches tracking **or** invoice number |
+| `GET  ?token=…&action=list` | `{ ok, orders, stages, trackingColumn }` |
+| `GET  ?token=…&action=find&code=…` | `{ ok, order \| null, stages }` — tracking **or** ACCI invoice number |
 | `POST {token, action:'update', id, fields}` | `{ ok: true }` |
 
 Anything missing or unreadable comes back as an empty string rather than an
-error: a sparse sheet renders, it does not break. A field the sheet has no
-column for is silently skipped on save.
+error: a sparse row renders, it does not break. A field the sheet has no column
+for is skipped on save.

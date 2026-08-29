@@ -170,38 +170,40 @@ loads and simply shows that text in English.
 
 ---
 
-## Orders — the same tracker, backed by a Google Sheet
+## Orders — the shipment control sheet, in the tracker
 
-A second, unlinked section of the tracker for orders whose records live in a
-Google Sheet rather than in the tracker's own database.
+A second, unlinked section of the tracker for the shipments recorded in the
+**SHIPMENTS** sheet of *Amanat_Shipment_Control_Tracker* — one row per ACCI
+invoice, fourteen stages from Kandahar to Delhi.
 
-- **`/orders`** — the customer view. Look up an order by invoice number or
-  tracking number, exactly like `/tracking`.
-- **`/orders/admin`** — the staff view. The order list, filters and status
-  badges of `/tracking/admin`, plus a **Refresh** button that pulls the sheet
-  again without reloading the page, and an edit form that writes back to it.
+- **`/orders`** — the customer view. Look up a shipment by ACCI invoice number
+  or tracking number and see its details and all fourteen stages.
+- **`/orders/admin`** — the staff view. The list, filters and badges of
+  `/tracking/admin`, filtered by the workbook's own seven legs (Booked,
+  Kandahar, To Hairatan, Hairatan, Uzbekistan, Tashkent Airport, Delivered),
+  plus a **Refresh** button that pulls the sheet again without reloading, and
+  an edit form that writes back to it.
 
 **It is reachable only by its direct URL.** It appears in no menu, nav bar or
-sitemap, is marked `noindex`, and is blocked in `robots.txt`. Nothing links to
-it — you reach it by typing the address.
+sitemap, is marked `noindex`, and is blocked in `robots.txt`.
 
 Both views are built from the shipment tracker's own layouts, stylesheet,
 details panel, timeline and dashboard script, so the two sections look and
-behave identically; only the data source differs. The status rules (Pending /
-In Transit / Received / Overdue) are the same code, so a record cannot be
-bucketed one way here and another way there.
+behave identically; only the data differs.
 
-**Tracking numbers are built in code, never typed**: the format is
-`AM-0031-INV-062` — a four-digit running sequence, plus the number out of the
-invoice (`RN-062` gives `062`). The next order issued is `AM-0032-INV-063`.
-Codes are written back to the sheet the first time it is read, so they are fixed
-from then on and stay put when rows are sorted or deleted; a code you enter by
-hand is left alone. A row added to the sheet is picked up on the next Refresh.
+**How far along a shipment is** comes from the highest numbered stage date in
+its row, never a count of filled cells — route KDR leaves stage 7 empty and
+route HRTN leaves stages 1 and 2 empty, so counting would under-report both.
 
-**Setup** is in **`google-apps-script/README.md`** — the sheet's columns, how to
-deploy `orders-api.gs`, and the three environment variables
-(`SHEETS_API_URL`, `SHEETS_API_TOKEN`, `ORDERS_ADMIN_PASSWORD`). The orders
-admin has its own password and its own cookie, so it is a third panel
+**Tracking numbers are built in code, never typed**: `AM-0031-INV-062` — a
+four-digit running sequence plus the number out of the ACCI invoice (`RM-055`
+gives `055`). Codes are written back to the sheet the first time it is read, so
+they are fixed from then on and stay put when rows are sorted or deleted.
+
+**Setup** is in **`google-apps-script/README.md`**: the one column to add to the
+sheet (`Tracking No`), how to deploy `orders-api.gs`, and the three environment
+variables (`SHEETS_API_URL`, `SHEETS_API_TOKEN`, `ORDERS_ADMIN_PASSWORD`). The
+orders admin has its own password and cookie, so it is a third panel
 independent of `/admin` and `/tracking/admin`.
 
 The shipment tracker is untouched by any of this and keeps its Postgres

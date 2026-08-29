@@ -61,6 +61,12 @@ export function initDashboard(): Dashboard | null {
   const rows = () => Array.from(rowsBody.querySelectorAll<HTMLElement>('[data-row]'));
   let filter = dash.dataset.filter ?? '';
 
+  /** A filter's name, taken from its own tile so both sections read right. */
+  const filterLabel = (key: string): string =>
+    dash.querySelector<HTMLElement>(`[data-tile="${key}"] .stat-label`)?.textContent?.trim() ??
+    STATUS_LABEL[key] ??
+    key;
+
   /* ---------------- filtering ---------------- */
 
   const matches = (row: HTMLElement, query: string, status: string): boolean => {
@@ -75,25 +81,28 @@ export function initDashboard(): Dashboard | null {
     const all = rows();
 
     // Tile counts follow the search but ignore the status, so the full
-    // breakdown stays readable while one bucket is selected.
-    const counts: Record<string, number> = { total: 0, pending: 0, transit: 0, received: 0, overdue: 0 };
+    // breakdown stays readable while one bucket is selected. The buckets come
+    // from the tiles the page actually rendered, not a fixed list — the
+    // tracker counts pending/transit/received/overdue, the Orders section
+    // counts the seven legs of its route.
+    const tiles = Array.from(dash.querySelectorAll<HTMLElement>('[data-count]'));
+    const counts: Record<string, number> = {};
+    for (const tile of tiles) counts[tile.dataset.count ?? ''] = 0;
     let shown = 0;
 
     for (const row of all) {
       if (matches(row, query, '')) {
-        counts.total++;
-        counts[row.dataset.status ?? 'pending']++;
-        if (row.dataset.overdue === '1') counts.overdue++;
+        if ('total' in counts) counts.total++;
+        const bucket = row.dataset.status ?? '';
+        if (bucket in counts) counts[bucket]++;
+        if (row.dataset.overdue === '1' && 'overdue' in counts) counts.overdue++;
       }
       const visible = matches(row, query, filter);
       row.hidden = !visible;
       if (visible) shown++;
     }
 
-    for (const [key, value] of Object.entries(counts)) {
-      const el = dash.querySelector(`[data-count="${key}"]`);
-      if (el) el.textContent = String(value);
-    }
+    for (const tile of tiles) tile.textContent = String(counts[tile.dataset.count ?? ''] ?? 0);
 
     dash.dataset.filter = filter;
     for (const tile of dash.querySelectorAll<HTMLElement>('[data-tile]')) {
@@ -102,6 +111,8 @@ export function initDashboard(): Dashboard | null {
       if (active) tile.setAttribute('aria-current', 'true');
       else tile.removeAttribute('aria-current');
     }
+
+    const noun = dash.dataset.noun ?? 'shipment';
 
     if (emptyRow && emptyText) {
       emptyRow.hidden = shown > 0;
@@ -112,19 +123,16 @@ export function initDashboard(): Dashboard | null {
       } else if (all.length === 0) {
         emptyText.textContent = 'No shipments yet. Use "Add new shipment" to create the first one.';
       } else if (query && filter) {
-        emptyText.textContent = `No "${STATUS_LABEL[filter]}" shipments match "${query}".`;
+        emptyText.textContent = `No "${filterLabel(filter)}" ${noun}s match "${query}".`;
       } else if (query) {
-        emptyText.textContent = `No shipments match "${query}".`;
+        emptyText.textContent = `No ${noun}s match "${query}".`;
       } else if (filter) {
-        emptyText.textContent = `No "${STATUS_LABEL[filter]}" shipments right now.`;
+        emptyText.textContent = `No "${filterLabel(filter)}" ${noun}s right now.`;
       }
     }
 
     if (summary) {
       const total = all.length;
-      // Wording belongs to the page, so the Orders section can say "orders"
-      // where the tracker says "shipments".
-      const noun = dash.dataset.noun ?? 'shipment';
       summary.textContent =
         query || filter
           ? `Showing ${shown} of ${total} ${noun}${total === 1 ? '' : 's'}.`
@@ -166,14 +174,17 @@ export function initDashboard(): Dashboard | null {
 
   /* ---------------- "Received", in place ---------------- */
 
-  const markReceivedInRow = (row: HTMLElement, dateLabel: string, gapLabel: string): void => {
+  const markReceivedInRow = (row: HTMLElement, data: Record<string, string>): void => {
+    const { dateLabel = '', gapLabel = '', badgeLabel = '', stageLabel = '' } = data;
     row.dataset.status = 'received';
     row.dataset.overdue = '0';
 
     const badge = row.querySelector<HTMLElement>('[data-badge]');
     if (badge) {
       badge.className = `badge badge-${TONE.received}`;
-      badge.textContent = STATUS_LABEL.received;
+      // The Orders section calls its final stage "Delivered", so the wording
+      // comes back with the reply rather than being fixed here.
+      badge.textContent = badgeLabel || STATUS_LABEL.received;
     }
     row.querySelector('[data-late-badge]')?.setAttribute('hidden', '');
     row.querySelector('[data-eta-cell]')?.classList.remove('is-late');
@@ -189,7 +200,7 @@ export function initDashboard(): Dashboard | null {
     }
     const stage = row.querySelector<HTMLElement>('[data-stage]');
     const total = row.dataset.stepTotal ?? '8';
-    if (stage) stage.textContent = `Delivered · step ${total} of ${total}`;
+    if (stage) stage.textContent = stageLabel || `Delivered · step ${total} of ${total}`;
     row.dataset.step = total;
 
     // It arrived today, so that is now the actual delivery date.
@@ -213,9 +224,11 @@ export function initDashboard(): Dashboard | null {
     const row = form.closest<HTMLElement>('[data-row]');
     const button = form.querySelector<HTMLButtonElement>('button');
     if (!row) return;
+    const label = button?.textContent ?? '✓ Received';
 
     const tracking = row.querySelector('strong')?.textContent ?? 'this shipment';
-    if (!window.confirm(`Mark ${tracking} as received? This completes the customer's timeline.`)) return;
+    const verb = button?.textContent?.replace(/[^A-Za-z ]/g, '').trim().toLowerCase() || 'received';
+    if (!window.confirm(`Mark ${tracking} as ${verb}? This completes the customer's timeline.`)) return;
 
     if (button) {
       button.disabled = true;
@@ -231,14 +244,14 @@ export function initDashboard(): Dashboard | null {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error ?? 'Could not save that change.');
 
-      markReceivedInRow(row, data.dateLabel ?? '', data.gapLabel ?? '');
+      markReceivedInRow(row, data ?? {});
       apply();
-      say(`${tracking} marked as received.`);
+      say(`${tracking} marked as ${verb}.`);
     } catch (error) {
       // Put the button back so the same click can simply be retried.
       if (button) {
         button.disabled = false;
-        button.textContent = '✓ Received';
+        button.textContent = label;
       }
       say(error instanceof Error ? error.message : 'Could not save that change.', false);
     }
