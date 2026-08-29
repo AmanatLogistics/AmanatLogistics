@@ -68,22 +68,40 @@ New version → Deploy**. The `/exec` URL stays the same.
 
 ## Tracking numbers
 
-Never typed in by hand and never invented from a counter — a counter would drift
-the moment a row was deleted or reordered. Each code is derived from the invoice
-number, so the same order always produces the same one:
+The format is **`AM-0031-INV-062`**, and both halves come from the sheet — no
+value is ever typed into the code by hand:
 
 ```
-INV-1042   ->  AL-1042
-INVOICE/778 -> AL-778
-inv 33/a   ->  AL-33A
-(blank)    ->  AL-R7        (falls back to the row number)
+  AM  -  0031  -  INV  -  062
+  ^^     ^^^^              ^^^
+prefix  sequence      the invoice's number
 ```
 
-A second row with the same invoice gets `AL-1042-2`, `AL-1042-3`, and so on, so
-codes are always unique within the sheet. New codes are written back into the
-Tracking Number column the first time the sheet is read, which makes them
-permanent — after that they are simply read, never regenerated. A code you type
-in yourself is always left alone.
+- **The sequence** is a four-digit running number, one higher than the highest
+  already in the sheet. `AM-0031-…` is followed by `AM-0032-…`.
+- **The invoice part** is the number out of the invoice itself: `RN-062` gives
+  `062`, keeping the leading zero exactly as the invoice writes it. The series
+  prefix (`RN-`) is not repeated in the tracking number.
+
+| Invoice | Next code issued |
+| --- | --- |
+| `RN-062` | `AM-0031-INV-062` |
+| `RN-063` | `AM-0032-INV-063` |
+| `RN-007` | `AM-0033-INV-007` |
+| `INV-1042` | `AM-0034-INV-1042` |
+| *(no digits)* | falls back to the invoice's letters, or the row number |
+
+A code is generated **once** and written straight back into the Tracking Number
+column, so it is fixed from then on and later reads simply use what is there.
+That is what keeps codes stable when rows are sorted, filtered or deleted —
+nothing is recalculated from a row's position. A code you type in yourself is
+always kept; if it is not in the `AM-…-INV-…` shape it simply does not move the
+counter.
+
+To change the format, edit the four constants at the top of `orders-api.gs`
+(`TRACKING_PREFIX`, `TRACKING_SEGMENT`, `SEQUENCE_PAD`, `SEQUENCE_START`). The
+parser that reads existing codes back is built from the same constants, so the
+two cannot fall out of step.
 
 ## Reads and writes
 

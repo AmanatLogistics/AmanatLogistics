@@ -191,11 +191,12 @@ behave identically; only the data source differs. The status rules (Pending /
 In Transit / Received / Overdue) are the same code, so a record cannot be
 bucketed one way here and another way there.
 
-**Tracking numbers are derived, never typed**: `INV-1042` becomes `AL-1042`,
-and a duplicate invoice becomes `AL-1042-2`. New codes are written back to the
-sheet the first time it is read, so they are permanent from then on, and a code
-you enter by hand is left alone. A row added to the sheet is picked up on the
-next Refresh.
+**Tracking numbers are built in code, never typed**: the format is
+`AM-0031-INV-062` — a four-digit running sequence, plus the number out of the
+invoice (`RN-062` gives `062`). The next order issued is `AM-0032-INV-063`.
+Codes are written back to the sheet the first time it is read, so they are fixed
+from then on and stay put when rows are sorted or deleted; a code you enter by
+hand is left alone. A row added to the sheet is picked up on the next Refresh.
 
 **Setup** is in **`google-apps-script/README.md`** — the sheet's columns, how to
 deploy `orders-api.gs`, and the three environment variables

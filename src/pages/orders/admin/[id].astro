@@ -119,7 +119,7 @@ if (authed) {
               Order details
               <span class="note">
                 Saved straight to row {order.row} of the Google Sheet. The tracking number is
-                derived from the invoice number and is not editable here.
+                built from the invoice number and its sequence, and is not editable here.
               </span>
             </div>
 
@@ -131,7 +131,10 @@ if (authed) {
               <div class="field">
                 <label for="tracking_number">Tracking number</label>
                 <input id="tracking_number" value={order.tracking_number} readonly />
-                <span class="hint">Generated from the invoice number by the Apps Script.</span>
+                <span class="hint">
+                  Built by the Apps Script as AM-&lt;sequence&gt;-INV-&lt;invoice number&gt;, and fixed
+                  once issued.
+                </span>
               </div>
               <div class="field">
                 <label for="customer_name">Customer name</label>

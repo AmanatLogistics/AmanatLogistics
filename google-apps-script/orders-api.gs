@@ -27,8 +27,20 @@
  */
 
 var SHEET_NAME = 'Orders';
-var TRACKING_PREFIX = 'AL';
 var STAGE_COUNT = 8;
+
+/**
+ * Tracking number format: AM-0031-INV-062
+ *                         ^^  ^^^^     ^^^
+ *                    prefix  sequence  the invoice's number (RN-062)
+ *
+ * Change these four to change the format everywhere — the parser that reads
+ * existing codes back is built from them too, so the two can never disagree.
+ */
+var TRACKING_PREFIX = 'AM';
+var TRACKING_SEGMENT = 'INV';
+var SEQUENCE_PAD = 4; // 0031
+var SEQUENCE_START = 1;
 
 /** Header name -> internal field. Lower-cased, non-alphanumerics removed. */
 var FIELD_ALIASES = {
@@ -138,30 +150,70 @@ function toIsoDate_(value) {
 function pad2_(n) { return (n < 10 ? '0' : '') + n; }
 
 /**
- * Tracking number for a row that has none.
+ * Tracking numbers — "AM-0031-INV-062" for invoice "RN-062".
  *
- * Derived from the invoice number so the same order always produces the same
- * code, never from a counter that would drift if rows are reordered or
- * deleted: "INV-1042" -> "AL-1042". A row with no usable invoice falls back to
- * its position, and a code already taken gets a numeric suffix, so the result
- * is always unique within the sheet.
+ * Two parts, and both are worked out from the sheet rather than typed in:
+ *
+ *   the sequence  a 4-digit running number, one higher than the highest
+ *                 already in the sheet, so 0031 is followed by 0032
+ *   the invoice   the number out of the invoice itself — "RN-062" gives "062",
+ *                 keeping the leading zero exactly as the invoice writes it
+ *
+ * A code is generated once and written straight back into the sheet, so it is
+ * fixed from then on: later reads simply use what is there. That is what keeps
+ * the sequence stable when rows are re-sorted or deleted — nothing is ever
+ * recalculated from a row's position.
  */
-function deriveTrackingNumber_(invoice, rowNumber, taken) {
-  var core = String(invoice == null ? '' : invoice)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '')
-    .replace(/^(INVOICE|INV)(?=[A-Z0-9])/, '');
-  if (!core) core = 'R' + rowNumber;
 
-  var base = TRACKING_PREFIX + '-' + core;
-  var candidate = base;
-  var n = 2;
-  while (taken[candidate]) {
-    candidate = base + '-' + n;
-    n++;
+/** Left-pad a number: 31 -> "0031". Longer numbers are left alone. */
+function padNumber_(value, width) {
+  var text = String(value);
+  while (text.length < width) text = '0' + text;
+  return text;
+}
+
+/** The part the invoice contributes: "RN-062" -> "062", "INV/7" -> "7". */
+function invoicePart_(invoice, rowNumber) {
+  var text = String(invoice == null ? '' : invoice).toUpperCase().trim();
+
+  // The last run of digits is the invoice's own number; any prefix ("RN-") is
+  // the series, which the tracking number does not repeat.
+  var digits = text.match(/[0-9]+/g);
+  if (digits && digits.length) return digits[digits.length - 1];
+
+  // An invoice with no digits at all still needs something stable.
+  var letters = text.replace(/[^A-Z0-9]/g, '');
+  return letters || 'R' + rowNumber;
+}
+
+function buildTrackingNumber_(invoice, sequence, rowNumber) {
+  return (
+    TRACKING_PREFIX + '-' +
+    padNumber_(sequence, SEQUENCE_PAD) + '-' +
+    TRACKING_SEGMENT + '-' +
+    invoicePart_(invoice, rowNumber)
+  );
+}
+
+/**
+ * The sequence inside an existing code, or 0 when it is not one of ours —
+ * a code typed in by hand in some other shape is kept, but does not move the
+ * counter.
+ */
+function trackingSequence_(code) {
+  var pattern = new RegExp('^' + TRACKING_PREFIX + '-(\\d+)-' + TRACKING_SEGMENT + '-', 'i');
+  var found = pattern.exec(String(code == null ? '' : code).trim());
+  return found ? parseInt(found[1], 10) || 0 : 0;
+}
+
+/** One past the highest sequence in the sheet — where new codes carry on from. */
+function nextSequence_(orders) {
+  var highest = SEQUENCE_START - 1;
+  for (var i = 0; i < orders.length; i++) {
+    var n = trackingSequence_(orders[i].tracking_number);
+    if (n > highest) highest = n;
   }
-  taken[candidate] = true;
-  return candidate;
+  return highest + 1;
 }
 
 /** Stage as 1..STAGE_COUNT. Unreadable or missing values mean stage 1. */
@@ -245,13 +297,23 @@ function readOrders_() {
     orders.push(order);
   }
 
-  // Assign codes only where one is missing, then write the column back once.
+  // Assign codes only where one is missing, carrying on from the highest
+  // sequence already in the sheet, then write the column back once.
   var missing = [];
+  var sequence = nextSequence_(orders);
   for (i = 0; i < orders.length; i++) {
-    if (!orders[i].tracking_number) {
-      orders[i].tracking_number = deriveTrackingNumber_(orders[i].invoice_number, orders[i].row, taken);
-      missing.push(orders[i]);
+    if (orders[i].tracking_number) continue;
+    var code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
+    // A code somebody typed by hand could already sit on this sequence; step
+    // past it rather than issuing the same number twice.
+    while (taken[code]) {
+      sequence++;
+      code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
     }
+    taken[code] = true;
+    sequence++;
+    orders[i].tracking_number = code;
+    missing.push(orders[i]);
   }
 
   if (missing.length && headers.tracking_number !== undefined) {
@@ -379,7 +441,9 @@ function doPost(e) {
 // Lets Node load the pure helpers for testing; ignored by Apps Script.
 if (typeof module !== 'undefined') {
   module.exports = {
-    mapHeaders_: mapHeaders_, toIsoDate_: toIsoDate_, deriveTrackingNumber_: deriveTrackingNumber_,
-    toStage_: toStage_, rowToOrder_: rowToOrder_, matches_: matches_, normaliseHeader_: normaliseHeader_,
+    mapHeaders_: mapHeaders_, toIsoDate_: toIsoDate_, toStage_: toStage_, rowToOrder_: rowToOrder_,
+    matches_: matches_, normaliseHeader_: normaliseHeader_, padNumber_: padNumber_,
+    invoicePart_: invoicePart_, buildTrackingNumber_: buildTrackingNumber_,
+    trackingSequence_: trackingSequence_, nextSequence_: nextSequence_,
   };
 }
