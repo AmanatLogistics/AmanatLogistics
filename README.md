@@ -170,6 +170,44 @@ loads and simply shows that text in English.
 
 ---
 
+## Orders — the same tracker, backed by a Google Sheet
+
+A second, unlinked section of the tracker for orders whose records live in a
+Google Sheet rather than in the tracker's own database.
+
+- **`/orders`** — the customer view. Look up an order by invoice number or
+  tracking number, exactly like `/tracking`.
+- **`/orders/admin`** — the staff view. The order list, filters and status
+  badges of `/tracking/admin`, plus a **Refresh** button that pulls the sheet
+  again without reloading the page, and an edit form that writes back to it.
+
+**It is reachable only by its direct URL.** It appears in no menu, nav bar or
+sitemap, is marked `noindex`, and is blocked in `robots.txt`. Nothing links to
+it — you reach it by typing the address.
+
+Both views are built from the shipment tracker's own layouts, stylesheet,
+details panel, timeline and dashboard script, so the two sections look and
+behave identically; only the data source differs. The status rules (Pending /
+In Transit / Received / Overdue) are the same code, so a record cannot be
+bucketed one way here and another way there.
+
+**Tracking numbers are derived, never typed**: `INV-1042` becomes `AL-1042`,
+and a duplicate invoice becomes `AL-1042-2`. New codes are written back to the
+sheet the first time it is read, so they are permanent from then on, and a code
+you enter by hand is left alone. A row added to the sheet is picked up on the
+next Refresh.
+
+**Setup** is in **`google-apps-script/README.md`** — the sheet's columns, how to
+deploy `orders-api.gs`, and the three environment variables
+(`SHEETS_API_URL`, `SHEETS_API_TOKEN`, `ORDERS_ADMIN_PASSWORD`). The orders
+admin has its own password and its own cookie, so it is a third panel
+independent of `/admin` and `/tracking/admin`.
+
+The shipment tracker is untouched by any of this and keeps its Postgres
+database; the Orders section never reads or writes it.
+
+---
+
 ## 1. Add your real images
 
 The site shows labelled placeholders until you add photos. Drop files into

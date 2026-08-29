@@ -1,0 +1,373 @@
+---
+/**
+ * Orders admin — login screen + order list, backed by Google Sheets.
+ *
+ * Structurally the same page as /tracking/admin: the same layout, stylesheet,
+ * stat tiles, filter bar, table markup and client script. Only the data source
+ * differs, so the two panels stay visually identical for free.
+ *
+ * Separate password (ORDERS_ADMIN_PASSWORD) and separate cookie, so a session
+ * here is not a session for the website admin or the shipment tracker.
+ */
+import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
+import { SITE } from '../../../consts';
+import { isOrdersAdmin, ordersPassword } from '../../../lib/orders/auth';
+import { isConfigured, listOrders, SHEETS_NOT_CONFIGURED, type SheetOrder } from '../../../lib/orders/api';
+import { searchText, stageTitle, toShipment } from '../../../lib/orders/model';
+import {
+  asStatus,
+  countBy,
+  daysBetween,
+  dueHint,
+  formatDate,
+  isOverdue,
+  statusOf,
+  STATUS_LABEL,
+  STEP_COUNT,
+  type Status,
+} from '../../../lib/tracker/shipments';
+
+export const prerender = false;
+
+const authed = await isOrdersAdmin(Astro.request);
+const params = Astro.url.searchParams;
+
+/* ---------- logged out ---------- */
+const loginErrors: Record<string, string> = {
+  '1': 'Wrong password.',
+  origin: 'That request looked unsafe, so it was blocked. Please try again.',
+  unconfigured: 'The orders admin password is not set. Add ORDERS_ADMIN_PASSWORD in your Vercel environment variables.',
+};
+const loginError = loginErrors[params.get('error') ?? ''] ?? '';
+
+/* ---------- logged in ---------- */
+const status = asStatus(params.get('status') ?? '');
+const search = (params.get('q') ?? '').trim();
+
+let orders: SheetOrder[] = [];
+let loadError = '';
+
+if (authed) {
+  if (!isConfigured()) {
+    loadError = SHEETS_NOT_CONFIGURED;
+  } else {
+    try {
+      orders = await listOrders();
+    } catch (e) {
+      console.error('Orders sheet failed to load:', e);
+      loadError = 'Could not read the Google Sheet. Check that the Apps Script web app is deployed and the token matches.';
+    }
+  }
+}
+
+// Every status rule comes from the shipment tracker, so the two sections
+// bucket, badge and flag a record identically.
+const shipments = orders.map(toShipment);
+const counts = countBy(shipments);
+
+const notice = params.has('saved') ? 'Order saved to the sheet.' : '';
+const actionError = params.get('error') === 'receive'
+  ? 'Could not mark that order as received. Please try again.'
+  : '';
+
+const cssSafeSearch = search.toLowerCase().replace(/[^a-z0-9 @._-]/g, '').slice(0, 60);
+
+const filterHref = (next: Status | '') => {
+  const url = new URLSearchParams();
+  if (search) url.set('q', search);
+  if (next) url.set('status', next);
+  const qs = url.toString();
+  return qs ? `/orders/admin?${qs}` : '/orders/admin';
+};
+
+const tiles: { key: Status | ''; label: string; value: number; tone: string; note: string }[] = [
+  { key: '', label: 'All orders', value: counts.total, tone: 'all', note: 'Everything in the sheet' },
+  { key: 'pending', label: 'Pending', value: counts.pending, tone: 'idle', note: 'Booked, not moving yet' },
+  { key: 'transit', label: 'In Transit', value: counts.transit, tone: 'transit', note: 'On the way' },
+  { key: 'received', label: 'Received', value: counts.received, tone: 'done', note: 'Delivered to customer' },
+  { key: 'overdue', label: 'Overdue', value: counts.overdue, tone: 'late', note: 'Past ETA, not received' },
+];
+
+const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
+  bucket === 'received' ? 'done' : bucket === 'transit' ? 'transit' : 'idle';
+
+const deliveryGap = (order: SheetOrder): string => {
+  if (!order.actual_delivery || !order.estimated_delivery) return '';
+  const days = daysBetween(order.estimated_delivery, order.actual_delivery);
+  if (days === null) return '';
+  const unit = (n: number) => (n === 1 ? 'day' : 'days');
+  if (days === 0) return 'on time';
+  return days > 0 ? `${days} ${unit(days)} late` : `${-days} ${unit(-days)} early`;
+};
+---
+
+{
+  !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Orders</h1>
+        <p class="lede">Sign in to view and update orders.</p>
+
+        {loginError && <div class="alert alert-err">{loginError}</div>}
+        {!ordersPassword() && !loginError && (
+          <div class="alert alert-err">
+            No orders password is set yet. Add <code>ORDERS_ADMIN_PASSWORD</code> to your
+            environment variables.
+          </div>
+        )}
+
+        <form method="post" action="/api/orders/login">
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" required autofocus />
+          </div>
+          <button class="btn btn-primary" type="submit">Log in</button>
+        </form>
+
+        <a class="back" href="/">← Back to {SITE.name}</a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout title="Orders">
+      {cssSafeSearch && (
+        <style
+          id="nojs-search"
+          set:html={`[data-row]:not([data-search*="${cssSafeSearch}"]){display:none}`}
+        />
+      )}
+
+      <div class="dash" data-noun="order" data-filter={status} data-load-error={loadError ? '1' : '0'}>
+        <div class="page-head">
+          <div>
+            <h1>Orders</h1>
+            <p class="page-sub" data-summary data-default="Live from the Google Sheet — every order and where it has reached.">
+              Live from the Google Sheet — every order and where it has reached.
+            </p>
+          </div>
+          <div class="head-actions">
+            <span class="synced" data-synced />
+            {/* A real link, so it still re-reads the sheet with JavaScript off;
+                the script intercepts it and swaps the rows in place instead. */}
+            <a class="btn btn-soft" href="/orders/admin" data-refresh data-astro-prefetch="false">
+              ↻ Refresh
+            </a>
+          </div>
+        </div>
+
+        <div class="alert alert-ok" data-notice hidden={!notice}>
+          {notice}
+        </div>
+        {actionError && <div class="alert alert-err">{actionError}</div>}
+        {loadError && <div class="alert alert-err">{loadError}</div>}
+
+        <div class="stat-grid">
+          {tiles.map((tile) => (
+            <a
+              class={`stat stat-${tile.tone}${tile.key === status ? ' is-active' : ''}`}
+              href={filterHref(tile.key)}
+              data-tile={tile.key}
+              data-astro-prefetch="false"
+              aria-current={tile.key === status ? 'true' : undefined}
+            >
+              <span class="stat-label">{tile.label}</span>
+              <span class="stat-value" data-count={tile.key || 'total'}>
+                {tile.value}
+              </span>
+              <span class="stat-note">{tile.note}</span>
+            </a>
+          ))}
+        </div>
+
+        <div class="card">
+          <form method="get" class="toolbar" data-toolbar>
+            <div class="field field-search">
+              <label for="q">Search</label>
+              <div class="search-wrap">
+                <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+                  <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+                <input
+                  id="q"
+                  name="q"
+                  type="search"
+                  value={search}
+                  autocomplete="off"
+                  placeholder="Invoice #, tracking #, customer, product"
+                />
+                <button class="search-clear" type="button" data-clear-search hidden aria-label="Clear search">
+                  ×
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="status">Status</label>
+              <select id="status" name="status" data-status-select>
+                <option value="" selected={status === ''}>
+                  All statuses
+                </option>
+                {(Object.keys(STATUS_LABEL) as Status[]).map((key) => (
+                  <option value={key} selected={status === key}>
+                    {STATUS_LABEL[key]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div class="field" data-sort-field hidden>
+              <label for="sort">Sort by</label>
+              <select id="sort" data-sort>
+                <option value="newest">Sheet order</option>
+                <option value="eta">Delivery date</option>
+                <option value="progress">Furthest along</option>
+                <option value="customer">Customer A–Z</option>
+              </select>
+            </div>
+
+            <div class="toolbar-end">
+              <button class="btn btn-soft" type="submit" data-apply>
+                Apply
+              </button>
+              <a
+                class="btn btn-ghost"
+                href="/orders/admin"
+                data-clear-all
+                data-astro-prefetch="false"
+                hidden={!search && !status}
+              >
+                Clear filters
+              </a>
+            </div>
+          </form>
+
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Invoice / Tracking</th>
+                  <th>Customer</th>
+                  <th>Product</th>
+                  <th>Route</th>
+                  <th>Status</th>
+                  <th>Est. delivery</th>
+                  <th>Actual delivery</th>
+                  <th class="th-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody data-rows>
+                {orders.map((order, i) => {
+                  const shipment = shipments[i];
+                  const bucket = statusOf(shipment);
+                  const late = isOverdue(shipment);
+                  return (
+                    <tr
+                      data-row
+                      data-id={order.order_id}
+                      data-status={bucket}
+                      data-overdue={late ? '1' : '0'}
+                      data-search={searchText(order)}
+                      data-seq={i}
+                      data-eta={order.estimated_delivery}
+                      data-step={order.stage}
+                      data-step-total={STEP_COUNT}
+                      data-customer={order.customer_name.toLowerCase()}
+                    >
+                      <td data-label="Invoice / Tracking">
+                        <span class="cell">
+                          <strong>{order.invoice_number || '—'}</strong>
+                          <span class="sub">{order.tracking_number}</span>
+                        </span>
+                      </td>
+                      <td data-label="Customer">{order.customer_name || '—'}</td>
+                      <td data-label="Product">{order.product || '—'}</td>
+                      <td data-label="Route" class="route">
+                        <span class="route-inner">
+                          <span>{order.origin || '—'}</span>
+                          <span class="arrow" aria-hidden="true">→</span>
+                          <span>{order.destination || '—'}</span>
+                        </span>
+                      </td>
+                      <td data-label="Status">
+                        <span class="status-cell">
+                          <span class="badges">
+                            <span class={`badge badge-${badgeTone(bucket)}`} data-badge>
+                              {STATUS_LABEL[bucket]}
+                            </span>
+                            <span class="badge badge-late" data-late-badge hidden={!late}>
+                              Overdue
+                            </span>
+                          </span>
+                          <span class="sub" data-stage>
+                            {stageTitle(order)} · step {order.stage} of {STEP_COUNT}
+                          </span>
+                          <span class="progress" aria-hidden="true">
+                            <i
+                              data-bar
+                              class={`bar-${badgeTone(bucket)}`}
+                              style={`width:${Math.round((order.stage / STEP_COUNT) * 100)}%`}
+                            />
+                          </span>
+                        </span>
+                      </td>
+                      <td data-label="Est. delivery" class={late ? 'is-late' : undefined} data-eta-cell>
+                        <span class="cell">
+                          <span class="date">
+                            {order.estimated_delivery ? formatDate(order.estimated_delivery) : '—'}
+                          </span>
+                          <span class="sub" data-due-hint>
+                            {dueHint(order.estimated_delivery, bucket === 'received')}
+                          </span>
+                        </span>
+                      </td>
+                      <td data-label="Actual delivery" data-actual-cell>
+                        <span class="cell">
+                          <span class="date" data-actual-date>
+                            {order.actual_delivery ? formatDate(order.actual_delivery) : '—'}
+                          </span>
+                          <span class="sub" data-actual-gap>{deliveryGap(order)}</span>
+                        </span>
+                      </td>
+                      <td class="actions">
+                        <div class="actions-inner">
+                          <form
+                            method="post"
+                            action="/api/orders/receive"
+                            data-receive
+                            hidden={bucket === 'received'}
+                          >
+                            <input type="hidden" name="id" value={order.order_id} />
+                            <input type="hidden" name="estimated" value={order.estimated_delivery} />
+                            <button class="btn btn-ok" type="submit" title="Mark as received">
+                              ✓ Received
+                            </button>
+                          </form>
+                          <a class="btn btn-edit" href={`/orders/admin/${encodeURIComponent(order.order_id)}`}>
+                            Edit
+                          </a>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr data-empty hidden={orders.length > 0}>
+                  <td colspan="8" class="empty" data-empty-text>
+                    {loadError
+                      ? 'Orders could not be loaded.'
+                      : 'No orders in the sheet yet. Add a row and press Refresh.'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </TrackerAdminLayout>
+  )
+}
+
+<script>
+  import { initOrdersAdmin } from '../../../scripts/orders-admin';
+  initOrdersAdmin();
+</script>

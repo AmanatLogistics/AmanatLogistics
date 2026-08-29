@@ -645,6 +645,21 @@ td .date {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
+/* Head-of-page actions: the Refresh link and its "synced" stamp. */
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.synced {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.btn[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
 .btn-ghost {
   background: transparent;
   border-color: transparent;

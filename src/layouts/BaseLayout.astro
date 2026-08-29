@@ -12,10 +12,12 @@ interface Props {
   description?: string;
   /** Active nav item href, e.g. "/about" */
   active?: string;
+  /** Keep the page out of search results — for direct-link-only pages. */
+  noindex?: boolean;
 }
 
 const { seo } = await getContent();
-const { title, description = seo.description, active } = Astro.props;
+const { title, description = seo.description, active, noindex = false } = Astro.props;
 const fullTitle = `${SITE.name} — ${title}`;
 const canonical = new URL(Astro.url.pathname, SITE.domain).href;
 const ogImage = new URL(seo.ogImage, SITE.domain).href;
@@ -28,6 +30,7 @@ const ogImage = new URL(seo.ogImage, SITE.domain).href;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
 
     <title>{fullTitle}</title>
     <meta name="description" content={description} />

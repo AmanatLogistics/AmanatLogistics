@@ -9,6 +9,10 @@
  * Everything here is an enhancement. With the script absent the tiles are plain
  * links, the filters are applied server-side as CSS, and "Received" is a normal
  * form POST — see tracking/admin/index.astro.
+ *
+ * The Orders section (/orders/admin) renders the same markup and reuses this
+ * whole file; the handle returned from initDashboard lets it re-apply the
+ * active filter after pulling fresh rows from Google Sheets.
  */
 
 type Bucket = 'pending' | 'transit' | 'received';
@@ -22,9 +26,14 @@ const STATUS_LABEL: Record<string, string> = {
 
 const TONE: Record<Bucket, string> = { pending: 'idle', transit: 'transit', received: 'done' };
 
-export function initDashboard(): void {
+/** Lets a caller re-run the filter after changing the rows underneath it. */
+export interface Dashboard {
+  apply: () => void;
+}
+
+export function initDashboard(): Dashboard | null {
   const dash = document.querySelector<HTMLElement>('.dash');
-  if (!dash) return; // login screen
+  if (!dash) return null; // login screen
 
   const rowsBody = dash.querySelector<HTMLElement>('[data-rows]');
   const searchInput = dash.querySelector<HTMLInputElement>('#q');
@@ -39,7 +48,7 @@ export function initDashboard(): void {
   const emptyText = dash.querySelector<HTMLElement>('[data-empty-text]');
   const summary = dash.querySelector<HTMLElement>('[data-summary]');
   const notice = dash.querySelector<HTMLElement>('[data-notice]');
-  if (!rowsBody) return;
+  if (!rowsBody) return null;
 
   // The server's no-JS search rule would fight the live one, so drop it.
   document.getElementById('nojs-search')?.remove();
@@ -113,10 +122,13 @@ export function initDashboard(): void {
 
     if (summary) {
       const total = all.length;
+      // Wording belongs to the page, so the Orders section can say "orders"
+      // where the tracker says "shipments".
+      const noun = dash.dataset.noun ?? 'shipment';
       summary.textContent =
         query || filter
-          ? `Showing ${shown} of ${total} shipment${total === 1 ? '' : 's'}.`
-          : 'An overview of every consignment and where it has reached.';
+          ? `Showing ${shown} of ${total} ${noun}${total === 1 ? '' : 's'}.`
+          : (summary.dataset.default ?? 'An overview of every consignment and where it has reached.');
     }
 
     clearSearchBtn?.toggleAttribute('hidden', !query);
@@ -286,4 +298,6 @@ export function initDashboard(): void {
   });
 
   apply();
+
+  return { apply };
 }

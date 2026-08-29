@@ -406,8 +406,13 @@ export function searchText(s: ShipmentSummary): string {
  * Counts for the dashboard tiles, computed from the rows already loaded rather
  * than by a second query. `overdue` overlaps the other three by design, so the
  * buckets do not sum to `total`.
+ *
+ * Typed to the two fields it actually reads, so the Orders section can count
+ * sheet-backed records with the same helper.
  */
-export function countBy(rows: ShipmentSummary[]): StatusCounts {
+export function countBy(
+  rows: Pick<Shipment, 'current_step' | 'estimated_delivery'>[],
+): StatusCounts {
   const counts: StatusCounts = { total: rows.length, pending: 0, transit: 0, received: 0, overdue: 0 };
   for (const row of rows) {
     counts[statusOf(row)]++;
