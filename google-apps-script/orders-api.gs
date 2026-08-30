@@ -70,7 +70,7 @@ var ISSUED_CODES = {
   'MS-024': 'AM-0023-INV-024',
   'MS-023': 'AM-0022-INV-023',
   'FF-004': 'AM-0021-INV-004',
-  'RM-066': 'AM-0020-INV-066',
+  'RN-066': 'AM-0020-INV-066',
   'SR-011': 'AM-0019-INV-011',
   'SR-010': 'AM-0018-INV-010',
   'RS-009': 'AM-0017-INV-009',
@@ -118,6 +118,12 @@ var STAGE_COUNT = STAGES.length;
  * (S.No, trip IDs, the formula columns, Remarks…) is read past and left alone.
  */
 var FIELD_ALIASES = {
+  // Read for ordering only — never shown, never written. See assignCodes_.
+  sno: 'seq_no',
+  serialno: 'seq_no',
+  slno: 'seq_no',
+  srno: 'seq_no',
+
   acciinvoiceno: 'invoice_number',
   acciinvoice: 'invoice_number',
   invoiceno: 'invoice_number',
@@ -160,7 +166,13 @@ var FIELD_ALIASES = {
   amtrackingno: 'tracking_number',
 };
 
-/** What the admin form may write back. */
+/**
+ * What the admin form may write back.
+ *
+ * `tracking_number` is here only so a code can be corrected by hand where a
+ * Tracking No column happens to exist. The script never writes a code it
+ * generated — those live in the backend, not the sheet.
+ */
 var WRITABLE = [
   'invoice_number', 'tracking_number', 'invoice_date', 'commodity', 'cartons',
   'gross_weight', 'kdr_plate', 'tas_plate', 'awb_no', 'flight_no', 'flight_date',
@@ -349,8 +361,13 @@ function rowToOrder_(row, headers, rowNumber) {
     stageDates.push(i === undefined ? '' : toIsoDate_(row[i]));
   }
 
+  var seq = parseInt(String(read('seq_no')).replace(/[^0-9]/g, ''), 10);
+
   return {
     row: rowNumber,
+    // The sheet's own S.No, when it has one. Used only to keep tracking
+    // numbers stable; it is not part of what the website tracks.
+    seq_no: isFinite(seq) ? seq : 0,
     order_id: String(rowNumber),
     invoice_number: read('invoice_number'),
     tracking_number: read('tracking_number'),
@@ -402,52 +419,91 @@ function findHeaderRow_(values) {
 }
 
 /**
- * Give every row without a code one, in place. Marks each row it touched with
- * `assigned` so the caller knows which cells to write back.
+ * Give every row without a code one, in place.
  *
  * Three sources, in order of authority:
  *
- *   1. the sheet          a code already in the Tracking No column, including
- *                         one an admin has edited by hand — always kept
- *   2. the register       ISSUED_CODES, for invoices the office numbered
+ *   1. the sheet          a code in a Tracking No column, if that column
+ *                         exists at all — this is the only way a code can be
+ *                         corrected by hand, and it is always kept
+ *   2. the register       ISSUED_CODES, the numbers the office handed out
  *                         before the website existed
  *   3. a new sequence     built from the invoice number, carrying on past
  *                         every code in either of the two above
  *
+ * Nothing is written back. Codes are worked out here on every read, so the
+ * sheet needs no column and gains no extra data because of the website.
+ *
+ * New numbers are handed out in a stable order — by invoice date, then invoice
+ * number — rather than in the order the rows happen to sit in. Sorting or
+ * filtering the sheet therefore cannot renumber anything, which it would if
+ * the numbering followed row positions.
+ *
  * A register entry is used once. Where the same invoice appears on several
- * rows — this sheet has a few — the first row keeps the issued code and the
- * rest are given new ones, so no two shipments share a number.
+ * rows — this sheet has a few — the first keeps the issued code and the rest
+ * are given new ones, so no two shipments share a number.
  */
+/** Enough of a row's own content to tell two same-invoice rows apart. */
+function rowFingerprint_(order) {
+  return [
+    order.cartons, order.gross_weight, order.kdr_plate,
+    order.tas_plate, order.awb_no, order.commodity,
+  ].join('|');
+}
+
 function assignCodes_(orders, taken) {
+  // Everything below walks the rows in a stable order taken from the sheet's
+  // own S.No — falling back to invoice date, invoice number and the row's
+  // contents where a row has none — rather than the order the rows happen to
+  // sit in. Sorting or filtering the sheet therefore cannot change a single
+  // number, and nor can adding a shipment.
+  var ordered = orders.slice().sort(function (a, b) {
+    // The sheet's own S.No first. It is data rather than a position, so
+    // sorting the sheet cannot change it, and it only ever grows — which is
+    // what stops a shipment added later, even a back-dated one, from
+    // renumbering the shipments already issued.
+    if (a.seq_no !== b.seq_no) {
+      if (!a.seq_no) return 1; // rows with no S.No go last
+      if (!b.seq_no) return -1;
+      return a.seq_no - b.seq_no;
+    }
+    if (a.invoice_date !== b.invoice_date) return a.invoice_date < b.invoice_date ? -1 : 1;
+    if (a.invoice_number !== b.invoice_number) return a.invoice_number < b.invoice_number ? -1 : 1;
+    var fa = rowFingerprint_(a);
+    var fb = rowFingerprint_(b);
+    if (fa !== fb) return fa < fb ? -1 : 1;
+    return a.row - b.row; // genuinely identical rows: fall back to position
+  });
+
   var i;
-  for (i = 0; i < orders.length; i++) {
-    if (orders[i].tracking_number) continue;
-    var issued = issuedCode_(orders[i].invoice_number);
+  // 1. the numbers the office already handed out.
+  for (i = 0; i < ordered.length; i++) {
+    if (ordered[i].tracking_number) continue;
+    var issued = issuedCode_(ordered[i].invoice_number);
     if (issued && !taken[issued]) {
       taken[issued] = true;
-      orders[i].tracking_number = issued;
-      orders[i].assigned = true;
+      ordered[i].tracking_number = issued;
     }
   }
 
+  // 2. everything else, carrying on past every code already in play.
   var sequence = nextSequence_(orders);
-  for (i = 0; i < orders.length; i++) {
-    if (orders[i].tracking_number) continue;
-    var code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
+  for (i = 0; i < ordered.length; i++) {
+    if (ordered[i].tracking_number) continue;
+    var code = buildTrackingNumber_(ordered[i].invoice_number, sequence, ordered[i].row);
     while (taken[code]) {
       sequence++;
-      code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
+      code = buildTrackingNumber_(ordered[i].invoice_number, sequence, ordered[i].row);
     }
     taken[code] = true;
     sequence++;
-    orders[i].tracking_number = code;
-    orders[i].assigned = true;
+    ordered[i].tracking_number = code;
   }
 }
 
 /**
- * The sheet, read once. Rows without a tracking number are given one and the
- * codes are written back in a single setValues call, not one per row.
+ * The sheet, read once per request. Tracking numbers are worked out in memory;
+ * nothing is written back for them.
  */
 function readOrders_() {
   var sh = sheet_();
@@ -471,30 +527,11 @@ function readOrders_() {
     orders.push(order);
   }
 
-  if (headers.tracking_number === undefined) {
-    // No column to keep codes in, but the website still needs them, so they
-    // are worked out in memory and simply not written back. Adding the column
-    // later makes them permanent; until then they are recomputed each read.
-    assignCodes_(orders, taken);
-    return { orders: orders, headers: headers, sheet: sh, headerRow: found.index + 1 };
-  }
-
+  // Codes are the backend's business: worked out here, never written to the
+  // sheet. A Tracking No column is not required and is not created; if one
+  // happens to exist its values are respected above, which is what lets a code
+  // be corrected by hand.
   assignCodes_(orders, taken);
-  var missing = [];
-  for (i = 0; i < orders.length; i++) {
-    if (orders[i].assigned) missing.push(orders[i]);
-  }
-
-  if (missing.length) {
-    var col = headers.tracking_number + 1;
-    var first = missing[0].row;
-    var last = missing[missing.length - 1].row;
-    var block = sh.getRange(first, col, last - first + 1, 1).getValues();
-    for (i = 0; i < missing.length; i++) {
-      block[missing[i].row - first][0] = missing[i].tracking_number;
-    }
-    sh.getRange(first, col, block.length, 1).setValues(block);
-  }
 
   return { orders: orders, headers: headers, sheet: sh, headerRow: found.index + 1 };
 }
@@ -613,6 +650,6 @@ if (typeof module !== 'undefined') {
     trackingSequence_: trackingSequence_, nextSequence_: nextSequence_,
     stageReached_: stageReached_, rowToOrder_: rowToOrder_, matches_: matches_,
     findHeaderRow_: findHeaderRow_, ISSUED_CODES: ISSUED_CODES, issuedCode_: issuedCode_,
-    assignCodes_: assignCodes_,
+    assignCodes_: assignCodes_, rowFingerprint_: rowFingerprint_,
   };
 }

@@ -195,14 +195,17 @@ behave identically; only the data differs.
 its row, never a count of filled cells — route KDR leaves stage 7 empty and
 route HRTN leaves stages 1 and 2 empty, so counting would under-report both.
 
-**Tracking numbers are built in code, never typed**: `AM-0031-INV-062` — a
+**Tracking numbers live in the backend, not the sheet**: `AM-0031-INV-062` — a
 four-digit running sequence plus the number out of the ACCI invoice (`RM-055`
-gives `055`). Numbers the office had already issued are held in a register in
+gives `055`). The website adds no column and writes nothing into the sheet for
+them. Numbers the office had already issued are held in a register in
 `orders-api.gs` and are always kept, so a customer holding `AM-0016-INV-020`
-still finds their shipment; everything else carries on from `AM-0032`. They work
-whether or not the sheet has a `Tracking No` column — adding one makes them
-permanent and lets an admin edit a code by hand. Customers can search by either
-the tracking number or the ACCI invoice number.
+still finds their shipment; everything else carries on from `AM-0032`.
+
+The numbering follows the sheet's own **S.No**, so sorting or filtering the
+sheet — or adding a shipment, even a back-dated one — never moves a number that
+has already been given out. Customers can search by either the tracking number
+or the ACCI invoice number.
 
 **Setup** is in **`google-apps-script/README.md`**: the one column to add to the
 sheet (`Tracking No`), how to deploy `orders-api.gs`, and the three environment

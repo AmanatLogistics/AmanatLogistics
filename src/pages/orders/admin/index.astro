@@ -51,7 +51,6 @@ const status = asGroup(params.get('status') ?? '');
 const search = (params.get('q') ?? '').trim();
 
 let orders: SheetOrder[] = [];
-let trackingColumn = true;
 let loadError = '';
 
 if (authed) {
@@ -59,9 +58,7 @@ if (authed) {
     loadError = SHEETS_NOT_CONFIGURED;
   } else {
     try {
-      const result = await listOrders();
-      orders = result.orders;
-      trackingColumn = result.trackingColumn;
+      orders = (await listOrders()).orders;
     } catch (e) {
       console.error('SHIPMENTS sheet failed to load:', e);
       loadError = 'Could not read the Google Sheet. Check that the Apps Script web app is deployed and the token matches.';
@@ -161,15 +158,6 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
         </div>
         {actionError && <div class="alert alert-err">{actionError}</div>}
         {loadError && <div class="alert alert-err">{loadError}</div>}
-        {!loadError && !trackingColumn && orders.length > 0 && (
-          <div class="alert alert-err">
-            The sheet has no <code>Tracking No</code> column. Numbers below are worked out on
-            every read and work everywhere, but they cannot be saved and cannot be edited by hand.
-            Add a <code>Tracking No</code> column to SHIPMENTS and press Refresh — the script will
-            fill it in once, and from then on they are fixed.
-          </div>
-        )}
-
         <div class="stat-grid stat-grid-wide">
           {tiles.map((tile) => (
             <a

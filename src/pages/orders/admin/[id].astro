@@ -131,11 +131,16 @@ if (authed) {
               </div>
               <div class="field">
                 <label for="tracking_number">Tracking number</label>
-                <input id="tracking_number" name="tracking_number" value={order.tracking_number} />
+                <input
+                  id="tracking_number"
+                  name={trackingColumn ? 'tracking_number' : undefined}
+                  value={order.tracking_number}
+                  readonly={!trackingColumn}
+                />
                 <span class="hint">
                   {trackingColumn
-                    ? 'Issued automatically as AM-<sequence>-INV-<invoice number>. Change it here if you need to — what you type is kept, and customers can look the shipment up by it.'
-                    : 'The sheet has no “Tracking No” column, so an edit here cannot be saved. Add that column to SHIPMENTS first.'}
+                    ? 'Issued by the tracker as AM-<sequence>-INV-<invoice number>. Change it here if you need to — what you type is kept, and customers can look the shipment up by it. Clear it to hand the number back to the tracker.'
+                    : 'Issued by the tracker as AM-<sequence>-INV-<invoice number> and held in the backend, so the sheet carries no tracking column. To pin or correct one, ask for it to be set in the tracker’s register.'}
                 </span>
               </div>
               <div class="field">
