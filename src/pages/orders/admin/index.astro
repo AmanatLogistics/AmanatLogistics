@@ -215,7 +215,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                   type="search"
                   value={search}
                   autocomplete="off"
-                  placeholder="Invoice #, tracking #, commodity, plate, AWB"
+                  placeholder="Tracking #, invoice #, commodity, plate, AWB"
                 />
                 <button class="search-clear" type="button" data-clear-search hidden aria-label="Clear search">
                   ×
@@ -267,7 +267,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
             <table>
               <thead>
                 <tr>
-                  <th>Invoice / Tracking</th>
+                  <th>Tracking / Invoice</th>
                   <th>Commodity</th>
                   <th>Cartons / Weight</th>
                   <th>Trucks</th>
@@ -293,10 +293,12 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                       data-step-total={ORDER_STAGE_COUNT}
                       data-customer={order.commodity.toLowerCase()}
                     >
-                      <td data-label="Invoice / Tracking">
+                      {/* The tracking number leads: it is what a customer
+                          quotes, and it matches /tracking/admin. */}
+                      <td data-label="Tracking / Invoice">
                         <span class="cell">
-                          <strong>{order.invoice_number}</strong>
-                          <span class="sub">{order.tracking_number || '— no code —'}</span>
+                          <strong>{order.tracking_number || '— no code —'}</strong>
+                          <span class="sub">{order.invoice_number}</span>
                         </span>
                       </td>
                       <td data-label="Commodity">
