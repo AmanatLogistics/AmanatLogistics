@@ -24,6 +24,7 @@ any number of other columns — they are read past and left alone.
 | `KDR Truck Plate`, `TAS Truck Plate` | the two trucks |
 | `1 …` through `14 …` | the fourteen stage dates |
 | `AWB No`, `Flight No`, `Flight Date` | the air leg |
+| `Estimated Delivery` | **optional** — add it and the expected date appears beside the actual one |
 | `CURRENT STATUS …` | read only, never written |
 
 A stage column is recognised by the number it starts with, so `3  Departed
@@ -33,7 +34,18 @@ Everything else in the workbook — `S.No`, `Customer / Consignee`, the trip IDs
 `Stage No`, `Days in Stage`, `ALERT`, `Remarks`, `DATA CHECK` — is ignored by the
 website and **written back untouched** when a row is saved.
 
-### Nothing to add to the sheet
+### The delivery dates
+
+The **actual** delivery date is stage 14, `14  Delivered to Delhi` — nothing to
+add, it is already there.
+
+There is no **estimated** delivery date in SHIPMENTS. Add a column headed
+`Estimated Delivery` (or `ETA`, or `Expected Delivery`) and it appears in the
+admin next to the actual date, with the difference — "3 days late", "on time",
+"2 days early" — and on the customer's page. Without it, that line simply does
+not show.
+
+### Nothing else to add to the sheet
 
 The website adds no columns and writes nothing into the sheet for its own
 benefit. Tracking numbers are worked out in this script on every read — see

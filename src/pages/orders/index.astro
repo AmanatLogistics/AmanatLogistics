@@ -59,6 +59,8 @@ const detailRows: [string, string][] = order
       ['AWB No', order.awb_no],
       ['Flight No', order.flight_no],
       ['Flight Date', formatDate(order.flight_date)],
+      ['Estimated Delivery', formatDate(order.estimated_delivery)],
+      ['Delivered', formatDate(order.actual_delivery)],
     ] as [string, string][]).filter(([, value]) => value !== '')
   : [];
 
@@ -79,7 +81,7 @@ const asShipment: Shipment | null = order
       shipping_method: '',
       booking_date: order.invoice_date,
       estimated_delivery: '',
-      actual_delivery: order.stage_dates[ORDER_STAGE_COUNT - 1] || null,
+      actual_delivery: order.actual_delivery || null,
       whatsapp_number: null,
       current_step: order.stage,
     }

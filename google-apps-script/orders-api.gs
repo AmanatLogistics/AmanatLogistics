@@ -41,7 +41,7 @@ var SHEET_NAME = 'SHIPMENTS';
  * with every reply and shown in the admin, which turns "why is this not
  * working" into "the script is v1, the site wants v3".
  */
-var SCRIPT_VERSION = 3;
+var SCRIPT_VERSION = 4;
 
 /**
  * Tracking number format: AM-0031-INV-062 for ACCI invoice RN-062.
@@ -160,6 +160,14 @@ var FIELD_ALIASES = {
   tastruckplate: 'tas_plate',
   tasplate: 'tas_plate',
 
+  // Optional. SHIPMENTS has no estimated-delivery column today; add one under
+  // any of these headings and it appears in the admin and for the customer.
+  estimateddelivery: 'estimated_delivery',
+  estimateddeliverydate: 'estimated_delivery',
+  expecteddelivery: 'estimated_delivery',
+  eta: 'estimated_delivery',
+  etadelhi: 'estimated_delivery',
+
   awbno: 'awb_no',
   awb: 'awb_no',
   flightno: 'flight_no',
@@ -187,6 +195,7 @@ var FIELD_ALIASES = {
 var WRITABLE = [
   'invoice_number', 'tracking_number', 'invoice_date', 'commodity', 'cartons',
   'gross_weight', 'kdr_plate', 'tas_plate', 'awb_no', 'flight_no', 'flight_date',
+  'estimated_delivery',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -391,6 +400,13 @@ function rowToOrder_(row, headers, rowNumber) {
     awb_no: read('awb_no'),
     flight_no: read('flight_no'),
     flight_date: readDate('flight_date'),
+    // Only if the sheet carries such a column; '' when it does not.
+    estimated_delivery: readDate('estimated_delivery'),
+    // Stage 14 is the delivery, so the actual date is simply that stage's.
+    actual_delivery: (function () {
+      var last = headers['stage_date_' + STAGE_COUNT];
+      return last === undefined ? '' : toIsoDate_(row[last]);
+    })(),
     current_status: read('current_status'),
     stage_dates: stageDates,
     stage: stageReached_(stageDates),

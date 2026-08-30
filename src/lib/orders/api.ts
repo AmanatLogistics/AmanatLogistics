@@ -30,6 +30,10 @@ export interface SheetOrder {
   awb_no: string;
   flight_no: string;
   flight_date: string;
+  /** Only if the sheet carries an estimated-delivery column; '' otherwise. */
+  estimated_delivery: string;
+  /** Stage 14's date — when it actually reached Delhi. */
+  actual_delivery: string;
   /** The sheet's own status wording, when it has one. */
   current_status: string;
   /** Fourteen entries, 'YYYY-MM-DD' or ''. */
@@ -51,7 +55,7 @@ export interface OrdersResult {
  * deployed, so an older one keeps answering until a new deployment is made —
  * this is what lets the admin say so instead of just looking broken.
  */
-export const REQUIRED_SCRIPT_VERSION = 3;
+export const REQUIRED_SCRIPT_VERSION = 4;
 
 export function apiUrl(): string | undefined {
   return env('SHEETS_API_URL');
@@ -157,6 +161,8 @@ function normalise(raw: any): SheetOrder {
     awb_no: text(raw?.awb_no),
     flight_no: text(raw?.flight_no),
     flight_date: text(raw?.flight_date),
+    estimated_delivery: text(raw?.estimated_delivery),
+    actual_delivery: text(raw?.actual_delivery),
     current_status: text(raw?.current_status),
     stage_dates: stageDates.slice(0, 14),
     stage: Math.min(14, Math.max(0, Number(raw?.stage) || 0)),

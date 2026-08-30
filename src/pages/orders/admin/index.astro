@@ -37,7 +37,7 @@ import {
   stageTitle,
   type Group,
 } from '../../../lib/orders/model';
-import { formatDate } from '../../../lib/tracker/shipments';
+import { daysBetween, formatDate } from '../../../lib/tracker/shipments';
 
 export const prerender = false;
 
@@ -85,6 +85,16 @@ const notice = params.has('saved')
 const actionError = params.get('error') === 'receive'
   ? 'Could not update the sheet. Please try again.'
   : '';
+
+/** "on time" / "4 days late" / "2 days early", when the sheet has an estimate. */
+const deliveryGap = (order: SheetOrder): string => {
+  if (!order.actual_delivery || !order.estimated_delivery) return '';
+  const days = daysBetween(order.estimated_delivery, order.actual_delivery);
+  if (days === null) return '';
+  const unit = (n: number) => (n === 1 ? 'day' : 'days');
+  if (days === 0) return 'on time';
+  return days > 0 ? `${days} ${unit(days)} late` : `${-days} ${unit(-days)} early`;
+};
 
 const cssSafeSearch = search.toLowerCase().replace(/[^a-z0-9 @._-]/g, '').slice(0, 60);
 
@@ -273,6 +283,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                   <th>Trucks</th>
                   <th>Stage</th>
                   <th>Air leg</th>
+                  <th>Delivery</th>
                   <th class="th-actions">Actions</th>
                 </tr>
               </thead>
@@ -351,6 +362,25 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                           </span>
                         </span>
                       </td>
+                      {/* Both dates in one column: nine columns did not fit,
+                          and the estimate only matters next to the actual. The
+                          bold line is when it arrived; underneath is what was
+                          expected and how that compared. */}
+                      <td data-label="Delivery" data-eta-cell data-actual-cell>
+                        <span class="cell">
+                          <span class="date" data-actual-date>
+                            {order.actual_delivery ? formatDate(order.actual_delivery) : '—'}
+                          </span>
+                          <span class="sub">
+                            <span data-due-hint>
+                              {order.estimated_delivery ? `Est. ${formatDate(order.estimated_delivery)}` : ''}
+                            </span>
+                            <span data-actual-gap>
+                              {deliveryGap(order) ? ` · ${deliveryGap(order)}` : ''}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
                       <td class="actions">
                         <div class="actions-inner">
                           <form
@@ -373,7 +403,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                   );
                 })}
                 <tr data-empty hidden={orders.length > 0}>
-                  <td colspan="7" class="empty" data-empty-text>
+                  <td colspan="8" class="empty" data-empty-text>
                     {loadError
                       ? 'Shipments could not be loaded.'
                       : 'No shipments in the sheet yet. Add a row and press Refresh.'}
