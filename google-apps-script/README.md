@@ -160,9 +160,22 @@ ORDERS_ADMIN_PASSWORD=a strong password for /orders/admin
 `TRACKER_ADMIN_PASSWORD`: the three panels have separate cookies, so a session
 for one is never a session for another. Local dev falls back to `orders123`.
 
-**After editing the script**, Apps Script keeps serving the deployed version:
-**Deploy → Manage deployments → edit (pencil) → Version: New version → Deploy**.
-The `/exec` URL stays the same.
+### Updating the script — the step that is easy to miss
+
+**Apps Script serves the version you last DEPLOYED, not the file in the editor**,
+and certainly not the one in this repository. Pasting a new file and saving it
+changes nothing on the live site. Every time `orders-api.gs` changes:
+
+1. Paste the current file over the old one in the Apps Script editor.
+2. **Deploy → Manage deployments → the pencil icon → Version: *New version* →
+   Deploy.**
+
+The `/exec` URL stays the same, so nothing else needs changing.
+
+`SCRIPT_VERSION` at the top of the file exists for exactly this. It is returned
+with every reply, and the orders admin compares it against the version the site
+expects — if the deployed script is older, the page says so in plain words
+instead of just looking broken.
 
 ## Reads and writes
 

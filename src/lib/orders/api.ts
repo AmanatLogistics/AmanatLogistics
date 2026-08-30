@@ -42,7 +42,16 @@ export interface OrdersResult {
   orders: SheetOrder[];
   /** False when the sheet has no Tracking No column to keep codes in. */
   trackingColumn: boolean;
+  /** Which version of orders-api.gs is actually deployed. 0 = too old to say. */
+  version: number;
 }
+
+/**
+ * The script version this site needs. Apps Script serves the version you last
+ * deployed, so an older one keeps answering until a new deployment is made —
+ * this is what lets the admin say so instead of just looking broken.
+ */
+export const REQUIRED_SCRIPT_VERSION = 3;
 
 export function apiUrl(): string | undefined {
   return env('SHEETS_API_URL');
@@ -82,6 +91,7 @@ export async function listOrders(): Promise<OrdersResult> {
   return {
     orders: Array.isArray(data.orders) ? data.orders.map(normalise) : [],
     trackingColumn: data.trackingColumn !== false,
+    version: Number(data.version) || 0,
   };
 }
 

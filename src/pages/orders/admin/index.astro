@@ -14,7 +14,13 @@ import TrackerAdminLayout from '../../../layouts/TrackerAdminLayout.astro';
 import TrackerAdminLogin from '../../../layouts/TrackerAdminLogin.astro';
 import { SITE } from '../../../consts';
 import { isOrdersAdmin, ordersPassword } from '../../../lib/orders/auth';
-import { isConfigured, listOrders, SHEETS_NOT_CONFIGURED, type SheetOrder } from '../../../lib/orders/api';
+import {
+  isConfigured,
+  listOrders,
+  REQUIRED_SCRIPT_VERSION,
+  SHEETS_NOT_CONFIGURED,
+  type SheetOrder,
+} from '../../../lib/orders/api';
 import {
   asGroup,
   countByGroup,
@@ -51,6 +57,7 @@ const status = asGroup(params.get('status') ?? '');
 const search = (params.get('q') ?? '').trim();
 
 let orders: SheetOrder[] = [];
+let scriptVersion = REQUIRED_SCRIPT_VERSION;
 let loadError = '';
 
 if (authed) {
@@ -58,7 +65,9 @@ if (authed) {
     loadError = SHEETS_NOT_CONFIGURED;
   } else {
     try {
-      orders = (await listOrders()).orders;
+      const result = await listOrders();
+      orders = result.orders;
+      scriptVersion = result.version;
     } catch (e) {
       console.error('SHIPMENTS sheet failed to load:', e);
       loadError = 'Could not read the Google Sheet. Check that the Apps Script web app is deployed and the token matches.';
@@ -158,6 +167,21 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
         </div>
         {actionError && <div class="alert alert-err">{actionError}</div>}
         {loadError && <div class="alert alert-err">{loadError}</div>}
+
+        {/* Apps Script serves the version last DEPLOYED, so an old one keeps
+            answering until a new deployment is made. Saying so beats looking
+            broken. */}
+        {!loadError && scriptVersion < REQUIRED_SCRIPT_VERSION && (
+          <div class="alert alert-err">
+            <strong>The Apps Script in your sheet is out of date</strong> — it is version{' '}
+            {scriptVersion || 'older than 3'}, this site needs {REQUIRED_SCRIPT_VERSION}. Tracking
+            numbers and other fixes will not appear until you update it. In the sheet: <em>
+            Extensions → Apps Script</em>, replace the file with the current{' '}
+            <code>google-apps-script/orders-api.gs</code>, then <em>Deploy → Manage deployments →
+            the pencil → Version: New version → Deploy</em>. Saving the file is not enough — it has
+            to be deployed.
+          </div>
+        )}
         <div class="stat-grid stat-grid-wide">
           {tiles.map((tile) => (
             <a

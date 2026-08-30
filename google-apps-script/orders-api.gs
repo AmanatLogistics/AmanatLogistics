@@ -33,6 +33,17 @@
 var SHEET_NAME = 'SHIPMENTS';
 
 /**
+ * Bump this whenever this file changes in a way the website depends on.
+ *
+ * Apps Script runs the version you DEPLOYED, not the file in the editor and
+ * certainly not the one in the repository — so a fix can sit in git for days
+ * while the sheet still answers with old behaviour. The number is returned
+ * with every reply and shown in the admin, which turns "why is this not
+ * working" into "the script is v1, the site wants v3".
+ */
+var SCRIPT_VERSION = 3;
+
+/**
  * Tracking number format: AM-0031-INV-062 for ACCI invoice RN-062.
  * The parser that reads existing codes back is built from these, so a change
  * here cannot leave the reader behind.
@@ -599,14 +610,15 @@ function doGet(e) {
       for (var i = 0; i < data.orders.length; i++) {
         if (matches_(data.orders[i], p.code || '')) { found = data.orders[i]; break; }
       }
-      return json_({ ok: true, order: found, stages: STAGES });
+      return json_({ ok: true, version: SCRIPT_VERSION, order: found, stages: STAGES });
     }
     return json_({
       ok: true,
+      version: SCRIPT_VERSION,
       orders: data.orders,
       stages: STAGES,
-      // Lets the website warn instead of silently handing out codes that the
-      // sheet has nowhere to keep.
+      // Only tells the admin whether a code can be edited by hand; codes
+      // themselves never depend on this column.
       trackingColumn: data.headers.tracking_number !== undefined,
     });
   } catch (err) {
@@ -643,7 +655,7 @@ function doPost(e) {
 // Lets Node load the pure helpers for testing; ignored by Apps Script.
 if (typeof module !== 'undefined') {
   module.exports = {
-    STAGES: STAGES, STAGE_COUNT: STAGE_COUNT,
+    SCRIPT_VERSION: SCRIPT_VERSION, STAGES: STAGES, STAGE_COUNT: STAGE_COUNT,
     normaliseHeader_: normaliseHeader_, isBlank_: isBlank_, mapHeaders_: mapHeaders_,
     toIsoDate_: toIsoDate_, toNumberText_: toNumberText_, padNumber_: padNumber_,
     invoicePart_: invoicePart_, buildTrackingNumber_: buildTrackingNumber_,
