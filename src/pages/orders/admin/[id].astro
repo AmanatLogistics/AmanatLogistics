@@ -25,11 +25,12 @@ const authed = await isOrdersAdmin(Astro.request);
 const id = decodeURIComponent(Astro.params.id ?? '');
 
 let order: SheetOrder | null = null;
+let trackingColumn = true;
 let error: string | null = null;
 
 /** Plain text columns the form offers. */
 const TEXT_FIELDS = [
-  'invoice_number', 'commodity', 'cartons', 'gross_weight',
+  'invoice_number', 'tracking_number', 'commodity', 'cartons', 'gross_weight',
   'kdr_plate', 'tas_plate', 'awb_no', 'flight_no',
 ] as const;
 /** Date columns, kept to what <input type="date"> produces. */
@@ -44,7 +45,9 @@ if (authed) {
     return Astro.redirect('/orders/admin', 303);
   } else {
     try {
-      order = await findOrderById(id);
+      const found = await findOrderById(id);
+      order = found.order;
+      trackingColumn = found.trackingColumn;
     } catch (e) {
       console.error('Loading shipment failed:', e);
       error = 'Could not read the Google Sheet. Please try again.';
@@ -65,6 +68,8 @@ if (authed) {
 
         if (!fields.invoice_number) {
           error = 'An ACCI invoice number is required — it is what the tracking number is built from.';
+        } else if (fields.tracking_number && !/^[A-Za-z0-9][A-Za-z0-9 \-\/]*$/.test(fields.tracking_number)) {
+          error = 'A tracking number can contain letters, digits, spaces, hyphens and slashes.';
         } else {
           try {
             await updateOrder(id, fields);
@@ -126,10 +131,11 @@ if (authed) {
               </div>
               <div class="field">
                 <label for="tracking_number">Tracking number</label>
-                <input id="tracking_number" value={order.tracking_number} readonly />
+                <input id="tracking_number" name="tracking_number" value={order.tracking_number} />
                 <span class="hint">
-                  Built by the Apps Script as AM-&lt;sequence&gt;-INV-&lt;invoice number&gt;, and fixed
-                  once issued.
+                  {trackingColumn
+                    ? 'Issued automatically as AM-<sequence>-INV-<invoice number>. Change it here if you need to — what you type is kept, and customers can look the shipment up by it.'
+                    : 'The sheet has no “Tracking No” column, so an edit here cannot be saved. Add that column to SHIPMENTS first.'}
                 </span>
               </div>
               <div class="field">

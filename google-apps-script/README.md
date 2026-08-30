@@ -66,8 +66,7 @@ The seven groups the dashboard filters by are the workbook's own colour key:
 
 ## Tracking numbers
 
-The format is **`AM-0031-INV-062`** — both halves come from the sheet, nothing
-is typed into the code by hand:
+The format is **`AM-0031-INV-062`** for ACCI invoice `RN-062`:
 
 ```
   AM  -  0031  -  INV  -  062
@@ -75,29 +74,50 @@ is typed into the code by hand:
 prefix  sequence      the invoice's number
 ```
 
-- **The sequence** is a four-digit running number, one higher than the highest
-  already in the sheet. `AM-0031-…` is followed by `AM-0032-…`.
-- **The invoice part** is the number out of the ACCI invoice: `RN-062` gives
-  `062`, `RM-055` gives `055`. The series prefix is not repeated.
+- **The sequence** is a four-digit running number.
+- **The invoice part** is the number out of the ACCI invoice: `RM-055` gives
+  `055`, `PH-028` gives `028`, `INV-020` gives `020`. The series prefix is not
+  repeated.
 
-| ACCI invoice | Code issued |
-| --- | --- |
-| `RM-055` | `AM-0001-INV-055` |
-| `PN-025` | `AM-0009-INV-025` |
-| `RN-062` | `AM-0031-INV-062` |
+### Where a code comes from
 
-A code is issued **once** and written straight back to `Tracking No`, so it is
-fixed from then on and later reads simply use what is there. That is what keeps
-codes stable when rows are sorted, filtered or deleted — nothing is ever
-recomputed from a row's position. A code you type in yourself is kept, and one
-that is not in the `AM-…-INV-…` shape does not move the counter, so an office
-that has already numbered some rows carries on from where it left off.
+Three sources, in order of authority:
 
-**Note on repeated invoice numbers.** SHIPMENTS currently has some invoice
-numbers on more than one row (`FF-003`, `MS-020`, `PH-032`). Each row still gets
-its own unique code, because each takes its own sequence. But a customer
-searching by *invoice* number is shown the first matching row — if those are
-genuinely separate shipments, give the customer the tracking number instead.
+1. **The sheet.** A code already in the `Tracking No` column — including one an
+   admin edited by hand — is always kept.
+2. **The register.** `ISSUED_CODES` near the top of `orders-api.gs` holds the
+   numbers the office issued before the website existed, `AM-0010` to `AM-0031`.
+   Customers may already be holding these, so an invoice listed there always
+   gets exactly the code it was given.
+3. **A new sequence**, built by the same rule, carrying on past everything in
+   1 and 2 — so the next new shipment is `AM-0032-INV-…`.
+
+The register is a record of numbers already handed out, not a substitute for the
+rule: every entry in it is exactly what the code would build for that invoice
+and sequence, and there is a test that proves it. New numbers are never listed
+there — they are built.
+
+Where the same invoice sits on more than one row (this sheet has a few), the
+first row keeps the issued code and the rest are given new ones, so no two
+shipments ever share a number.
+
+### It works before the sheet has a Tracking No column
+
+With no `Tracking No` column, codes are still worked out on every read, and
+everything — the admin list, customer lookup by code, the timeline — works
+normally. What you lose is permanence: they are recomputed each time, so
+inserting a row above an unnumbered one can shift the numbers below it, and a
+code cannot be edited by hand.
+
+**Adding the column fixes both.** The script fills it in once, and from then on
+those codes are simply read, never regenerated.
+
+### Editing a code
+
+With the column present, the tracking number is an ordinary editable field on
+the admin's edit form. Whatever you type is kept and is what customers look the
+shipment up by. Clear it and the automatic rule takes over again on the next
+read.
 
 ## Deploying
 

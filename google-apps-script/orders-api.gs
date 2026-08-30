@@ -43,6 +43,53 @@ var SEQUENCE_PAD = 4;
 var SEQUENCE_START = 1;
 
 /**
+ * Codes the office has ALREADY issued, before the website existed.
+ *
+ * These are real numbers customers may already be holding, so they are not
+ * regenerated — an invoice listed here always gets exactly the code it was
+ * given. Everything else carries on from the highest sequence here (0031), so
+ * the next new shipment is AM-0032-INV-….
+ *
+ * This is a register of issued numbers, not a substitute for the rule: the
+ * codes below all follow the same AM-<sequence>-INV-<invoice number> shape,
+ * and new ones are built by buildTrackingNumber_() rather than listed.
+ *
+ * Once the sheet has a Tracking No column, its value wins over this list — so
+ * a number corrected in the sheet stays corrected, and this list can be left
+ * as the historical record.
+ */
+var ISSUED_CODES = {
+  'RN-062': 'AM-0031-INV-062',
+  'PH-028': 'AM-0030-INV-028',
+  'PH-029': 'AM-0029-INV-029',
+  'PH-030': 'AM-0028-INV-030',
+  'PH-031': 'AM-0027-INV-031',
+  'PH-033': 'AM-0026-INV-033',
+  'PH-034': 'AM-0025-INV-034',
+  'PH-032': 'AM-0024-INV-032',
+  'MS-024': 'AM-0023-INV-024',
+  'MS-023': 'AM-0022-INV-023',
+  'FF-004': 'AM-0021-INV-004',
+  'RM-066': 'AM-0020-INV-066',
+  'SR-011': 'AM-0019-INV-011',
+  'SR-010': 'AM-0018-INV-010',
+  'RS-009': 'AM-0017-INV-009',
+  'MS-020': 'AM-0016-INV-020',
+  'MS-022': 'AM-0015-INV-022',
+  'MS-021': 'AM-0014-INV-021',
+  'MS-018': 'AM-0013-INV-018',
+  'MS-019': 'AM-0012-INV-019',
+  'INV-020': 'AM-0011-INV-020',
+  'INV-021': 'AM-0010-INV-021',
+};
+
+/** The code this invoice was already issued, or '' if it is a new one. */
+function issuedCode_(invoice) {
+  var key = String(invoice == null ? '' : invoice).trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(ISSUED_CODES, key) ? ISSUED_CODES[key] : '';
+}
+
+/**
  * The fourteen stages, named as the sheet names them. Stage 0 is "booked" —
  * the shipment exists from the moment the ACCI invoice is created.
  */
@@ -115,8 +162,8 @@ var FIELD_ALIASES = {
 
 /** What the admin form may write back. */
 var WRITABLE = [
-  'invoice_number', 'invoice_date', 'commodity', 'cartons', 'gross_weight',
-  'kdr_plate', 'tas_plate', 'awb_no', 'flight_no', 'flight_date',
+  'invoice_number', 'tracking_number', 'invoice_date', 'commodity', 'cartons',
+  'gross_weight', 'kdr_plate', 'tas_plate', 'awb_no', 'flight_no', 'flight_date',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -247,12 +294,22 @@ function trackingSequence_(code) {
   return found ? parseInt(found[1], 10) || 0 : 0;
 }
 
-/** One past the highest sequence in the sheet. */
+/**
+ * One past the highest sequence anywhere — in the sheet OR in the register of
+ * codes already issued. Counting only the sheet would hand a new shipment a
+ * number a customer is already holding.
+ */
 function nextSequence_(orders) {
   var highest = SEQUENCE_START - 1;
-  for (var i = 0; i < orders.length; i++) {
+  var i;
+  for (i = 0; i < orders.length; i++) {
     var n = trackingSequence_(orders[i].tracking_number);
     if (n > highest) highest = n;
+  }
+  for (var invoice in ISSUED_CODES) {
+    if (!Object.prototype.hasOwnProperty.call(ISSUED_CODES, invoice)) continue;
+    var m = trackingSequence_(ISSUED_CODES[invoice]);
+    if (m > highest) highest = m;
   }
   return highest + 1;
 }
@@ -345,6 +402,50 @@ function findHeaderRow_(values) {
 }
 
 /**
+ * Give every row without a code one, in place. Marks each row it touched with
+ * `assigned` so the caller knows which cells to write back.
+ *
+ * Three sources, in order of authority:
+ *
+ *   1. the sheet          a code already in the Tracking No column, including
+ *                         one an admin has edited by hand — always kept
+ *   2. the register       ISSUED_CODES, for invoices the office numbered
+ *                         before the website existed
+ *   3. a new sequence     built from the invoice number, carrying on past
+ *                         every code in either of the two above
+ *
+ * A register entry is used once. Where the same invoice appears on several
+ * rows — this sheet has a few — the first row keeps the issued code and the
+ * rest are given new ones, so no two shipments share a number.
+ */
+function assignCodes_(orders, taken) {
+  var i;
+  for (i = 0; i < orders.length; i++) {
+    if (orders[i].tracking_number) continue;
+    var issued = issuedCode_(orders[i].invoice_number);
+    if (issued && !taken[issued]) {
+      taken[issued] = true;
+      orders[i].tracking_number = issued;
+      orders[i].assigned = true;
+    }
+  }
+
+  var sequence = nextSequence_(orders);
+  for (i = 0; i < orders.length; i++) {
+    if (orders[i].tracking_number) continue;
+    var code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
+    while (taken[code]) {
+      sequence++;
+      code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
+    }
+    taken[code] = true;
+    sequence++;
+    orders[i].tracking_number = code;
+    orders[i].assigned = true;
+  }
+}
+
+/**
  * The sheet, read once. Rows without a tracking number are given one and the
  * codes are written back in a single setValues call, not one per row.
  */
@@ -371,24 +472,17 @@ function readOrders_() {
   }
 
   if (headers.tracking_number === undefined) {
-    // Without the column there is nowhere to keep a code, so the sheet is
-    // served as-is rather than handing out numbers that would not survive.
+    // No column to keep codes in, but the website still needs them, so they
+    // are worked out in memory and simply not written back. Adding the column
+    // later makes them permanent; until then they are recomputed each read.
+    assignCodes_(orders, taken);
     return { orders: orders, headers: headers, sheet: sh, headerRow: found.index + 1 };
   }
 
+  assignCodes_(orders, taken);
   var missing = [];
-  var sequence = nextSequence_(orders);
   for (i = 0; i < orders.length; i++) {
-    if (orders[i].tracking_number) continue;
-    var code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
-    while (taken[code]) {
-      sequence++;
-      code = buildTrackingNumber_(orders[i].invoice_number, sequence, orders[i].row);
-    }
-    taken[code] = true;
-    sequence++;
-    orders[i].tracking_number = code;
-    missing.push(orders[i]);
+    if (orders[i].assigned) missing.push(orders[i]);
   }
 
   if (missing.length) {
@@ -518,6 +612,7 @@ if (typeof module !== 'undefined') {
     invoicePart_: invoicePart_, buildTrackingNumber_: buildTrackingNumber_,
     trackingSequence_: trackingSequence_, nextSequence_: nextSequence_,
     stageReached_: stageReached_, rowToOrder_: rowToOrder_, matches_: matches_,
-    findHeaderRow_: findHeaderRow_,
+    findHeaderRow_: findHeaderRow_, ISSUED_CODES: ISSUED_CODES, issuedCode_: issuedCode_,
+    assignCodes_: assignCodes_,
   };
 }

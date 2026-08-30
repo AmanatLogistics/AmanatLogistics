@@ -93,12 +93,19 @@ export async function findOrder(code: string): Promise<SheetOrder | null> {
   return data.order ? normalise(data.order) : null;
 }
 
-/** One shipment by its sheet row, for the edit form. */
-export async function findOrderById(id: string): Promise<SheetOrder | null> {
+/**
+ * One shipment by its sheet row, for the edit form. Carries the tracking-column
+ * flag with it so the form can say whether an edited code can be saved.
+ */
+export async function findOrderById(
+  id: string,
+): Promise<{ order: SheetOrder | null; trackingColumn: boolean }> {
   const wanted = id.trim();
-  if (!wanted) return null;
-  const { orders } = await listOrders();
-  return orders.find((o) => o.order_id === wanted) ?? null;
+  const { orders, trackingColumn } = await listOrders();
+  return {
+    order: wanted ? (orders.find((o) => o.order_id === wanted) ?? null) : null,
+    trackingColumn,
+  };
 }
 
 export async function updateOrder(id: string, fields: Record<string, string>): Promise<void> {

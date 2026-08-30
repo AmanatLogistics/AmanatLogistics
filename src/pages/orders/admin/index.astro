@@ -163,8 +163,10 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
         {loadError && <div class="alert alert-err">{loadError}</div>}
         {!loadError && !trackingColumn && orders.length > 0 && (
           <div class="alert alert-err">
-            The sheet has no <code>Tracking No</code> column, so tracking numbers cannot be saved.
-            Add one to SHIPMENTS and press Refresh — the script will fill it in.
+            The sheet has no <code>Tracking No</code> column. Numbers below are worked out on
+            every read and work everywhere, but they cannot be saved and cannot be edited by hand.
+            Add a <code>Tracking No</code> column to SHIPMENTS and press Refresh — the script will
+            fill it in once, and from then on they are fixed.
           </div>
         )}
 
