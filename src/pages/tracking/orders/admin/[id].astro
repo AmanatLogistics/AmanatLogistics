@@ -1,0 +1,178 @@
+---
+/**
+ * Edit one shipment — writes straight back to the SHIPMENTS sheet.
+ *
+ * Only the columns the website tracks are offered. Everything else in the
+ * workbook (S.No, trip IDs, the formula columns, Remarks) is left untouched:
+ * the Apps Script writes the row back with those cells exactly as it read them.
+ *
+ * The page answers in three shapes, from one set of rules:
+ *
+ *   • a full page      — the plain path, and what you get with JavaScript off;
+ *   • ?partial=1       — the form on its own, for the drawer the list opens;
+ *   • Accept: json     — {ok:true} or {error} for a save made by fetch.
+ *
+ * So the list page can open, save and close an edit without ever reloading,
+ * while the same URL still works as an ordinary page.
+ */
+import TrackerAdminLayout from '../../../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../../../layouts/TrackerAdminLogin.astro';
+import OrderForm from '../../../../components/orders/OrderForm.astro';
+import { isOrdersAdmin } from '../../../../lib/orders/auth';
+import { isSameOrigin } from '../../../../lib/session';
+import {
+  findOrderById,
+  isConfigured,
+  SHEETS_NOT_CONFIGURED,
+  updateOrder,
+  type SheetOrder,
+} from '../../../../lib/orders/api';
+import { ORDER_STAGE_COUNT } from '../../../../lib/orders/model';
+
+export const prerender = false;
+
+const id = decodeURIComponent(Astro.params.id ?? '');
+const partial = Astro.url.searchParams.get('partial') === '1';
+const wantsJson = (Astro.request.headers.get('accept') ?? '').includes('application/json');
+
+/** Plain text columns the form offers. */
+const TEXT_FIELDS = [
+  'invoice_number', 'tracking_number', 'commodity', 'cartons', 'gross_weight',
+  'kdr_plate', 'tas_plate', 'awb_no', 'flight_no',
+] as const;
+/** Date columns, kept to what <input type="date"> produces. */
+const DATE_FIELDS = ['invoice_date', 'flight_date'] as const;
+
+const asDate = (value: string) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '');
+
+const json = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+/** A fragment the drawer can show in place of the form. */
+const fragment = (message: string, status = 200) =>
+  new Response(`<div class="alert alert-err" data-form-error>${message}</div>`, {
+    status,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+
+const authed = await isOrdersAdmin(Astro.request);
+
+let order: SheetOrder | null = null;
+let trackingColumn = true;
+let error: string | null = null;
+
+if (!authed) {
+  const expired = 'Your session has expired. Please log in again.';
+  if (wantsJson) return json({ error: expired }, 401);
+  if (partial) return fragment(expired, 401);
+  // falls through to the login screen below
+} else if (!isConfigured()) {
+  error = SHEETS_NOT_CONFIGURED;
+  if (wantsJson) return json({ error }, 503);
+  if (partial) return fragment(error, 503);
+} else if (!id) {
+  if (wantsJson) return json({ error: 'Unknown shipment.' }, 400);
+  if (partial) return fragment('Unknown shipment.', 400);
+  return Astro.redirect('/tracking/orders/admin', 303);
+} else {
+  try {
+    const found = await findOrderById(id);
+    order = found.order;
+    trackingColumn = found.trackingColumn;
+  } catch (e) {
+    console.error('Loading shipment failed:', e);
+    error = 'Could not read the Google Sheet. Please try again.';
+  }
+
+  if (!order) {
+    const message = error ?? 'That shipment is no longer in the sheet.';
+    if (wantsJson) return json({ error: message }, error ? 502 : 404);
+    if (partial) return fragment(message, error ? 502 : 404);
+    if (!error) return Astro.redirect('/tracking/orders/admin', 303);
+  }
+
+  if (order && Astro.request.method === 'POST') {
+    if (!isSameOrigin(Astro.request)) {
+      error = 'That request looked unsafe, so it was blocked. Please try again.';
+    } else {
+      const form = await Astro.request.formData();
+      const fields: Record<string, string> = {};
+      for (const field of TEXT_FIELDS) fields[field] = String(form.get(field) ?? '').trim();
+      for (const field of DATE_FIELDS) fields[field] = asDate(String(form.get(field) ?? '').trim());
+      for (let n = 1; n <= ORDER_STAGE_COUNT; n++) {
+        fields[`stage_date_${n}`] = asDate(String(form.get(`stage_date_${n}`) ?? '').trim());
+      }
+
+      if (!fields.invoice_number) {
+        error = 'An ACCI invoice number is required — it is what the tracking number is built from.';
+      } else if (
+        fields.tracking_number &&
+        !/^[A-Za-z0-9][A-Za-z0-9 \-\/]*$/.test(fields.tracking_number)
+      ) {
+        error = 'A tracking number can contain letters, digits, spaces, hyphens and slashes.';
+      } else {
+        try {
+          await updateOrder(id, fields);
+          if (wantsJson) return json({ ok: true, id });
+          return Astro.redirect('/tracking/orders/admin?saved=1', 303);
+        } catch (e) {
+          console.error('Saving shipment failed:', e);
+          error = 'Could not write to the Google Sheet. Please try again.';
+        }
+      }
+
+      // Keep what was typed so an error never empties the form.
+      order = {
+        ...order,
+        ...fields,
+        stage_dates: Array.from(
+          { length: ORDER_STAGE_COUNT },
+          (_, i) => fields[`stage_date_${i + 1}`],
+        ),
+      } as SheetOrder;
+    }
+
+    // The drawer keeps the values the user typed, so a failed save only needs
+    // the reason; it never re-renders the form underneath them.
+    if (error && wantsJson) return json({ error }, 422);
+  }
+}
+---
+
+{
+  partial && order ? (
+    <OrderForm order={order} trackingColumn={trackingColumn} error={error} partial />
+  ) : !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Session expired</h1>
+        <p class="lede">Please log in again to edit this shipment.</p>
+        <a
+          class="btn btn-primary"
+          href="/tracking/orders/admin"
+          style="width:100%;justify-content:center;"
+        >
+          Go to login
+        </a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout title="Edit shipment">
+      <div class="page-head">
+        <h1>{order ? `Edit — ${order.invoice_number}` : 'Edit shipment'}</h1>
+        <a class="btn btn-soft" href="/tracking/orders/admin">← Back to shipments</a>
+      </div>
+
+      <div class="card">
+        {!order ? (
+          <div class="alert alert-err">{error ?? 'Shipment not found.'}</div>
+        ) : (
+          <OrderForm order={order} trackingColumn={trackingColumn} error={error} />
+        )}
+      </div>
+    </TrackerAdminLayout>
+  )
+}

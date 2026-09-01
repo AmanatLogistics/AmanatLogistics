@@ -799,11 +799,162 @@ td.is-late {
 tr.just-received td {
   animation: just-received 1.2s ease-out;
 }
+/* ---------------- the loading bar ----------------
+   A thin line across the very top of the window while the page is talking to
+   Google Sheets. The sheet can take a second or two, and nothing else on the
+   page moves while it does, so without this a Refresh or a Save looks like a
+   click that did nothing.
+
+   It crawls to 80% on a long easing curve — it can never reach the end on its
+   own — and is only sent to 100% when the request actually finishes. */
+.load-bar {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 90;
+  height: 3px;
+  width: 0;
+  opacity: 0;
+  background: linear-gradient(90deg, var(--gold), var(--burg));
+  /* No transition in the resting state, so returning to zero is instant
+     rather than an animation running backwards. */
+  transition: none;
+  pointer-events: none;
+}
+.load-bar.is-on {
+  width: 80%;
+  opacity: 1;
+  transition: width 8s cubic-bezier(0, 0.75, 0.25, 1);
+}
+.load-bar.is-done {
+  width: 100%;
+  opacity: 0;
+  transition:
+    width 0.2s ease,
+    opacity 0.3s ease 0.15s;
+}
+
+/* The shipment form keeps its error line in the markup at all times so the
+   script has somewhere to write, which means the first heading is no longer
+   the form's first div and `.section-title:first-of-type` above stops matching
+   it. Give it back the flush top it should have while there is no error. */
+[data-order-form] > [data-form-error][hidden] + .section-title {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ---------------- the edit drawer ----------------
+   Edit opens the shipment here instead of navigating away, so the list keeps
+   its search, filter, sort and scroll position. The form inside is fetched
+   from the edit route itself. */
+.drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(44, 24, 32, 0.42);
+  animation: drawer-fade 0.18s ease-out;
+}
+.drawer-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  background: var(--cream);
+  box-shadow: -18px 0 46px rgba(44, 24, 32, 0.22);
+  animation: drawer-in 0.22s cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex: none;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.drawer-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.drawer-x {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+.drawer-x:hover {
+  border-color: var(--burg);
+  color: var(--burg);
+}
+/* The only scrolling region, so the heading and the close button stay put
+   however long the fourteen stages make the form. */
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px;
+}
+.drawer-loading {
+  margin: 0;
+  padding: 40px 0;
+  text-align: center;
+  color: var(--muted);
+}
+/* The page behind must not scroll while the drawer is over it. */
+body.has-drawer {
+  overflow: hidden;
+}
+
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 760px) {
+  .drawer-panel {
+    width: 100%;
+  }
+  .drawer-body {
+    padding: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stat,
   .progress i,
   tr.just-received td {
     transition: none;
+    animation: none;
+  }
+  .load-bar,
+  .load-bar.is-on,
+  .load-bar.is-done {
+    transition: none;
+  }
+  .drawer-backdrop,
+  .drawer-panel {
     animation: none;
   }
 }

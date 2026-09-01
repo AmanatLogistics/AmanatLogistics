@@ -8,7 +8,7 @@ const back = (query: string, cookie?: string) =>
   new Response(null, {
     status: 303, // 303 so the browser follows with GET after the POST
     headers: {
-      Location: `/orders/admin${query}`,
+      Location: `/tracking/orders/admin${query}`,
       ...(cookie ? { 'Set-Cookie': cookie } : {}),
     },
   });

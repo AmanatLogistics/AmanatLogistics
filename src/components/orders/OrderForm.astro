@@ -1,0 +1,155 @@
+---
+/**
+ * The edit form for one row of the SHIPMENTS sheet.
+ *
+ * Lives in its own component because it is rendered two ways: inside the admin
+ * layout at /tracking/orders/admin/<id> (the plain, no-JavaScript path), and on
+ * its own as a fragment for the drawer the list page opens (?partial=1). One
+ * copy of the markup, so the two can never drift.
+ */
+import { ORDER_STAGES, stageTitle } from '../../lib/orders/model';
+import type { SheetOrder } from '../../lib/orders/api';
+
+interface Props {
+  order: SheetOrder;
+  /** False when the sheet has no Tracking No column to save a code into. */
+  trackingColumn: boolean;
+  error?: string | null;
+  /** The drawer wants the buttons to say "Close", not navigate away. */
+  partial?: boolean;
+}
+const { order, trackingColumn, error = null, partial = false } = Astro.props;
+
+const backHref = '/tracking/orders/admin';
+---
+
+<form
+  method="post"
+  action={`/tracking/orders/admin/${encodeURIComponent(order.order_id)}`}
+  data-order-form
+  data-id={order.order_id}
+>
+  <div class="alert alert-err" data-form-error hidden={!error}>{error}</div>
+
+  <div class="section-title">
+    Shipment details
+    <span class="note">
+      Saved to row {order.row} of the SHIPMENTS sheet. Columns this page does not show — trip IDs,
+      the status formulas, remarks — are written back untouched.
+    </span>
+  </div>
+
+  <div class="form-grid">
+    <div class="field">
+      <label for="invoice_number">ACCI invoice no *</label>
+      <input id="invoice_number" name="invoice_number" value={order.invoice_number} required />
+    </div>
+    <div class="field">
+      <label for="tracking_number">Tracking number</label>
+      <input
+        id="tracking_number"
+        name={trackingColumn ? 'tracking_number' : undefined}
+        value={order.tracking_number}
+        readonly={!trackingColumn}
+      />
+      <span class="hint">
+        {
+          trackingColumn
+            ? 'Issued by the tracker as AM-<sequence>-INV-<invoice number>. Change it here if you need to — what you type is kept, and customers can look the shipment up by it. Clear it to hand the number back to the tracker.'
+            : 'Issued by the tracker as AM-<sequence>-INV-<invoice number> and held in the backend, so the sheet carries no tracking column. To pin or correct one, ask for it to be set in the tracker’s register.'
+        }
+      </span>
+    </div>
+    <div class="field">
+      <label for="invoice_date">ACCI invoice date (booked)</label>
+      <input id="invoice_date" name="invoice_date" type="date" value={order.invoice_date} />
+    </div>
+    <div class="field">
+      <label for="commodity">Commodity</label>
+      <input id="commodity" name="commodity" value={order.commodity} />
+    </div>
+    <div class="field">
+      <label for="cartons">Cartons / pkgs</label>
+      <input id="cartons" name="cartons" value={order.cartons} inputmode="numeric" />
+    </div>
+    <div class="field">
+      <label for="gross_weight">Gross weight (kg)</label>
+      <input id="gross_weight" name="gross_weight" value={order.gross_weight} inputmode="decimal" />
+    </div>
+    <div class="field">
+      <label for="kdr_plate">KDR truck plate</label>
+      <input id="kdr_plate" name="kdr_plate" value={order.kdr_plate} />
+    </div>
+    <div class="field">
+      <label for="tas_plate">TAS truck plate</label>
+      <input id="tas_plate" name="tas_plate" value={order.tas_plate} />
+    </div>
+    <div class="field">
+      <label for="awb_no">AWB no</label>
+      <input id="awb_no" name="awb_no" value={order.awb_no} />
+    </div>
+    <div class="field">
+      <label for="flight_no">Flight no</label>
+      <input id="flight_no" name="flight_no" value={order.flight_no} />
+    </div>
+    <div class="field">
+      <label for="flight_date">Flight date</label>
+      <input id="flight_date" name="flight_date" type="date" value={order.flight_date} />
+    </div>
+    <div class="field">
+      <label for="current_stage">Current stage</label>
+      <input
+        id="current_stage"
+        value={order.stage >= 1 ? `${order.stage}. ${stageTitle(order)}` : stageTitle(order)}
+        readonly
+      />
+      <span class="hint">
+        Worked out from the dates below — the highest stage with a date. Fill a date in to move the
+        shipment on.
+      </span>
+    </div>
+  </div>
+
+  <div class="section-title">
+    The fourteen stages
+    <span class="note">
+      Kandahar → Hairatan → Termez → Tashkent → Delhi. Leave a stage blank and the customer sees it
+      as “Pending”. Route KDR skips stage 7; route HRTN skips stages 1 and 2 — leaving those blank
+      is correct, not missing data.
+    </span>
+  </div>
+
+  <div class="steps-grid">
+    {
+      ORDER_STAGES.map((stage, i) => (
+        <div class="step-card">
+          <h4>Stage {stage.n}</h4>
+          <div class="field">
+            <label for={`stage_date_${stage.n}`}>{stage.title}</label>
+            <input
+              id={`stage_date_${stage.n}`}
+              name={`stage_date_${stage.n}`}
+              type="date"
+              value={order.stage_dates[i] ?? ''}
+            />
+          </div>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">Save to sheet</button>
+    {
+      partial ? (
+        <button class="btn btn-soft" type="button" data-drawer-close>
+          Cancel
+        </button>
+      ) : (
+        <a class="btn btn-soft" href={backHref}>
+          Cancel
+        </a>
+      )
+    }
+  </div>
+</form>

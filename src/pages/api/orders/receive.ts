@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request }) => {
     }
     return new Response(null, {
       status: 303,
-      headers: { Location: `/orders/admin?error=${status === 403 ? 'origin' : 'receive'}` },
+      headers: { Location: `/tracking/orders/admin?error=${status === 403 ? 'origin' : 'receive'}` },
     });
   };
 
@@ -68,5 +68,5 @@ export const POST: APIRoute = async ({ request }) => {
     );
   }
 
-  return new Response(null, { status: 303, headers: { Location: '/orders/admin?delivered=1' } });
+  return new Response(null, { status: 303, headers: { Location: '/tracking/orders/admin?delivered=1' } });
 };

@@ -3,6 +3,7 @@ Allow: /
 Disallow: /admin
 Disallow: /tracking/admin
 Disallow: /orders
+Disallow: /tracking/orders
 Disallow: /api/
 
 Sitemap: https://amanatlogistics.com/sitemap.xml
