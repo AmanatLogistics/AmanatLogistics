@@ -34,7 +34,7 @@ const { title } = Astro.props;
         <small>Shipment Tracker Admin</small>
       </a>
       <div class="actions">
-        <a class="view" href="/tracking" target="_blank" rel="noopener">View tracking page</a>
+        <a class="view" href="/tracking/shipment" target="_blank" rel="noopener">View tracking page</a>
         <!-- POST, so a logout can't be triggered by a stray link or prefetch. -->
         <form method="post" action="/api/tracker/logout">
           <button class="logout" type="submit">Log out</button>
