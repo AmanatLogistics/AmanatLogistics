@@ -87,20 +87,42 @@ const valueCards = values.map((v, i) => ({ ...v, ...palette[i % palette.length] 
       </div>
       <div class="flex flex-wrap gap-7">
         {
-          TEAM.map((m) => (
-            <div class="flex flex-[0_1_280px] flex-col items-center gap-[18px] rounded-xl border border-line bg-paper p-8 text-center reveal">
-              <ImageFrame
-                src={m.img}
-                alt={m.name}
-                class="h-[120px] w-[120px] rounded-full"
-                label="PHOTO"
-              />
-              <div class="flex flex-col gap-1.5">
-                <span class="font-serif text-[21px] font-bold text-plum">{m.name}</span>
-                <span class="eyebrow text-[12px] text-label">{m.role}</span>
+          TEAM.map((m) => {
+            // A photo is optional. Without one the card shows the person's
+            // initials rather than an empty "PHOTO" placeholder, so a team
+            // listed by name alone still looks finished — and cards with and
+            // without a photo stay the same size next to each other.
+            const initials = (m.name ?? '')
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((w) => w[0].toUpperCase())
+              .join('');
+
+            return (
+              <div class="flex flex-[0_1_280px] flex-col items-center gap-[18px] rounded-xl border border-line bg-paper p-8 text-center reveal">
+                {m.img ? (
+                  <ImageFrame
+                    src={m.img}
+                    alt={m.name}
+                    class="h-[120px] w-[120px] rounded-full"
+                    label="PHOTO"
+                  />
+                ) : (
+                  <span
+                    class="flex h-[120px] w-[120px] flex-none items-center justify-center rounded-full border border-line bg-sand font-serif text-[36px] font-bold leading-none text-plum"
+                    aria-hidden="true"
+                  >
+                    {initials}
+                  </span>
+                )}
+                <div class="flex flex-col gap-1.5">
+                  <span class="font-serif text-[21px] font-bold text-plum">{m.name}</span>
+                  <span class="eyebrow text-[12px] text-label">{m.role}</span>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         }
       </div>
     </div>

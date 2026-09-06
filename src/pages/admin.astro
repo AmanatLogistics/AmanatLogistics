@@ -529,11 +529,11 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
           {
             id: 'team', title: 'Team members', icon: I.users, kind: 'list',
             addLabel: 'Add a person', itemName: 'person',
-            hint: 'The leadership cards on the About page.',
+            hint: 'The leadership cards on the About page. Only the name is needed — a photo is optional, and without one the card shows the person’s initials.',
             fields: [
               { key: 'name', label: 'Full name', ph: 'e.g. Abdul Amanat' },
               { key: 'role', label: 'Role', ph: 'e.g. Founder & Managing Director' },
-              { key: 'img', label: 'Photo (square works best)', type: 'image' },
+              { key: 'img', label: 'Photo — optional (square works best)', type: 'image' },
             ],
           },
           {
