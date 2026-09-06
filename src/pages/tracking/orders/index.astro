@@ -22,16 +22,16 @@ import { findOrder, isConfigured, type SheetOrder } from '../../../lib/orders/ap
 import { formatCount, formatWeight, ORDER_STAGE_COUNT } from '../../../lib/orders/model';
 import { ot, stageOfLabel, stageTitleIn, stepsIn } from '../../../lib/orders/i18n';
 import { formatDate, type Shipment } from '../../../lib/tracker/shipments';
-import { htmlLang, isRtl, langCookie, resolveLang } from '../../../lib/tracker/i18n';
+import { htmlLang, isRtl, langFromUrl } from '../../../lib/tracker/i18n';
 
 export const prerender = false;
 
-const lang = resolveLang(Astro.url, Astro.request);
+// English unless the URL asks otherwise, and the choice is not remembered
+// afterwards: this page opens in English for everyone, every time. The toggle
+// sets ?lang=, and the search form below carries it, so a Pashto reader stays
+// in Pashto for as long as they are on the page.
+const lang = langFromUrl(Astro.url);
 const rtl = isRtl(lang);
-// One cookie for the whole tracking section, so a choice made on /tracking
-// carries over here and back again.
-Astro.response.headers.append('Set-Cookie', langCookie(lang));
-Astro.response.headers.set('Vary', 'Cookie');
 
 const code = (Astro.url.searchParams.get('code') ?? '').trim();
 const searched = code !== '';

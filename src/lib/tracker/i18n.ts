@@ -184,6 +184,22 @@ export function resolveLang(url: URL, request: Request): Lang {
   return DEFAULT_LANG;
 }
 
+/**
+ * Language from the URL alone — the cookie is not consulted.
+ *
+ * Used by the order lookup, which should always open in English: a visitor who
+ * once read a page in Pashto had it remembered for a year, so the page never
+ * appeared in English again for them. The toggle still works and the search
+ * form carries the choice, so a Pashto reader keeps Pashto for as long as they
+ * are looking; it simply is not held on to afterwards.
+ *
+ * The tracker keeps resolveLang above, and keeps remembering.
+ */
+export function langFromUrl(url: URL): Lang {
+  const param = url.searchParams.get('lang');
+  return param && isLang(param) ? param : DEFAULT_LANG;
+}
+
 /** Remember the choice so the next visit opens in the same language. */
 export function langCookie(lang: Lang): string {
   return `${COOKIE}=${lang}; Path=/; SameSite=Lax; Max-Age=${365 * 86400}`;
