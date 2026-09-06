@@ -147,6 +147,81 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
   cache = { data: next, at: Date.now() };
 }
 
+/**
+ * Write a tiny file to Blob, read it back, and delete it.
+ *
+ * A failed save on the live site can mean two very different things — no store
+ * connected at all, or a store that is connected but refusing the write (a
+ * revoked token, a deleted store, OIDC not actually available). Both surface as
+ * a 500, and the second one's real reason only ever reached the Vercel function
+ * logs. This runs the same round trip the admin's Save does and hands back
+ * whatever actually went wrong, so it can be read off a URL instead of guessed
+ * at. Called only from /api/admin/status?test=1, which is admin-only.
+ */
+export async function blobSelfTest(): Promise<{
+  ok: boolean;
+  step: string;
+  error?: string;
+  errorName?: string;
+}> {
+  // Test whichever storage is actually in use, so the answer is honest both on
+  // the live site and on a laptop.
+  if (!hasBlob()) {
+    if (isServerless()) {
+      return { ok: false, step: 'configuration', error: BLOB_NOT_CONFIGURED, errorName: 'NoBlobStore' };
+    }
+    try {
+      const { mkdir, writeFile, readFile, unlink } = await import('node:fs/promises');
+      const dir = new URL('../../.data/', import.meta.url);
+      await mkdir(dir, { recursive: true });
+      const file = new URL(`.selftest-${Date.now()}.txt`, dir);
+      await writeFile(file, 'ok', 'utf8');
+      await readFile(file, 'utf8');
+      await unlink(file);
+      return { ok: true, step: 'done (local file storage)' };
+    } catch (e) {
+      return {
+        ok: false,
+        step: 'local file write',
+        error: e instanceof Error ? e.message : String(e),
+        errorName: e instanceof Error ? e.name : 'Unknown',
+      };
+    }
+  }
+
+  const key = `amanat/.selftest-${Date.now()}.txt`;
+  let step = 'import';
+  try {
+    const { put, del } = await import('@vercel/blob');
+
+    step = 'write';
+    const blob = await put(key, `ok ${new Date().toISOString()}`, {
+      access: 'public',
+      contentType: 'text/plain',
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      cacheControlMaxAge: 0,
+      ...auth(),
+    });
+
+    step = 'read back';
+    const res = await fetch(`${blob.url}?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`Reading it back returned ${res.status}.`);
+
+    step = 'clean up';
+    await del(blob.url, { ...auth() });
+
+    return { ok: true, step: 'done' };
+  } catch (e) {
+    return {
+      ok: false,
+      step,
+      error: e instanceof Error ? e.message : String(e),
+      errorName: e instanceof Error ? e.name : 'Unknown',
+    };
+  }
+}
+
 /** Store an uploaded image; returns its public URL. */
 export async function saveImage(file: File): Promise<string> {
   const safe = file.name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '');

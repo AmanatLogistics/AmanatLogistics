@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { isAdmin } from '../../../lib/auth';
-import { blobToken } from '../../../lib/store';
+import { blobSelfTest, blobToken } from '../../../lib/store';
 
 export const prerender = false;
 
@@ -14,6 +14,11 @@ export const GET: APIRoute = async ({ request }) => {
   }
 
   const e = process.env ?? {};
+  // ?test=1 actually writes to storage and reads it back, so a save that is
+  // failing says why instead of only reporting what is configured. Off by
+  // default, because it is a real write.
+  const url = new URL(request.url);
+  const selfTest = url.searchParams.get('test') === '1' ? await blobSelfTest() : undefined;
   const blobLike = Object.keys(e).filter((k) => /BLOB/i.test(k));
 
   return new Response(
@@ -29,6 +34,8 @@ export const GET: APIRoute = async ({ request }) => {
           authMode: blobToken() ? 'static token' : e.BLOB_STORE_ID ? 'OIDC (automatic)' : 'none',
           blobVariableNames: blobLike, // names only, never values
           savingWillWork: Boolean(blobToken() || e.BLOB_STORE_ID) || !e.VERCEL,
+          // Only present when called with ?test=1.
+          ...(selfTest ? { writeTest: selfTest } : {}),
         },
         otherSettings: {
           adminPasswordSet: Boolean(e.ADMIN_PASSWORD),
