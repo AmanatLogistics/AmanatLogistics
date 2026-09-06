@@ -59,7 +59,12 @@ export const POST: APIRoute = async ({ request }) => {
     return new Response(JSON.stringify({ ok: true, url }), { status: 200 });
   } catch (e) {
     console.error('Upload failed:', e);
-    const msg = e instanceof Error && e.message.startsWith('Storage not connected') ? e.message : 'Upload failed. Try again.';
+    // Say what actually went wrong rather than a flat 'try again' — the
+    // reason otherwise reached only the Vercel logs.
+    const detail = e instanceof Error ? e.message : String(e);
+    const msg = detail.startsWith('Database not connected')
+      ? detail
+      : `Upload failed — the storage refused it: ${detail}`;
     return new Response(JSON.stringify({ error: msg }), { status: 500 });
   }
 };

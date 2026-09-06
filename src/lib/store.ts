@@ -1,16 +1,27 @@
 /**
  * Content store — where admin edits live.
  *
- * Production (Vercel):   JSON + uploaded images in Vercel Blob
- *                        (BLOB_READ_WRITE_TOKEN is auto-set when a Blob
- *                        store is connected to the project).
- * Local development:     JSON in .data/content.json, images in public/uploads.
+ * Production:        Neon Postgres (the same free database the shipment
+ *                    tracker uses, in its own tables — site_content for the
+ *                    text, site_images for uploaded photos).
+ * Local development: JSON in .data/content.json, images in public/uploads,
+ *                    so the site runs with no database at all.
  *
  * Public pages call getContent(); admin APIs call saveContent()/saveImage().
+ *
+ * This used to be Vercel Blob, and Blob's free tier suspended the store. The
+ * reason was the read path, not the amount stored: every page view ran a
+ * list() — a metered "advanced operation", ~10k a month on the free plan — and
+ * then re-downloaded the file with a cache-busting query string, so the CDN
+ * could never serve it. A few hundred visitors a day was enough. Postgres has
+ * no per-operation meter, the row is a few kilobytes, and the read below is a
+ * single indexed SELECT behind a short cache.
  */
+import { neon } from '@neondatabase/serverless';
 import { DEFAULT_CONTENT, type SiteContent } from '../consts';
 
-const CONTENT_KEY = 'amanat/content.json';
+/** One row holds the whole content document. */
+const CONTENT_ID = 'site';
 
 export function env(name: string): string | undefined {
   // import.meta.env covers build-time; process.env covers Vercel runtime.
@@ -18,68 +29,109 @@ export function env(name: string): string | undefined {
 }
 
 /**
- * Vercel Blob read/write token.
- * Normally `BLOB_READ_WRITE_TOKEN`, but Vercel lets you choose a custom prefix
- * when connecting a store (e.g. `AMANAT_BLOB_READ_WRITE_TOKEN`), so accept any
- * variable whose name ends with that suffix.
+ * The Vercel/Neon integration sets DATABASE_URL; some setups (and the older
+ * Vercel Postgres integration) use POSTGRES_URL instead, so accept either.
+ * Deliberately read here rather than imported from lib/tracker/db.ts: the two
+ * share a database but nothing else, so the tracker cannot be broken from here.
  */
-export function blobToken(): string | undefined {
-  const direct = env('BLOB_READ_WRITE_TOKEN');
-  if (direct) return direct;
-  const key = Object.keys(process.env ?? {}).find((k) => k.endsWith('BLOB_READ_WRITE_TOKEN'));
-  return key ? process.env[key] : undefined;
+function connectionString(): string | undefined {
+  return env('DATABASE_URL') || env('POSTGRES_URL');
 }
 
-/**
- * Blob is usable when either a static token exists, or a store is connected on
- * Vercel — there the SDK authenticates itself via OIDC and no token is issued.
- */
-const hasBlob = () => Boolean(blobToken() || env('BLOB_STORE_ID'));
+const hasDb = () => Boolean(connectionString());
 
-/**
- * Only pass an explicit token when we actually have one; otherwise let the SDK
- * resolve credentials itself (OIDC on Vercel).
- */
-const auth = () => {
-  const t = blobToken();
-  return t ? { token: t } : {};
-};
+let client: ReturnType<typeof neon> | null = null;
+function db() {
+  if (!client) {
+    const url = connectionString();
+    if (!url) throw new Error(DB_NOT_CONFIGURED);
+    client = neon(url);
+  }
+  return client;
+}
 
-// On Vercel/serverless the filesystem is read-only, so writes need Vercel Blob.
+// On Vercel/serverless the filesystem is read-only, so writes need the database.
 const isServerless = () =>
   Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY);
 
-/** Thrown on the live site when no Blob store is connected (message shown to admin). */
-export const BLOB_NOT_CONFIGURED =
-  'Storage not connected. On Vercel, go to Storage → Create → Blob → connect it to this project, then redeploy. Saving works locally without this.';
+/** Shown to the admin when no database is connected (message reaches the UI). */
+export const DB_NOT_CONFIGURED =
+  'Database not connected. On Vercel, go to Storage → Create Database → Neon (free plan), connect it to this project, then redeploy. Saving works locally without this.';
+
+/* ------------------------------------------------------------------ */
+/* Schema                                                              */
+/* ------------------------------------------------------------------ */
+
+let schemaReady: Promise<void> | null = null;
+
+/**
+ * Create this module's own two tables if they are missing. Idempotent, and
+ * memoised so it costs one round trip per cold start rather than one per
+ * request. The tracker's tables are created by lib/tracker/db.ts and are not
+ * touched here.
+ */
+function ensureSchema(): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      const sql = db();
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_content (
+          id         TEXT PRIMARY KEY,
+          data       JSONB NOT NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_images (
+          id           TEXT PRIMARY KEY,
+          content_type TEXT NOT NULL,
+          -- base64 rather than bytea: it survives the HTTP driver unambiguously,
+          -- and Postgres compresses the column anyway.
+          bytes        TEXT NOT NULL,
+          created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+        )`;
+    })().catch((e) => {
+      schemaReady = null; // let a later request try again
+      throw e;
+    });
+  }
+  return schemaReady;
+}
 
 /* ------------------------------------------------------------------ */
 /* Read                                                                */
 /* ------------------------------------------------------------------ */
 
-// Per-instance micro-cache so one page render doesn't fetch repeatedly.
+/**
+ * Per-instance cache. Eleven components ask for the content while one page
+ * renders, so without this each page would query eleven times. Ten seconds is
+ * short enough that a save shows up on the next refresh and long enough to
+ * collapse a burst of traffic into one query; a save also refreshes this
+ * directly, so the admin's own next request never waits for it to expire.
+ */
 let cache: { data: Partial<SiteContent>; at: number } | null = null;
-const CACHE_MS = 3_000;
+const CACHE_MS = 10_000;
 
 async function readOverrides(): Promise<Partial<SiteContent>> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.data;
 
   let data: Partial<SiteContent> = {};
   try {
-    if (hasBlob()) {
-      const { list } = await import('@vercel/blob');
-      const { blobs } = await list({ prefix: CONTENT_KEY, limit: 1, ...auth() });
-      if (blobs.length) {
-        const res = await fetch(`${blobs[0].url}?t=${Date.now()}`);
-        if (res.ok) data = await res.json();
-      }
+    if (hasDb()) {
+      await ensureSchema();
+      const rows = (await db()`
+        SELECT data FROM site_content WHERE id = ${CONTENT_ID}
+      `) as { data: Partial<SiteContent> }[];
+      if (rows.length && rows[0].data) data = rows[0].data;
     } else {
       const { readFile } = await import('node:fs/promises');
       const raw = await readFile(new URL('../../.data/content.json', import.meta.url), 'utf8');
       data = JSON.parse(raw);
     }
-  } catch {
-    // No overrides yet (first run) — defaults apply.
+  } catch (e) {
+    // Defaults apply. Logged rather than swallowed: a site quietly serving its
+    // built-in text because storage is unreachable looked exactly like a site
+    // whose admin had never saved anything, and that cost a long time to spot.
+    console.error('Reading site content failed — serving built-in defaults:', e);
   }
   cache = { data, at: Date.now() };
   return data;
@@ -118,6 +170,26 @@ export async function getContent(): Promise<SiteContent> {
   };
 }
 
+/** One stored image, for the route that serves it. */
+export async function readImage(
+  id: string,
+): Promise<{ contentType: string; bytes: ArrayBuffer } | null> {
+  if (!hasDb()) return null;
+  await ensureSchema();
+  const rows = (await db()`
+    SELECT content_type, bytes FROM site_images WHERE id = ${id}
+  `) as { content_type: string; bytes: string }[];
+  if (!rows.length) return null;
+
+  // Buffer.from draws from a shared pool, so `.buffer` is usually a much larger
+  // block with this image somewhere inside it. Slice to this image's own range —
+  // handing back the whole pool would serve the wrong bytes.
+  const buf = Buffer.from(rows[0].bytes, 'base64');
+  const bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+
+  return { contentType: rows[0].content_type, bytes };
+}
+
 /* ------------------------------------------------------------------ */
 /* Write (admin only — routes verify the session first)                */
 /* ------------------------------------------------------------------ */
@@ -126,18 +198,15 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
   const current = await readOverrides();
   const next = { ...current, ...patch };
 
-  if (hasBlob()) {
-    const { put } = await import('@vercel/blob');
-    await put(CONTENT_KEY, JSON.stringify(next, null, 2), {
-      access: 'public',
-      contentType: 'application/json',
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      cacheControlMaxAge: 0,
-      ...auth(),
-    });
+  if (hasDb()) {
+    await ensureSchema();
+    await db()`
+      INSERT INTO site_content (id, data, updated_at)
+      VALUES (${CONTENT_ID}, ${JSON.stringify(next)}::jsonb, now())
+      ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
+    `;
   } else if (isServerless()) {
-    throw new Error(BLOB_NOT_CONFIGURED);
+    throw new Error(DB_NOT_CONFIGURED);
   } else {
     const { mkdir, writeFile } = await import('node:fs/promises');
     const dir = new URL('../../.data/', import.meta.url);
@@ -147,97 +216,104 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
   cache = { data: next, at: Date.now() };
 }
 
-/**
- * Write a tiny file to Blob, read it back, and delete it.
- *
- * A failed save on the live site can mean two very different things — no store
- * connected at all, or a store that is connected but refusing the write (a
- * revoked token, a deleted store, OIDC not actually available). Both surface as
- * a 500, and the second one's real reason only ever reached the Vercel function
- * logs. This runs the same round trip the admin's Save does and hands back
- * whatever actually went wrong, so it can be read off a URL instead of guessed
- * at. Called only from /api/admin/status?test=1, which is admin-only.
- */
-export async function blobSelfTest(): Promise<{
-  ok: boolean;
-  step: string;
-  error?: string;
-  errorName?: string;
-}> {
-  // Test whichever storage is actually in use, so the answer is honest both on
-  // the live site and on a laptop.
-  if (!hasBlob()) {
-    if (isServerless()) {
-      return { ok: false, step: 'configuration', error: BLOB_NOT_CONFIGURED, errorName: 'NoBlobStore' };
-    }
-    try {
-      const { mkdir, writeFile, readFile, unlink } = await import('node:fs/promises');
-      const dir = new URL('../../.data/', import.meta.url);
-      await mkdir(dir, { recursive: true });
-      const file = new URL(`.selftest-${Date.now()}.txt`, dir);
-      await writeFile(file, 'ok', 'utf8');
-      await readFile(file, 'utf8');
-      await unlink(file);
-      return { ok: true, step: 'done (local file storage)' };
-    } catch (e) {
-      return {
-        ok: false,
-        step: 'local file write',
-        error: e instanceof Error ? e.message : String(e),
-        errorName: e instanceof Error ? e.name : 'Unknown',
-      };
-    }
-  }
-
-  const key = `amanat/.selftest-${Date.now()}.txt`;
-  let step = 'import';
-  try {
-    const { put, del } = await import('@vercel/blob');
-
-    step = 'write';
-    const blob = await put(key, `ok ${new Date().toISOString()}`, {
-      access: 'public',
-      contentType: 'text/plain',
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      cacheControlMaxAge: 0,
-      ...auth(),
-    });
-
-    step = 'read back';
-    const res = await fetch(`${blob.url}?t=${Date.now()}`);
-    if (!res.ok) throw new Error(`Reading it back returned ${res.status}.`);
-
-    step = 'clean up';
-    await del(blob.url, { ...auth() });
-
-    return { ok: true, step: 'done' };
-  } catch (e) {
-    return {
-      ok: false,
-      step,
-      error: e instanceof Error ? e.message : String(e),
-      errorName: e instanceof Error ? e.name : 'Unknown',
-    };
-  }
-}
-
-/** Store an uploaded image; returns its public URL. */
+/** Store an uploaded image; returns the URL the site should use for it. */
 export async function saveImage(file: File): Promise<string> {
   const safe = file.name.toLowerCase().replace(/[^a-z0-9.]+/g, '-').replace(/^-+|-+$/g, '');
   const name = `${Date.now()}-${safe || 'image'}`;
 
-  if (hasBlob()) {
-    const { put } = await import('@vercel/blob');
-    const blob = await put(`amanat/uploads/${name}`, file, { access: 'public', ...auth() });
-    return blob.url;
+  if (hasDb()) {
+    await ensureSchema();
+    const bytes = Buffer.from(await file.arrayBuffer()).toString('base64');
+    await db()`
+      INSERT INTO site_images (id, content_type, bytes)
+      VALUES (${name}, ${file.type || 'application/octet-stream'}, ${bytes})
+      ON CONFLICT (id) DO UPDATE SET content_type = EXCLUDED.content_type, bytes = EXCLUDED.bytes
+    `;
+    // The id carries a timestamp and its bytes never change, so the route that
+    // serves it can mark it immutable and let the CDN do the work from then on.
+    return `/api/image/${encodeURIComponent(name)}`;
   }
 
-  if (isServerless()) throw new Error(BLOB_NOT_CONFIGURED);
+  if (isServerless()) throw new Error(DB_NOT_CONFIGURED);
 
   const { mkdir, writeFile } = await import('node:fs/promises');
   const dir = new URL('../../public/uploads/', import.meta.url);
   await mkdir(dir, { recursive: true });
   await writeFile(new URL(name, dir), Buffer.from(await file.arrayBuffer()));
   return `/uploads/${name}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Diagnostics                                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Write a row, read it back, delete it.
+ *
+ * A failed save can mean no storage configured, or storage that is connected
+ * but refusing the write — and both look identical from the browser. This runs
+ * the same round trip a save does against whichever storage is actually in use
+ * and reports what really happened, so it can be read off a URL rather than
+ * guessed at. Called only from /api/admin/status?test=1, which is admin-only.
+ */
+export async function storageSelfTest(): Promise<{
+  ok: boolean;
+  backend: string;
+  step: string;
+  error?: string;
+  errorName?: string;
+}> {
+  if (!hasDb()) {
+    if (isServerless()) {
+      return { ok: false, backend: 'none', step: 'configuration', error: DB_NOT_CONFIGURED, errorName: 'NoDatabase' };
+    }
+    let step = 'local file write';
+    try {
+      const { mkdir, writeFile, readFile, unlink } = await import('node:fs/promises');
+      const dir = new URL('../../.data/', import.meta.url);
+      await mkdir(dir, { recursive: true });
+      const file = new URL(`.selftest-${Date.now()}.txt`, dir);
+      await writeFile(file, 'ok', 'utf8');
+      step = 'local file read';
+      await readFile(file, 'utf8');
+      await unlink(file);
+      return { ok: true, backend: 'local files', step: 'done' };
+    } catch (e) {
+      return {
+        ok: false, backend: 'local files', step,
+        error: e instanceof Error ? e.message : String(e),
+        errorName: e instanceof Error ? e.name : 'Unknown',
+      };
+    }
+  }
+
+  const id = `.selftest-${Date.now()}`;
+  let step = 'connect';
+  try {
+    await ensureSchema();
+    const sql = db();
+
+    step = 'write';
+    await sql`INSERT INTO site_content (id, data) VALUES (${id}, ${'{"ok":true}'}::jsonb)`;
+
+    step = 'read back';
+    const rows = (await sql`SELECT data FROM site_content WHERE id = ${id}`) as { data: unknown }[];
+    if (!rows.length) throw new Error('The row was written but could not be read back.');
+
+    return { ok: true, backend: 'Neon Postgres', step: 'done' };
+  } catch (e) {
+    return {
+      ok: false, backend: 'Neon Postgres', step,
+      error: e instanceof Error ? e.message : String(e),
+      errorName: e instanceof Error ? e.name : 'Unknown',
+    };
+  } finally {
+    // In a finally, because a test that fails halfway is exactly when this runs —
+    // leaving its scratch row behind every time would slowly fill the table.
+    try {
+      await db()`DELETE FROM site_content WHERE id = ${id}`;
+    } catch {
+      /* nothing more to do; the row is harmless and ignored by getContent() */
+    }
+  }
 }
