@@ -240,7 +240,9 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
       }
       .toast.show { transform: none; opacity: 1; }
       .toast.ok { background: var(--ok); }
-      .toast.err { background: var(--err); }
+      /* Errors wait to be read, so they have to be clickable to dismiss. */
+      .toast.err { background: var(--err); pointer-events: auto; cursor: pointer; }
+      .savebar .note.note-err { color: var(--err); font-weight: 700; }
 
       /* ===================== login ===================== */
       .login {
@@ -678,11 +680,24 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
         const panelOf = (id: string) => app!.querySelector(`.panel[data-section="${id}"]`) as HTMLElement;
         const navOf = (id: string) => sidenav.querySelector(`[data-nav="${id}"]`) as HTMLElement;
 
+        let toastTimer: number | undefined;
+        /**
+         * A success can fade by itself; a failure must not. The message is the
+         * only place the reason appears, and 3 seconds in the far corner is
+         * easy to miss entirely — which makes a failed save look like a button
+         * that did nothing. Errors stay until they are clicked away.
+         */
         function showToast(msg: string, kind: 'ok' | 'err') {
+          clearTimeout(toastTimer);
           toast.textContent = msg;
           toast.className = `toast show ${kind}`;
-          setTimeout(() => toast.classList.remove('show'), 3200);
+          if (kind === 'ok') {
+            toastTimer = window.setTimeout(() => toast.classList.remove('show'), 3200);
+          } else {
+            toast.title = 'Click to dismiss';
+          }
         }
+        toast.addEventListener('click', () => toast.classList.remove('show'));
 
         function markDirty(panel: HTMLElement, dirty: boolean) {
           navOf(panel.dataset.section!)?.classList.toggle('is-dirty', dirty);
@@ -828,12 +843,24 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
               body: JSON.stringify({ [s.id]: value }),
             }).catch(() => null);
             const body = await res?.json().catch(() => null);
+            // The eye is on the Save button, not the corner of the window, so
+            // the outcome is reported in both places.
+            const note = panel.querySelector('.savebar .note') as HTMLElement | null;
             if (res?.ok) {
               content[s.id] = value;
               markDirty(panel, false);
               showToast('Saved — your changes are live on the website ✓', 'ok');
+              if (note) {
+                note.textContent = 'Saved. Your changes are live on the website.';
+                note.classList.remove('note-err');
+              }
             } else {
-              showToast(body?.error || 'Save failed. Try again.', 'err');
+              const msg = body?.error || 'Save failed. Try again.';
+              showToast(msg, 'err');
+              if (note) {
+                note.textContent = msg;
+                note.classList.add('note-err');
+              }
             }
             btn.disabled = false;
             btn.textContent = 'Save changes';
