@@ -11,8 +11,10 @@ interface Props {
   steps: ShipmentStep[];
   currentStep: number;
   lang: Lang;
+  /** Set false where the page already states the status above the timeline. */
+  showStatus?: boolean;
 }
-const { steps, currentStep, lang } = Astro.props;
+const { steps, currentStep, lang, showStatus = true } = Astro.props;
 
 const statusLabel =
   steps.find((s) => s.step_number === currentStep)?.step_title ?? t(lang, 'pending');
@@ -31,9 +33,13 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
       </svg>
       {t(lang, 'shipmentProgress')}
     </h2>
-    <p class="m-0 text-[14px] text-muted">
-      {t(lang, 'currentStatus')}: <span class="font-bold text-accent-deep">{statusLabel}</span>
-    </p>
+    {
+      showStatus && (
+        <p class="m-0 text-[14px] text-muted">
+          {t(lang, 'currentStatus')}: <span class="font-bold text-accent-deep">{statusLabel}</span>
+        </p>
+      )
+    }
   </div>
 
   <ol class="tk-timeline m-0 list-none p-0">
@@ -66,10 +72,17 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
           <p class="tk-time m-0 mt-0.5 text-[12.5px] font-semibold">
             {/* <bdi> isolates the date so its digits keep LTR order in a Pashto
                 page, without dragging the paragraph's alignment with it. */}
+            {/* A stage the shipment has already gone past but which carries no
+                date — a route that skips it — was showing a completed green
+                tick and the word "Pending" at the same time, which contradicts
+                itself. Only a stage still ahead is pending; a passed one with
+                no date simply has nothing to show. */}
             {s.step_date ? (
               <bdi>{formatDate(s.step_date)}</bdi>
-            ) : (
+            ) : s.step_number >= currentStep ? (
               t(lang, 'pending')
+            ) : (
+              <span class="opacity-70">—</span>
             )}
           </p>
           <p class="m-0 mt-1 text-[13.5px] leading-relaxed text-muted">{s.step_description}</p>

@@ -524,9 +524,12 @@ td .date {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* Two across even on the narrowest phone: eight full-width tiles pushed the
+   table itself most of a screen down, and the numbers are short enough to
+   read side by side. */
 @media (max-width: 420px) {
   .stat-grid-wide {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -586,6 +589,17 @@ td .date {
   color: var(--muted);
 }
 
+/* Nothing in this leg — still readable, but it should not pull the eye the way
+   a leg with shipments in it does. */
+.stat-grid-wide .stat.is-empty {
+  opacity: 0.62;
+}
+.stat-grid-wide .stat.is-empty:hover,
+.stat-grid-wide .stat.is-empty:focus-visible,
+.stat-grid-wide .stat.is-empty.is-active {
+  opacity: 1;
+}
+
 .stat-all {
   --tone: var(--burg);
   --tone-bg: #f7eef2;
@@ -629,12 +643,15 @@ td .date {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
-.toolbar .field-search {
-  flex: 1 1 260px;
-  max-width: 380px;
-}
 .toolbar .field {
   flex: 0 0 auto;
+}
+/* Must come after `.toolbar .field`: the two selectors have the same weight, so
+   whichever is written last wins. It used to be written first, which is why the
+   search box never grew and its placeholder was cut to "…invoice #, co". */
+.toolbar .field-search {
+  flex: 1 1 320px;
+  max-width: 460px;
 }
 .toolbar-end {
   display: flex;
@@ -781,6 +798,12 @@ td .date {
 .progress i.bar-teal   { background: var(--teal); }
 .progress i.bar-purple { background: var(--purple); }
 .progress i.bar-orange { background: var(--orange); }
+
+/* Codes that must not be split: a hyphen or a space is a legal break point, so
+   "098-11223344" and "3345 KDR" were being cut across two lines. */
+.nowrap {
+  white-space: nowrap;
+}
 
 td.is-late {
   font-weight: 700;

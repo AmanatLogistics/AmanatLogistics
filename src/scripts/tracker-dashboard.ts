@@ -102,7 +102,13 @@ export function initDashboard(): Dashboard | null {
       if (visible) shown++;
     }
 
-    for (const tile of tiles) tile.textContent = String(counts[tile.dataset.count ?? ''] ?? 0);
+    for (const tile of tiles) {
+      const count = counts[tile.dataset.count ?? ''] ?? 0;
+      tile.textContent = String(count);
+      // Keep the dimming of an empty leg in step with the live count, so a
+      // refresh or a filter never leaves a "0" looking as loud as a "12".
+      tile.closest('[data-tile]')?.classList.toggle('is-empty', count === 0);
+    }
 
     dash.dataset.filter = filter;
     for (const tile of dash.querySelectorAll<HTMLElement>('[data-tile]')) {

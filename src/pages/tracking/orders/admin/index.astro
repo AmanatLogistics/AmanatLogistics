@@ -201,7 +201,9 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
         <div class="stat-grid stat-grid-wide">
           {tiles.map((tile) => (
             <a
-              class={`stat stat-${tile.tone}${tile.key === status ? ' is-active' : ''}`}
+              class={`stat stat-${tile.tone}${tile.key === status ? ' is-active' : ''}${
+                tile.value === 0 ? ' is-empty' : ''
+              }`}
               href={filterHref(tile.key)}
               data-tile={tile.key}
               data-astro-prefetch="false"
@@ -332,7 +334,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                       </td>
                       <td data-label="Trucks">
                         <span class="cell">
-                          {order.kdr_plate || '—'}
+                          <span class="nowrap">{order.kdr_plate || '—'}</span>
                           <span class="sub">{order.tas_plate ? `TAS ${order.tas_plate}` : ''}</span>
                         </span>
                       </td>
@@ -360,7 +362,7 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                       </td>
                       <td data-label="Air leg">
                         <span class="cell">
-                          {order.awb_no || '—'}
+                          <span class="nowrap">{order.awb_no || '—'}</span>
                           <span class="sub">
                             {[order.flight_no, order.flight_date ? formatDate(order.flight_date) : '']
                               .filter(Boolean)
@@ -396,8 +398,12 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
                             hidden={order.stage >= ORDER_STAGE_COUNT}
                           >
                             <input type="hidden" name="id" value={order.order_id} />
-                            <button class="btn btn-ok" type="submit" title="Mark delivered to Delhi">
-                              ✓ Delivered
+                            {/* "✓ Delivered" sat next to a row whose badge said
+                                "To Hairatan", so a green pill reading Delivered
+                                looked like the row's state rather than the
+                                button that sets it. Name the action. */}
+                            <button class="btn btn-ok" type="submit" title="Mark this shipment delivered to Delhi">
+                              Mark delivered
                             </button>
                           </form>
                           {/* A real link to the full edit page, so it still

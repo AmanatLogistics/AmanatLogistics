@@ -228,7 +228,14 @@ const asShipment: Shipment | null = order
                   title={ot(lang, 'shipmentDetails')}
                   rows={detailRows}
                 />
-                <TrackingTimeline steps={steps} currentStep={order.stage} lang={lang} />
+                {/* showStatus={false}: the card above already says where the
+                    shipment is, and saying it twice on one screen is noise. */}
+                <TrackingTimeline
+                  steps={steps}
+                  currentStep={order.stage}
+                  lang={lang}
+                  showStatus={false}
+                />
               </div>
             </Fragment>
           )
@@ -273,9 +280,17 @@ const asShipment: Shipment | null = order
 {
   rtl && (
     <style is:global>
-      [dir='rtl'],
+      /* The Latin face is listed FIRST on purpose. A browser picks the first
+         family that actually has the glyph, and Archivo/Fraunces carry no
+         Arabic script — so Pashto still falls through to Naskh, while the
+         tracking numbers, dates, weights and plate numbers sprinkled through
+         this page stay in the site's own typeface instead of being rendered in
+         an Arabic face that was never drawn for them. */
+      [dir='rtl'] {
+        font-family: 'Archivo', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', Tahoma, sans-serif;
+      }
       [dir='rtl'] .font-serif {
-        font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, sans-serif;
+        font-family: 'Fraunces', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', Georgia, serif;
       }
       /* Naskh sits lower than Latin faces and needs a little more room. */
       [dir='rtl'] h1,
