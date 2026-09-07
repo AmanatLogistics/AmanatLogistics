@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { isAdmin } from '../../../lib/auth';
+import { isSameOrigin } from '../../../lib/session';
 import { saveImage } from '../../../lib/store';
 
 export const prerender = false;
@@ -27,6 +28,9 @@ async function trimLogo(file: File): Promise<File> {
 }
 
 export const POST: APIRoute = async ({ request }) => {
+  if (!isSameOrigin(request)) {
+    return new Response(JSON.stringify({ error: 'That request looked unsafe, so it was blocked.' }), { status: 403 });
+  }
   if (!(await isAdmin(request))) {
     return new Response(JSON.stringify({ error: 'Not authorized.' }), { status: 401 });
   }

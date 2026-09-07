@@ -336,10 +336,23 @@ export function isOverdue(s: Pick<Shipment, 'current_step' | 'estimated_delivery
 }
 
 /** Today as 'YYYY-MM-DD' in local time (not UTC — a UTC date can be tomorrow). */
+/**
+ * The office's own timezone. Kandahar is UTC+04:30 and Vercel's servers run on
+ * UTC, so between midnight and 04:30 local the server is still on yesterday's
+ * date — marking a shipment delivered early in the morning recorded the wrong
+ * day. Pinning the zone fixes that wherever the code happens to run.
+ */
+const OFFICE_TZ = 'Asia/Kabul';
+
+/** Today's date in the office's timezone, as YYYY-MM-DD. */
 export function today(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  // en-CA formats as YYYY-MM-DD, which is exactly the shape wanted.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: OFFICE_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

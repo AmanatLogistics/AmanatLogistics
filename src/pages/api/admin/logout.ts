@@ -1,10 +1,13 @@
 import type { APIRoute } from 'astro';
 import { clearSessionCookie } from '../../../lib/auth';
+import { isSameOrigin } from '../../../lib/session';
 
 export const prerender = false;
 
-export const POST: APIRoute = async () =>
-  new Response(null, {
-    status: 302,
-    headers: { 'Set-Cookie': clearSessionCookie(), Location: '/admin' },
-  });
+/** POST only, so a logout can't be triggered by a stray link or prefetch. */
+export const POST: APIRoute = async ({ request }) => {
+  const headers: Record<string, string> = { Location: '/admin' };
+  if (isSameOrigin(request)) headers['Set-Cookie'] = clearSessionCookie();
+  // 303 rather than 302: it guarantees the browser follows with GET.
+  return new Response(null, { status: 303, headers });
+};

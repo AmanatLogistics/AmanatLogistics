@@ -1,9 +1,15 @@
 import type { APIRoute } from 'astro';
 import { adminPassword, createSessionCookie } from '../../../lib/auth';
+import { isSameOrigin } from '../../../lib/session';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
+  // Matches the tracker and orders logins, which already refuse a foreign origin.
+  if (!isSameOrigin(request)) {
+    return new Response(JSON.stringify({ error: 'That request looked unsafe, so it was blocked.' }), { status: 403 });
+  }
+
   const expected = adminPassword();
   if (!expected) {
     return new Response(JSON.stringify({ error: 'Admin is not configured. Set ADMIN_PASSWORD.' }), { status: 500 });

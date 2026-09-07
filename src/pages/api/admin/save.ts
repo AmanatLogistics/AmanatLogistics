@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { isAdmin } from '../../../lib/auth';
+import { isSameOrigin } from '../../../lib/session';
 import { saveContent } from '../../../lib/store';
 
 export const prerender = false;
@@ -28,6 +29,12 @@ const ALLOWED = new Set([
 ]);
 
 export const POST: APIRoute = async ({ request }) => {
+  // The tracker and orders panels both check this; the website admin — the most
+  // powerful of the three — did not. SameSite=Lax already blocks a cross-site
+  // POST from carrying the cookie, so this is the second lock, not the first.
+  if (!isSameOrigin(request)) {
+    return new Response(JSON.stringify({ error: 'That request looked unsafe, so it was blocked.' }), { status: 403 });
+  }
   if (!(await isAdmin(request))) {
     return new Response(JSON.stringify({ error: 'Not authorized.' }), { status: 401 });
   }

@@ -29,6 +29,14 @@ export const GET: APIRoute = async ({ params }) => {
       'Content-Type': image.contentType,
       'Cache-Control': 'public, max-age=31536000, immutable',
       'Content-Length': String(image.bytes.byteLength),
+      // An SVG is a document, and it can carry <script>. These files used to be
+      // served from Vercel Blob — a different origin, where such a script could
+      // do nothing to this site. They are served from our own origin now, so
+      // the protection has to be here instead: the sandbox and the empty
+      // default-src stop anything in the file from executing or fetching, and
+      // nosniff stops a mislabelled file being treated as HTML.
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 };

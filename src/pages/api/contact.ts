@@ -29,8 +29,20 @@ export const POST: APIRoute = async ({ request }) => {
   // Honeypot: bots fill hidden fields; humans never see it.
   if (data.website) return json({ ok: true });
 
-  const name = (data.name || '').trim();
-  const email = (data.email || '').trim();
+  /**
+   * Anything can be posted here — this endpoint is public and takes JSON, so a
+   * field may arrive as an object, a number or a megabyte of text. `.trim()` on
+   * an object threw and crashed the request; an unbounded message went straight
+   * into an email. Coerce to a string and cap the length before using any of it.
+   */
+  const field = (v: unknown, max = 500): string => {
+    if (v === null || v === undefined) return '';
+    const str = typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : '';
+    return str.trim().slice(0, max);
+  };
+
+  const name = field(data.name, 120);
+  const email = field(data.email, 200);
 
   if (!name || !email) {
     return json({ error: 'Please provide at least your name and email.' }, 400);
@@ -52,16 +64,17 @@ export const POST: APIRoute = async ({ request }) => {
   const from = env('MAIL_FROM') || 'Amanat Logistics <onboarding@resend.dev>';
   const to = env('MAIL_TO') || (await getContent()).contact.email || 'info@amanatlogistics.com';
 
+  const service = field(data.service, 80);
   const fields: Array<[string, string]> = [
     ['Name', name],
-    ['Company / Organization', data.company || '—'],
+    ['Company / Organization', field(data.company, 160) || '—'],
     ['Email', email],
-    ['Phone', data.phone || '—'],
-    ['Service', data.service || '—'],
-    ['Departure', data.departure || '—'],
-    ['Destination Country', data.destination || '—'],
-    ['Product & Est. Weight', data.product || '—'],
-    ['Message', data.message || '—'],
+    ['Phone', field(data.phone, 60) || '—'],
+    ['Service', service || '—'],
+    ['Departure', field(data.departure, 120) || '—'],
+    ['Destination Country', field(data.destination, 120) || '—'],
+    ['Product & Est. Weight', field(data.product, 200) || '—'],
+    ['Message', field(data.message, 4000) || '—'],
   ];
 
   const rows = fields
@@ -105,7 +118,7 @@ export const POST: APIRoute = async ({ request }) => {
       from,
       to: [to],
       replyTo: email,
-      subject: `New quote request — ${name}${data.service ? ` (${data.service})` : ''}`,
+      subject: `New quote request — ${name}${service ? ` (${service})` : ''}`,
       html: internalHtml,
     });
 
