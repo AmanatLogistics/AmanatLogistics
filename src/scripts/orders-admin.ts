@@ -93,7 +93,10 @@ export function initOrdersAdmin(): void {
       throw new Error('Your session has expired. Please log in again.');
     }
     if (fresh.querySelector('[data-load-error="1"]')) {
-      throw new Error('Could not read the sheet. Check the Apps Script deployment.');
+      // Carry the server's own wording across — it names the actual fault,
+      // where this used to substitute a guess for it.
+      const said = fresh.querySelector('.alert-err')?.textContent?.trim();
+      throw new Error(said || 'Could not read the sheet. Check the Apps Script deployment.');
     }
 
     // The search box, status filter, sort order and scroll position are all

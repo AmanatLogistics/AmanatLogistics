@@ -90,6 +90,113 @@ async function call(params: Record<string, string>): Promise<any> {
   return data;
 }
 
+/**
+ * Call the sheet the way listOrders does, but report what happened instead of
+ * throwing.
+ *
+ * "Could not read the Google Sheet" covers four quite different faults — the
+ * web app not deployed, its access not set to "Anyone", a token that does not
+ * match, or a URL pointing at nothing — and the reason only ever reached the
+ * Vercel logs. This runs the same request and hands back enough to tell which
+ * one it is. Never returns the token or the full URL.
+ */
+export async function sheetSelfTest(): Promise<Record<string, unknown>> {
+  const base = apiUrl();
+  const token = env('SHEETS_API_TOKEN');
+
+  if (!base || !token) {
+    return {
+      ok: false,
+      reason: 'not configured',
+      urlSet: Boolean(base),
+      tokenSet: Boolean(token),
+      fix: SHEETS_NOT_CONFIGURED,
+    };
+  }
+
+  let host = '(unparseable)';
+  let looksLikeAppsScript = false;
+  try {
+    const u = new URL(base);
+    host = u.host;
+    looksLikeAppsScript = u.host.endsWith('script.google.com') && u.pathname.includes('/exec');
+  } catch {
+    return { ok: false, reason: 'SHEETS_API_URL is not a valid URL', fix: 'Re-copy the web app URL from Apps Script (Deploy → Manage deployments).' };
+  }
+
+  const url = new URL(base);
+  url.searchParams.set('token', token);
+  url.searchParams.set('action', 'list');
+
+  let response: Response;
+  try {
+    response = await fetch(url, { redirect: 'follow' });
+  } catch (e) {
+    return {
+      ok: false,
+      reason: 'could not reach the script at all',
+      host,
+      error: e instanceof Error ? e.message : String(e),
+      fix: 'Check SHEETS_API_URL is the /exec web app URL, not the editor link.',
+    };
+  }
+
+  const body = await response.text();
+  const contentType = response.headers.get('content-type') ?? '';
+
+  let data: any = null;
+  let parsed = true;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    parsed = false;
+  }
+
+  if (!parsed) {
+    const signIn = /accounts\.google\.com|Sign in|ServiceLogin/i.test(body);
+    return {
+      ok: false,
+      reason: signIn
+        ? 'Google answered with a sign-in page, not the script'
+        : `the script did not return JSON (HTTP ${response.status})`,
+      host,
+      looksLikeAppsScript,
+      httpStatus: response.status,
+      contentType,
+      bodyStarts: body.slice(0, 180),
+      fix: signIn
+        ? 'In Apps Script: Deploy → Manage deployments → the pencil → "Who has access" must be Anyone (not "Anyone with a Google account"), then Deploy.'
+        : 'The URL is reaching something that is not this web app. Re-copy it from Deploy → Manage deployments.',
+    };
+  }
+
+  if (data?.error) {
+    const unauth = String(data.error).toLowerCase().includes('unauth');
+    return {
+      ok: false,
+      reason: `the script replied with an error: ${data.error}`,
+      host,
+      httpStatus: response.status,
+      scriptVersion: Number(data.version) || 0,
+      fix: unauth
+        ? 'The token does not match. In Apps Script: Project Settings → Script Properties → the token property must equal SHEETS_API_TOKEN in Vercel, exactly.'
+        : 'See the message above — it comes from orders-api.gs.',
+    };
+  }
+
+  const version = Number(data?.version) || 0;
+  return {
+    ok: true,
+    host,
+    httpStatus: response.status,
+    rowsReturned: Array.isArray(data?.orders) ? data.orders.length : 0,
+    trackingColumn: data?.trackingColumn !== false,
+    scriptVersion: version,
+    scriptVersionRequired: REQUIRED_SCRIPT_VERSION,
+    scriptUpToDate: version >= REQUIRED_SCRIPT_VERSION,
+  };
+}
+
 export async function listOrders(): Promise<OrdersResult> {
   const data = await call({ action: 'list' });
   return {

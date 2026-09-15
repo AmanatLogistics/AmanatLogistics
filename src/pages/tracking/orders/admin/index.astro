@@ -76,7 +76,11 @@ if (authed) {
       scriptVersion = result.version;
     } catch (e) {
       console.error('SHIPMENTS sheet failed to load:', e);
-      loadError = 'Could not read the Google Sheet. Check that the Apps Script web app is deployed and the token matches.';
+      // One sentence used to cover four different faults — not deployed, access
+      // not set to "Anyone", a token that doesn't match, a URL pointing at
+      // nothing — and the reason only reached the Vercel logs. Say which.
+      const detail = e instanceof Error ? e.message : String(e);
+      loadError = `Could not read the Google Sheet — ${detail}`;
     }
   }
 }
@@ -182,7 +186,16 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
           {notice}
         </div>
         {actionError && <div class="alert alert-err">{actionError}</div>}
-        {loadError && <div class="alert alert-err">{loadError}</div>}
+        {loadError && (
+          <div class="alert alert-err">
+            {loadError}
+            <br />
+            <a href="/api/orders/status" target="_blank" rel="noopener" style="color:inherit;">
+              Open the connection check
+            </a>{' '}
+            to see exactly what the sheet replied.
+          </div>
+        )}
 
         {/* Apps Script serves the version last DEPLOYED, so an old one keeps
             answering until a new deployment is made. Saying so beats looking
