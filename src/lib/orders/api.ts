@@ -55,7 +55,7 @@ export interface OrdersResult {
  * deployed, so an older one keeps answering until a new deployment is made —
  * this is what lets the admin say so instead of just looking broken.
  */
-export const REQUIRED_SCRIPT_VERSION = 4;
+export const REQUIRED_SCRIPT_VERSION = 5;
 
 export function apiUrl(): string | undefined {
   return env('SHEETS_API_URL');

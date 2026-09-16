@@ -41,7 +41,7 @@ var SHEET_NAME = 'SHIPMENTS';
  * with every reply and shown in the admin, which turns "why is this not
  * working" into "the script is v1, the site wants v3".
  */
-var SCRIPT_VERSION = 4;
+var SCRIPT_VERSION = 5;
 
 /**
  * Tracking number format: AM-0031-INV-062 for ACCI invoice RN-062.
@@ -563,7 +563,29 @@ function readOrders_() {
   return { orders: orders, headers: headers, sheet: sh, headerRow: found.index + 1 };
 }
 
-/** Apply one shipment's changed fields, writing its row in a single call. */
+/** Fields whose sheet value is a date and must be compared as one. */
+var DATE_FIELDS = { invoice_date: true, flight_date: true, estimated_delivery: true };
+function isDateField_(field) {
+  return DATE_FIELDS[field] === true || /^stage_date_\d+$/.test(field);
+}
+
+/**
+ * Apply one shipment's changed fields.
+ *
+ * Writes ONLY the cells that actually changed, one at a time.
+ *
+ * It used to read the whole row, patch a few entries and write the row back in
+ * a single setValues() call. That looks efficient and is quietly destructive:
+ * getValues() hands back a formula's COMPUTED VALUE, never the formula, so
+ * writing the row back replaced this sheet's "Stage No" and "CURRENT STATUS"
+ * formulas with the text they happened to be showing. Every shipment the office
+ * edited lost them, permanently, one row at a time — while the edit form
+ * promised those columns were "written back untouched".
+ *
+ * Touching only the changed cells leaves every other cell exactly as it was,
+ * formulas included. In practice a save changes one or two cells, so this is
+ * also fewer writes than before, not more.
+ */
 function updateOrder_(id, fields) {
   var data = readOrders_();
   var order = null;
@@ -575,29 +597,41 @@ function updateOrder_(id, fields) {
   var headers = data.headers;
   var sh = data.sheet;
   var width = sh.getLastColumn();
-  var row = sh.getRange(order.row, 1, 1, width).getValues()[0];
-  var touched = false;
+  var current = sh.getRange(order.row, 1, 1, width).getValues()[0];
+  var changes = [];
 
-  var write = function (field, value) {
+  var stage = function (field, value) {
     var col = headers[field];
     // A field the sheet has no column for is skipped, never an error.
     if (col === undefined || col >= width) return;
-    row[col] = value == null ? '' : value;
-    touched = true;
+    var next = value == null ? '' : value;
+
+    // A date cell comes back as a Date object while the form sends
+    // 'YYYY-MM-DD'; compare them in the same shape or every save would rewrite
+    // every date it was given.
+    var same = isDateField_(field)
+      ? toIsoDate_(current[col]) === toIsoDate_(next)
+      : String(current[col]).trim() === String(next).trim();
+    if (same) return;
+
+    changes.push({ col: col, value: next });
   };
 
   for (var k = 0; k < WRITABLE.length; k++) {
     if (Object.prototype.hasOwnProperty.call(fields, WRITABLE[k])) {
-      write(WRITABLE[k], fields[WRITABLE[k]]);
+      stage(WRITABLE[k], fields[WRITABLE[k]]);
     }
   }
   for (var n = 1; n <= STAGE_COUNT; n++) {
     var key = 'stage_date_' + n;
-    if (Object.prototype.hasOwnProperty.call(fields, key)) write(key, fields[key]);
+    if (Object.prototype.hasOwnProperty.call(fields, key)) stage(key, fields[key]);
   }
 
-  if (touched) sh.getRange(order.row, 1, 1, width).setValues([row]);
-  return { ok: true };
+  for (var c = 0; c < changes.length; c++) {
+    sh.getRange(order.row, changes[c].col + 1).setValue(changes[c].value);
+  }
+
+  return { ok: true, changed: changes.length };
 }
 
 /* ------------------------------------------------------------------ */
