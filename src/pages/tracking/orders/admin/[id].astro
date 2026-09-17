@@ -160,7 +160,14 @@ if (!authed) {
       </div>
     </TrackerAdminLogin>
   ) : (
-    <TrackerAdminLayout title="Edit shipment">
+    <TrackerAdminLayout
+      title="Edit shipment"
+      subtitle="Orders Admin"
+      home="/tracking/orders/admin"
+      viewLabel="View order lookup"
+      viewHref="/tracking/orders"
+      logoutAction="/api/orders/logout"
+    >
       <div class="page-head">
         <h1>{order ? `Edit — ${order.invoice_number}` : 'Edit shipment'}</h1>
         <a class="btn btn-soft" href="/tracking/orders/admin">← Back to shipments</a>

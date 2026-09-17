@@ -1,0 +1,316 @@
+---
+/**
+ * Quote requests — everyone who has used the contact form.
+ *
+ * Until now an enquiry existed only as an email. This is the record: who asked,
+ * how to reach them, what they want moved, and how far the office has got with
+ * them. Same login as /admin; built on the tracker admin's stylesheet so the
+ * three panels read as one product.
+ */
+import TrackerAdminLayout from '../../layouts/TrackerAdminLayout.astro';
+import TrackerAdminLogin from '../../layouts/TrackerAdminLogin.astro';
+import { isAdmin } from '../../lib/auth';
+import {
+  countByStatus,
+  formatWhen,
+  isConfigured,
+  listRequests,
+  STATUSES,
+  STATUS_LABEL,
+  STATUS_TONE,
+  DB_NOT_CONFIGURED,
+  type QuoteRequest,
+  type Status,
+} from '../../lib/quotes';
+
+export const prerender = false;
+
+const authed = await isAdmin(Astro.request);
+const params = Astro.url.searchParams;
+
+let requests: QuoteRequest[] = [];
+let loadError = '';
+
+if (authed) {
+  if (!isConfigured()) {
+    loadError = DB_NOT_CONFIGURED;
+  } else {
+    try {
+      requests = await listRequests();
+    } catch (e) {
+      console.error('Loading quote requests failed:', e);
+      loadError = `Could not read the requests — ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+}
+
+const counts = countByStatus(requests);
+const filter = (STATUSES as readonly string[]).includes(params.get('status') ?? '')
+  ? (params.get('status') as Status)
+  : '';
+const search = (params.get('q') ?? '').trim();
+
+const notice = params.has('updated')
+  ? 'Status updated.'
+  : params.has('deleted')
+    ? 'Request deleted.'
+    : '';
+
+const tiles: { key: Status | ''; label: string; value: number; tone: string; note: string }[] = [
+  { key: '', label: 'All requests', value: counts.total, tone: 'all', note: 'Everything received' },
+  { key: 'new', label: STATUS_LABEL.new, value: counts.new, tone: STATUS_TONE.new, note: 'Nobody has replied yet' },
+  { key: 'contacted', label: STATUS_LABEL.contacted, value: counts.contacted, tone: STATUS_TONE.contacted, note: 'We have been in touch' },
+  { key: 'quoted', label: STATUS_LABEL.quoted, value: counts.quoted, tone: STATUS_TONE.quoted, note: 'A price has been sent' },
+  { key: 'closed', label: STATUS_LABEL.closed, value: counts.closed, tone: STATUS_TONE.closed, note: 'Won, lost or dropped' },
+];
+
+const searchText = (r: QuoteRequest) =>
+  [r.name, r.email, r.company, r.phone, r.service, r.departure, r.destination, r.product, r.message]
+    .join(' ')
+    .toLowerCase();
+
+const cssSafeSearch = search.toLowerCase().replace(/[^a-z0-9 @._-]/g, '').slice(0, 60);
+
+const filterHref = (next: Status | '') => {
+  const url = new URLSearchParams();
+  if (search) url.set('q', search);
+  if (next) url.set('status', next);
+  const qs = url.toString();
+  return qs ? `/admin/requests?${qs}` : '/admin/requests';
+};
+---
+
+{
+  !authed ? (
+    <TrackerAdminLogin>
+      <div class="login-box">
+        <h1>Quote requests</h1>
+        <p class="lede">Please log in to the website admin to see these.</p>
+        <a class="btn btn-primary" href="/admin" style="width:100%;justify-content:center;">
+          Go to login
+        </a>
+      </div>
+    </TrackerAdminLogin>
+  ) : (
+    <TrackerAdminLayout
+      title="Quote requests"
+      subtitle="Website Admin"
+      home="/admin"
+      viewLabel="View website"
+      viewHref="/"
+      logoutAction="/api/admin/logout"
+    >
+      {cssSafeSearch && (
+        <style
+          id="nojs-search"
+          set:html={`[data-row]:not([data-search*="${cssSafeSearch}"]){display:none}`}
+        />
+      )}
+
+      <div class="dash" data-noun="request" data-filter={filter} data-load-error={loadError ? '1' : '0'}>
+        <div class="page-head">
+          <div>
+            <h1>Quote requests</h1>
+            <p class="page-sub" data-summary data-default="Everyone who has used the contact form — newest first.">
+              Everyone who has used the contact form — newest first.
+            </p>
+          </div>
+          <div class="head-actions">
+            <a class="btn btn-soft" href="/admin">← Back to the website admin</a>
+          </div>
+        </div>
+
+        <div class="alert alert-ok" data-notice hidden={!notice}>{notice}</div>
+        {loadError && <div class="alert alert-err">{loadError}</div>}
+
+        <div class="stat-grid stat-grid-wide">
+          {tiles.map((tile) => (
+            <a
+              class={`stat stat-${tile.tone}${tile.key === filter ? ' is-active' : ''}${
+                tile.value === 0 ? ' is-empty' : ''
+              }`}
+              href={filterHref(tile.key)}
+              data-tile={tile.key}
+              data-astro-prefetch="false"
+              aria-current={tile.key === filter ? 'true' : undefined}
+            >
+              <span class="stat-label">{tile.label}</span>
+              <span class="stat-value" data-count={tile.key || 'total'}>{tile.value}</span>
+              <span class="stat-note">{tile.note}</span>
+            </a>
+          ))}
+        </div>
+
+        <div class="card">
+          <form method="get" class="toolbar" data-toolbar>
+            <div class="field field-search">
+              <label for="q">Search</label>
+              <div class="search-wrap">
+                <svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+                  <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                </svg>
+                <input
+                  id="q"
+                  name="q"
+                  type="search"
+                  value={search}
+                  autocomplete="off"
+                  placeholder="Name, email, phone, company, destination, product"
+                />
+                <button class="search-clear" type="button" data-clear-search hidden aria-label="Clear search">×</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="status">Status</label>
+              <select id="status" name="status" data-status-select>
+                <option value="" selected={filter === ''}>All statuses</option>
+                {STATUSES.map((s) => (
+                  <option value={s} selected={filter === s}>{STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+            </div>
+
+            <div class="toolbar-end">
+              <button class="btn btn-soft" type="submit" data-apply>Apply</button>
+              <a
+                class="btn btn-ghost"
+                href="/admin/requests"
+                data-clear-all
+                data-astro-prefetch="false"
+                hidden={!search && !filter}
+              >
+                Clear filters
+              </a>
+            </div>
+          </form>
+
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Who</th>
+                  <th>Contact</th>
+                  <th>Wants moved</th>
+                  <th>Route</th>
+                  <th>Received</th>
+                  <th>Status</th>
+                  <th class="th-actions">Actions</th>
+                </tr>
+              </thead>
+              <tbody data-rows>
+                {requests.map((r, i) => (
+                  <tr
+                    data-row
+                    data-id={r.id}
+                    data-status={r.status}
+                    data-overdue="0"
+                    data-search={searchText(r)}
+                    data-seq={i}
+                    data-customer={r.name.toLowerCase()}
+                  >
+                    <td data-label="Who">
+                      <span class="cell">
+                        <strong>{r.name}</strong>
+                        <span class="sub">{r.company || '—'}</span>
+                      </span>
+                    </td>
+                    <td data-label="Contact">
+                      <span class="cell">
+                        {/* Clickable: the first thing anyone does here is reply. */}
+                        <a href={`mailto:${r.email}`}>{r.email}</a>
+                        <span class="sub">
+                          {r.phone ? <a href={`tel:${r.phone.replace(/[^\d+]/g, '')}`}>{r.phone}</a> : '—'}
+                        </span>
+                      </span>
+                    </td>
+                    <td data-label="Wants moved">
+                      <span class="cell">
+                        {r.product || '—'}
+                        <span class="sub">{r.service || '—'}</span>
+                      </span>
+                    </td>
+                    <td data-label="Route">
+                      <span class="cell">
+                        {r.destination || '—'}
+                        <span class="sub">{r.departure ? `from ${r.departure}` : ''}</span>
+                      </span>
+                    </td>
+                    <td data-label="Received">
+                      <span class="cell">
+                        <span class="nowrap">{formatWhen(r.created_at)}</span>
+                        <span class="sub">{r.emailed ? 'emailed' : 'not emailed'}</span>
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <span class="status-cell">
+                        <span class="badges">
+                          <span class={`badge badge-${STATUS_TONE[r.status]}`} data-badge>
+                            {STATUS_LABEL[r.status]}
+                          </span>
+                        </span>
+                      </span>
+                    </td>
+                    <td class="actions">
+                      <div class="actions-inner">
+                        <form method="post" action="/api/admin/request-status">
+                          <input type="hidden" name="id" value={r.id} />
+                          <select name="status" class="status-pick" aria-label={`Status for ${r.name}`}>
+                            {STATUSES.map((s) => (
+                              <option value={s} selected={s === r.status}>{STATUS_LABEL[s]}</option>
+                            ))}
+                          </select>
+                          <button class="btn btn-soft" type="submit">Set</button>
+                        </form>
+                        <form
+                          method="post"
+                          action="/api/admin/request-delete"
+                          onsubmit="return confirm('Delete this request permanently?')"
+                        >
+                          <input type="hidden" name="id" value={r.id} />
+                          <button class="btn btn-ghost" type="submit">Delete</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                <tr data-empty hidden={requests.length > 0}>
+                  <td colspan="7" class="empty" data-empty-text>
+                    {loadError
+                      ? 'Requests could not be loaded.'
+                      : 'No quote requests yet. They will appear here the moment someone uses the contact form.'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* The message is long-form, so it sits under the table rather than in it. */}
+        {requests.some((r) => r.message) && (
+          <div class="card" style="margin-top:18px;">
+            <div class="section-title">
+              Messages
+              <span class="note">What each person wrote, in their own words.</span>
+            </div>
+            {requests
+              .filter((r) => r.message)
+              .map((r) => (
+                <div data-row data-search={searchText(r)} data-status={r.status} style="padding:12px 0;border-bottom:1px solid var(--line);">
+                  <strong>{r.name}</strong>{' '}
+                  <span class="sub">· {formatWhen(r.created_at)}</span>
+                  <p style="margin:6px 0 0;white-space:pre-wrap;">{r.message}</p>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </TrackerAdminLayout>
+  )
+}
+
+<script>
+  import { initDashboard } from '../../scripts/tracker-dashboard';
+  initDashboard();
+</script>

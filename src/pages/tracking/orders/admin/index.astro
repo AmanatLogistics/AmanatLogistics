@@ -15,6 +15,12 @@
  *
  * Nothing on this page reloads it: Refresh, Edit and Save all go out by fetch
  * and swap what changed back in — see scripts/orders-admin.ts.
+ *
+ * The layout is given this panel's own chrome and, importantly, its own logout
+ * action. It kept the shared default, which posts to /api/tracker/logout — so
+ * pressing Log out here cleared the tracker's cookie and left this session
+ * untouched: you stayed signed in, and were signed out of a panel you were not
+ * even looking at.
  */
 import TrackerAdminLayout from '../../../../layouts/TrackerAdminLayout.astro';
 import TrackerAdminLogin from '../../../../layouts/TrackerAdminLogin.astro';
@@ -156,7 +162,14 @@ const tiles: { key: Group | ''; label: string; value: number; tone: string; note
       </div>
     </TrackerAdminLogin>
   ) : (
-    <TrackerAdminLayout title="Shipments">
+    <TrackerAdminLayout
+      title="Shipments"
+      subtitle="Orders Admin"
+      home="/tracking/orders/admin"
+      viewLabel="View order lookup"
+      viewHref="/tracking/orders"
+      logoutAction="/api/orders/logout"
+    >
       {cssSafeSearch && (
         <style
           id="nojs-search"

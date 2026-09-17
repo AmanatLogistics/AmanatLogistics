@@ -799,6 +799,24 @@ td .date {
 .progress i.bar-purple { background: var(--purple); }
 .progress i.bar-orange { background: var(--orange); }
 
+/* The status picker sits inside the actions column, beside its Set button. */
+.status-pick {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.actions-inner form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+}
+
 /* Codes that must not be split: a hyphen or a space is a legal break point, so
    "098-11223344" and "3345 KDR" were being cut across two lines. */
 .nowrap {

@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { Resend } from 'resend';
 import { env, getContent } from '../../lib/store';
+import { saveRequest } from '../../lib/quotes';
 
 // On-demand (server) route.
 export const prerender = false;
@@ -51,9 +52,42 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'Please enter a valid email address.' }, 400);
   }
 
+  const service = field(data.service, 80);
+
+  /**
+   * Record the enquiry before trying to send anything.
+   *
+   * An email is a notification, not a record: if it is missed, filtered or
+   * deleted, nobody can say afterwards who asked, for what, or whether anyone
+   * replied. Writing it down first means an enquiry survives the mail failing —
+   * which is also why a failure here is logged but never returned: losing the
+   * record is bad, losing the enquiry would be worse.
+   */
+  const record = {
+    name,
+    email,
+    company: field(data.company, 160),
+    phone: field(data.phone, 60),
+    service,
+    departure: field(data.departure, 120),
+    destination: field(data.destination, 120),
+    product: field(data.product, 200),
+    message: field(data.message, 4000),
+  };
+
+  let saved: number | null = null;
+  try {
+    saved = await saveRequest(record);
+  } catch (e) {
+    console.error('Could not record the quote request:', e);
+  }
+
   const apiKey = env('RESEND_API_KEY');
   if (!apiKey) {
     console.error('RESEND_API_KEY is not set.');
+    // The enquiry is safe in the admin even when mail is not configured, so
+    // the visitor should not be told to go away and email us instead.
+    if (saved) return json({ ok: true });
     return json({ error: 'Email service not configured yet. Please email info@amanatlogistics.com directly.' }, 500);
   }
 
@@ -64,17 +98,16 @@ export const POST: APIRoute = async ({ request }) => {
   const from = env('MAIL_FROM') || 'Amanat Logistics <onboarding@resend.dev>';
   const to = env('MAIL_TO') || (await getContent()).contact.email || 'info@amanatlogistics.com';
 
-  const service = field(data.service, 80);
   const fields: Array<[string, string]> = [
-    ['Name', name],
-    ['Company / Organization', field(data.company, 160) || '—'],
-    ['Email', email],
-    ['Phone', field(data.phone, 60) || '—'],
-    ['Service', service || '—'],
-    ['Departure', field(data.departure, 120) || '—'],
-    ['Destination Country', field(data.destination, 120) || '—'],
-    ['Product & Est. Weight', field(data.product, 200) || '—'],
-    ['Message', field(data.message, 4000) || '—'],
+    ['Name', record.name],
+    ['Company / Organization', record.company || '—'],
+    ['Email', record.email],
+    ['Phone', record.phone || '—'],
+    ['Service', record.service || '—'],
+    ['Departure', record.departure || '—'],
+    ['Destination Country', record.destination || '—'],
+    ['Product & Est. Weight', record.product || '—'],
+    ['Message', record.message || '—'],
   ];
 
   const rows = fields
