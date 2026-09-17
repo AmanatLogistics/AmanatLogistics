@@ -8,7 +8,7 @@ import { liveStats, roundedPlus } from '../lib/orders/stats';
 
 export const prerender = false;
 
-const { hero, stats: adminStats, services, why, destinations } = await getContent();
+const { hero, stats: adminStats, services, why, destinations, exports: EXPORTS } = await getContent();
 
 /**
  * A trust number whose value is the word "auto" is worked out from the
@@ -155,33 +155,126 @@ const countryList =
         <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">Two services. One standard of trust.</h2>
       </div>
       <div class="grid grid-cols-1 gap-8 md:grid-cols-2">
+        <!--
+          Each card now opens with a photograph of the work it describes. They
+          were flat blocks of colour with a line-drawing on them: the page's two
+          most important links, and the least to look at on the whole screen.
+          The tint over the picture keeps the type as readable as it was.
+        -->
         <!-- Export & Freight -->
-        <div class="flex flex-col gap-5 rounded-xl bg-plum p-9 shadow-[0_8px_28px_rgba(61,34,51,0.18)] md:p-11 reveal">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <rect x="8" y="16" width="32" height="24" rx="2" stroke="#D6B676" stroke-width="2"></rect>
-            <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
-            <path d="M20 8 L28 8 L28 16 L20 16 Z" stroke="#D6B676" stroke-width="2"></path>
-          </svg>
-          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F8F3E9] md:text-[27px]">{services.exportTitle}</h3>
-          <p class="m-0 text-[16px] leading-relaxed text-[#CDBBB0]">{services.exportText}</p>
-          <a href="/services" class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F8F3E9]">
-            Learn More <span class="text-[17px]">→</span>
-          </a>
-        </div>
+        <a
+          href="/services"
+          class="group relative flex min-h-[380px] flex-col justify-end overflow-hidden rounded-xl bg-plum shadow-[0_8px_28px_rgba(61,34,51,0.18)] reveal"
+        >
+          <ImageFrame
+            src="/images/gallery/loading.jpg"
+            alt=""
+            label="EXPORT & FREIGHT"
+            class="absolute inset-0 h-full w-full transition-transform duration-700 group-hover:scale-105"
+          />
+          <div
+            class="pointer-events-none absolute inset-0"
+            style="background:linear-gradient(0deg,rgba(61,34,51,0.96) 12%,rgba(61,34,51,0.74) 48%,rgba(61,34,51,0.30));"
+          ></div>
+          <div class="relative flex flex-col gap-4 p-9 md:p-11">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <rect x="8" y="16" width="32" height="24" rx="2" stroke="#D6B676" stroke-width="2"></rect>
+              <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
+              <path d="M20 8 L28 8 L28 16 L20 16 Z" stroke="#D6B676" stroke-width="2"></path>
+            </svg>
+            <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F8F3E9] md:text-[27px]">{services.exportTitle}</h3>
+            <p class="m-0 text-[16px] leading-relaxed text-[#E0D2CA]">{services.exportText}</p>
+            <span class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors group-hover:text-[#F8F3E9]">
+              Learn More <span class="text-[17px] transition-transform group-hover:translate-x-1">→</span>
+            </span>
+          </div>
+        </a>
+        <!--
+          No photograph here on purpose. The only picture available for it,
+          shopping-parcels.jpg, is the very same air-cargo shot used on the card
+          to its left — the two side by side read as a mistake. A clean block of
+          colour beside a photograph is a deliberate pair; the same picture twice
+          is not. Give this one a photo of its own and it can match.
+        -->
         <!-- Personal Shopping -->
-        <div class="flex flex-col gap-5 rounded-xl bg-olive p-9 shadow-[0_8px_28px_rgba(67,80,58,0.18)] md:p-11 reveal">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <circle cx="24" cy="24" r="16" stroke="#D6B676" stroke-width="2"></circle>
-            <ellipse cx="24" cy="24" rx="7" ry="16" stroke="#D6B676" stroke-width="2"></ellipse>
-            <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
-          </svg>
-          <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F5F3EA] md:text-[27px]">{services.shoppingTitle}</h3>
-          <p class="m-0 text-[16px] leading-relaxed text-[#C9CDBB]">{services.shoppingText}</p>
-          <a href="/services" class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F5F3EA]">
-            Learn More <span class="text-[17px]">→</span>
-          </a>
-        </div>
+        <a
+          href="/services"
+          class="group relative flex min-h-[380px] flex-col justify-end overflow-hidden rounded-xl bg-olive shadow-[0_8px_28px_rgba(67,80,58,0.18)] reveal"
+        >
+          <div
+            class="pointer-events-none absolute inset-0 opacity-[0.16]"
+            style="background-image:radial-gradient(circle at 1px 1px, #F5F3EA 1px, transparent 0);background-size:22px 22px;"
+          ></div>
+          <div class="relative flex flex-col gap-4 p-9 md:p-11">
+            <svg width="40" height="40" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+              <circle cx="24" cy="24" r="16" stroke="#D6B676" stroke-width="2"></circle>
+              <ellipse cx="24" cy="24" rx="7" ry="16" stroke="#D6B676" stroke-width="2"></ellipse>
+              <path d="M8 24 H40" stroke="#D6B676" stroke-width="2"></path>
+            </svg>
+            <h3 class="m-0 font-serif text-[24px] font-bold leading-tight text-[#F5F3EA] md:text-[27px]">{services.shoppingTitle}</h3>
+            <p class="m-0 text-[16px] leading-relaxed text-[#D4D8C6]">{services.shoppingText}</p>
+            <span class="mt-1 flex items-center gap-2 text-[15px] font-semibold text-gold-light transition-colors group-hover:text-[#F5F3EA]">
+              Learn More <span class="text-[17px] transition-transform group-hover:translate-x-1">→</span>
+            </span>
+          </div>
+        </a>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ WHAT WE EXPORT ============ -->
+  <!--
+    The home page of a dried-fruit exporter showed no fruit. Five product
+    photographs already existed and only ever appeared on /services, which meant
+    the one thing a buyer comes here to see was two clicks away. This puts the
+    produce on the front page, where it sells.
+  -->
+  <section class="bg-sand">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-[88px]">
+      <div class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end reveal">
+        <div class="flex max-w-[640px] flex-col gap-4">
+          <Eyebrow text="What We Export" />
+          <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">
+            Kandahar's orchards, graded and ready to ship.
+          </h2>
+        </div>
+        <a
+          href="/services"
+          class="flex flex-none items-center gap-2 text-[15px] font-semibold text-accent-deep transition-colors hover:text-plum"
+        >
+          See the full range <span class="text-[17px]">→</span>
+        </a>
+      </div>
+
+      <!--
+        Five across on a wide screen, two on a phone. The last card spans both
+        columns when the count is odd, so the row never ends on a gap.
+      -->
+      <ul class="m-0 grid list-none grid-cols-2 gap-4 p-0 sm:grid-cols-3 lg:grid-cols-5 md:gap-5">
+        {
+          EXPORTS.map((e) => (
+            <li class="group relative overflow-hidden rounded-xl border border-line bg-paper reveal last:max-sm:col-span-2">
+              <div class="overflow-hidden">
+                <ImageFrame
+                  src={e.img}
+                  alt={e.alt}
+                  label={e.name}
+                  sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 230px"
+                  class="h-[170px] w-full transition-transform duration-500 group-hover:scale-[1.06] md:h-[210px]"
+                />
+              </div>
+              {/* The label sits over the foot of the picture, so the eye reads
+                  the produce first and the name second. */}
+              <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-3.5 pt-10"
+                style="background:linear-gradient(0deg,rgba(43,20,35,0.88),rgba(43,20,35,0.35) 55%,rgba(43,20,35,0));"
+              >
+                <span class="font-serif text-[17px] font-bold text-[#F8F3E9] md:text-[18px]">{e.name}</span>
+              </div>
+            </li>
+          ))
+        }
+      </ul>
     </div>
   </section>
 

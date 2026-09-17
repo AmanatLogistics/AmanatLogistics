@@ -12,6 +12,9 @@ interface Asset {
   w: number;
   h: number;
   webp?: string;
+  /** A narrow variant, for pictures only ever shown small. */
+  small?: string;
+  smallW?: number;
 }
 
 interface Props {
@@ -23,9 +26,15 @@ interface Props {
   /** extra classes for sizing (height, rounding, etc.) */
   class?: string;
   loading?: 'lazy' | 'eager';
+  /**
+   * How wide this picture will actually be, so the browser can pick the
+   * narrow variant on a phone instead of downloading the full-size file.
+   * Only worth giving where the image is shown small.
+   */
+  sizes?: string;
 }
 
-const { src, alt = '', label = 'IMAGE', tone = 'cream', class: klass = '', loading = 'lazy' } = Astro.props;
+const { src, alt = '', label = 'IMAGE', tone = 'cream', class: klass = '', loading = 'lazy', sizes } = Astro.props;
 
 /**
  * What scripts/optimise-images.mjs found: a WebP sibling and the real pixel
@@ -36,6 +45,17 @@ const { src, alt = '', label = 'IMAGE', tone = 'cream', class: klass = '', loadi
  * reserve the space, and the gallery visibly jumped as its pictures arrived.
  */
 const asset = src ? (manifest as Record<string, Asset | undefined>)[src] : undefined;
+
+/**
+ * Offer both widths when there is a narrow variant and the page has said how
+ * wide the picture will be. Without a `sizes` hint the browser assumes full
+ * viewport width and would pick the large file anyway, so there is no point
+ * emitting a srcset then.
+ */
+const srcset =
+  asset?.webp && asset.small && sizes
+    ? `${asset.small} ${asset.smallW}w, ${asset.webp} ${asset.w}w`
+    : asset?.webp;
 
 const tones: Record<string, { pattern: string; text: string; border: string }> = {
   cream: {
@@ -85,7 +105,7 @@ const isAbsolute = klass.includes('absolute');
       /* <picture> rather than a bare <img>: browsers that take WebP get the
          smaller file, everything else falls back to the original untouched. */
       <picture>
-        {asset?.webp && <source srcset={asset.webp} type="image/webp" />}
+        {srcset && <source srcset={srcset} sizes={sizes} type="image/webp" />}
         <img
           src={src}
           alt={alt}

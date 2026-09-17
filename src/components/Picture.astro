@@ -16,6 +16,9 @@ interface Asset {
   w: number;
   h: number;
   webp?: string;
+  /** A narrow variant, for pictures only ever shown small. */
+  small?: string;
+  smallW?: number;
 }
 
 interface Props {
@@ -23,15 +26,32 @@ interface Props {
   alt: string;
   class?: string;
   loading?: 'lazy' | 'eager';
+  /**
+   * How wide this picture will actually be, so the browser can pick the
+   * narrow variant on a phone instead of downloading the full-size file.
+   * Only worth giving where the image is shown small.
+   */
+  sizes?: string;
   /** Passed straight through — used for the marketplace logo fallback. */
   onerror?: string;
 }
-const { src, alt, class: klass = '', loading = 'lazy', onerror } = Astro.props;
+const { src, alt, class: klass = '', loading = 'lazy', onerror, sizes } = Astro.props;
 const asset = (manifest as Record<string, Asset | undefined>)[src];
+
+/**
+ * Offer both widths when there is a narrow variant and the page has said how
+ * wide the picture will be. Without a `sizes` hint the browser assumes full
+ * viewport width and would pick the large file anyway, so there is no point
+ * emitting a srcset then.
+ */
+const srcset =
+  asset?.webp && asset.small && sizes
+    ? `${asset.small} ${asset.smallW}w, ${asset.webp} ${asset.w}w`
+    : asset?.webp;
 ---
 
 <picture>
-  {asset?.webp && <source srcset={asset.webp} type="image/webp" />}
+  {srcset && <source srcset={srcset} sizes={sizes} type="image/webp" />}
   <img
     src={src}
     alt={alt}

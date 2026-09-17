@@ -20,6 +20,12 @@ import path from 'node:path';
 const ROOT = 'public/images';
 const MANIFEST = 'src/lib/image-manifest.json';
 const QUALITY = 78; // visually indistinguishable here, ~40% smaller than the JPEG
+/**
+ * A narrow variant for pictures that are only ever shown small — the product
+ * tiles run five across and are about 215px wide, so an 800px file is four
+ * times more than the screen can use, even allowing for a retina display.
+ */
+const SMALL_WIDTH = 480;
 
 const walk = async (dir) => {
   const out = [];
@@ -46,6 +52,17 @@ for (const file of files) {
   const useWebp = webp.length < buf.length * 0.95;
   if (useWebp) await writeFile(webpPath, webp);
 
+  // Worth a narrow variant only when the original is comfortably wider than it.
+  let small;
+  if (useWebp && (meta.width ?? 0) > SMALL_WIDTH * 1.35) {
+    const smallPath = file.replace(/\.(jpe?g|png)$/i, `-${SMALL_WIDTH}.webp`);
+    await writeFile(
+      smallPath,
+      await sharp(buf).resize({ width: SMALL_WIDTH }).webp({ quality: QUALITY }).toBuffer(),
+    );
+    small = '/' + path.relative('public', smallPath).split(path.sep).join('/');
+  }
+
   before += buf.length;
   after += useWebp ? webp.length : buf.length;
 
@@ -53,6 +70,7 @@ for (const file of files) {
     w: meta.width,
     h: meta.height,
     ...(useWebp ? { webp: '/' + path.relative('public', webpPath).split(path.sep).join('/') } : {}),
+    ...(small ? { small, smallW: SMALL_WIDTH } : {}),
   };
 }
 

@@ -2,12 +2,16 @@
   "/images/about-header.jpg": {
     "w": 2200,
     "h": 900,
-    "webp": "/images/about-header.webp"
+    "webp": "/images/about-header.webp",
+    "small": "/images/about-header-480.webp",
+    "smallW": 480
   },
   "/images/about-story.jpg": {
     "w": 1100,
     "h": 1000,
-    "webp": "/images/about-story.webp"
+    "webp": "/images/about-story.webp",
+    "small": "/images/about-story-480.webp",
+    "smallW": 480
   },
   "/images/brand-logo-white.png": {
     "w": 249,
@@ -22,97 +26,135 @@
   "/images/exports/dried-fruits.jpg": {
     "w": 800,
     "h": 700,
-    "webp": "/images/exports/dried-fruits.webp"
+    "webp": "/images/exports/dried-fruits.webp",
+    "small": "/images/exports/dried-fruits-480.webp",
+    "smallW": 480
   },
   "/images/exports/figs.jpg": {
     "w": 800,
     "h": 700,
-    "webp": "/images/exports/figs.webp"
+    "webp": "/images/exports/figs.webp",
+    "small": "/images/exports/figs-480.webp",
+    "smallW": 480
   },
   "/images/exports/fresh-fruits.jpg": {
     "w": 800,
     "h": 700,
-    "webp": "/images/exports/fresh-fruits.webp"
+    "webp": "/images/exports/fresh-fruits.webp",
+    "small": "/images/exports/fresh-fruits-480.webp",
+    "smallW": 480
   },
   "/images/exports/nuts.jpg": {
     "w": 800,
     "h": 700,
-    "webp": "/images/exports/nuts.webp"
+    "webp": "/images/exports/nuts.webp",
+    "small": "/images/exports/nuts-480.webp",
+    "smallW": 480
   },
   "/images/exports/other.jpg": {
     "w": 800,
     "h": 700,
-    "webp": "/images/exports/other.webp"
+    "webp": "/images/exports/other.webp",
+    "small": "/images/exports/other-480.webp",
+    "smallW": 480
   },
   "/images/gallery/boxes.jpg": {
     "w": 900,
     "h": 720,
-    "webp": "/images/gallery/boxes.webp"
+    "webp": "/images/gallery/boxes.webp",
+    "small": "/images/gallery/boxes-480.webp",
+    "smallW": 480
   },
   "/images/gallery/cold-storage.jpg": {
     "w": 900,
     "h": 820,
-    "webp": "/images/gallery/cold-storage.webp"
+    "webp": "/images/gallery/cold-storage.webp",
+    "small": "/images/gallery/cold-storage-480.webp",
+    "smallW": 480
   },
   "/images/gallery/container.jpg": {
     "w": 900,
     "h": 860,
-    "webp": "/images/gallery/container.webp"
+    "webp": "/images/gallery/container.webp",
+    "small": "/images/gallery/container-480.webp",
+    "smallW": 480
   },
   "/images/gallery/figs.jpg": {
     "w": 900,
     "h": 1100,
-    "webp": "/images/gallery/figs.webp"
+    "webp": "/images/gallery/figs.webp",
+    "small": "/images/gallery/figs-480.webp",
+    "smallW": 480
   },
   "/images/gallery/loading.jpg": {
     "w": 900,
     "h": 900,
-    "webp": "/images/gallery/loading.webp"
+    "webp": "/images/gallery/loading.webp",
+    "small": "/images/gallery/loading-480.webp",
+    "smallW": 480
   },
   "/images/gallery/nuts.jpg": {
     "w": 900,
     "h": 1050,
-    "webp": "/images/gallery/nuts.webp"
+    "webp": "/images/gallery/nuts.webp",
+    "small": "/images/gallery/nuts-480.webp",
+    "smallW": 480
   },
   "/images/gallery/packing.jpg": {
     "w": 900,
     "h": 930,
-    "webp": "/images/gallery/packing.webp"
+    "webp": "/images/gallery/packing.webp",
+    "small": "/images/gallery/packing-480.webp",
+    "smallW": 480
   },
   "/images/gallery/pallets.jpg": {
     "w": 900,
     "h": 720,
-    "webp": "/images/gallery/pallets.webp"
+    "webp": "/images/gallery/pallets.webp",
+    "small": "/images/gallery/pallets-480.webp",
+    "smallW": 480
   },
   "/images/gallery/pomegranates.jpg": {
     "w": 900,
     "h": 900,
-    "webp": "/images/gallery/pomegranates.webp"
+    "webp": "/images/gallery/pomegranates.webp",
+    "small": "/images/gallery/pomegranates-480.webp",
+    "smallW": 480
   },
   "/images/gallery/raisins.jpg": {
     "w": 900,
     "h": 760,
-    "webp": "/images/gallery/raisins.webp"
+    "webp": "/images/gallery/raisins.webp",
+    "small": "/images/gallery/raisins-480.webp",
+    "smallW": 480
   },
   "/images/gallery/truck.jpg": {
     "w": 900,
     "h": 1050,
-    "webp": "/images/gallery/truck.webp"
+    "webp": "/images/gallery/truck.webp",
+    "small": "/images/gallery/truck-480.webp",
+    "smallW": 480
   },
   "/images/gallery/warehouse.jpg": {
     "w": 900,
     "h": 760,
-    "webp": "/images/gallery/warehouse.webp"
+    "webp": "/images/gallery/warehouse.webp",
+    "small": "/images/gallery/warehouse-480.webp",
+    "smallW": 480
   },
   "/images/hero-home.jpg": {
     "w": 2200,
     "h": 1200,
-    "webp": "/images/hero-home.webp"
+    "webp": "/images/hero-home.webp",
+    "small": "/images/hero-home-480.webp",
+    "smallW": 480
   },
   "/images/og-image.jpg": {
     "w": 1200,
     "h": 630,
-    "webp": "/images/og-image.webp"
+    "webp": "/images/og-image.webp",
+    "small": "/images/og-image-480.webp",
+    "smallW": 480
   },
   "/images/platforms/aliexpress.png": {
     "w": 80,
@@ -132,6 +174,8 @@
   "/images/shopping-parcels.jpg": {
     "w": 1100,
     "h": 760,
-    "webp": "/images/shopping-parcels.webp"
+    "webp": "/images/shopping-parcels.webp",
+    "small": "/images/shopping-parcels-480.webp",
+    "smallW": 480
   }
 }
