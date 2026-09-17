@@ -4,10 +4,50 @@ import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
 import RouteMap from '../components/RouteMap.astro';
 import { getContent } from '../lib/store';
+import { liveStats, roundedPlus } from '../lib/orders/stats';
 
 export const prerender = false;
 
-const { hero, stats: STATS, services, why, destinations } = await getContent();
+const { hero, stats: adminStats, services, why, destinations } = await getContent();
+
+/**
+ * A trust number whose value is the word "auto" is worked out from the
+ * SHIPMENTS sheet instead of being typed in, so it stays true on its own.
+ * Which figure it takes is read from the stat's own label — tonnes for one
+ * about weight, completed shipments for one about orders.
+ *
+ * Opt-in on purpose, rather than simply taking over. The sheet holds the
+ * shipments it holds: if it covers the last few months rather than the whole
+ * history of the business, switching these over automatically would have
+ * quietly replaced "1,200+ Orders Completed" on the public home page with the
+ * handful the sheet knows about. That is the office's call to make, one stat at
+ * a time, in /admin → Trust numbers.
+ *
+ * Anything else — the sheet unreachable, a label that matches nothing — leaves
+ * the admin's own figure in place. A visitor never sees a failure.
+ */
+const wantsLive = adminStats.some((s) => s.value.trim().toLowerCase() === 'auto');
+const live = wantsLive ? await liveStats() : null;
+
+const fromSheet = (label: string): string | null => {
+  if (!live) return null;
+  const l = label.toLowerCase();
+  if (l.includes('ton')) return roundedPlus(live.tonnes);
+  if (l.includes('order') || l.includes('shipment') || l.includes('deliver')) {
+    return roundedPlus(live.delivered);
+  }
+  return null;
+};
+
+const STATS = adminStats
+  .map((stat) => {
+    if (stat.value.trim().toLowerCase() !== 'auto') return stat;
+    return { ...stat, value: fromSheet(stat.label) };
+  })
+  // A stat asking for a live figure that cannot be had — the sheet unreachable,
+  // or a label matching none of them — is dropped rather than shown as a dash.
+  // Three honest numbers read better than four with a hole in them.
+  .filter((stat): stat is { value: string; label: string } => Boolean(stat.value));
 
 // "India, Canada, United Kingdom & United States" — built from the live list
 const names = destinations.map((d) => d.name);
