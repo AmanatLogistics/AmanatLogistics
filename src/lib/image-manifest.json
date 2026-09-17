@@ -1,0 +1,137 @@
+{
+  "/images/about-header.jpg": {
+    "w": 2200,
+    "h": 900,
+    "webp": "/images/about-header.webp"
+  },
+  "/images/about-story.jpg": {
+    "w": 1100,
+    "h": 1000,
+    "webp": "/images/about-story.webp"
+  },
+  "/images/brand-logo-white.png": {
+    "w": 249,
+    "h": 238,
+    "webp": "/images/brand-logo-white.webp"
+  },
+  "/images/brand-logo.png": {
+    "w": 511,
+    "h": 490,
+    "webp": "/images/brand-logo.webp"
+  },
+  "/images/exports/dried-fruits.jpg": {
+    "w": 800,
+    "h": 700,
+    "webp": "/images/exports/dried-fruits.webp"
+  },
+  "/images/exports/figs.jpg": {
+    "w": 800,
+    "h": 700,
+    "webp": "/images/exports/figs.webp"
+  },
+  "/images/exports/fresh-fruits.jpg": {
+    "w": 800,
+    "h": 700,
+    "webp": "/images/exports/fresh-fruits.webp"
+  },
+  "/images/exports/nuts.jpg": {
+    "w": 800,
+    "h": 700,
+    "webp": "/images/exports/nuts.webp"
+  },
+  "/images/exports/other.jpg": {
+    "w": 800,
+    "h": 700,
+    "webp": "/images/exports/other.webp"
+  },
+  "/images/gallery/boxes.jpg": {
+    "w": 900,
+    "h": 720,
+    "webp": "/images/gallery/boxes.webp"
+  },
+  "/images/gallery/cold-storage.jpg": {
+    "w": 900,
+    "h": 820,
+    "webp": "/images/gallery/cold-storage.webp"
+  },
+  "/images/gallery/container.jpg": {
+    "w": 900,
+    "h": 860,
+    "webp": "/images/gallery/container.webp"
+  },
+  "/images/gallery/figs.jpg": {
+    "w": 900,
+    "h": 1100,
+    "webp": "/images/gallery/figs.webp"
+  },
+  "/images/gallery/loading.jpg": {
+    "w": 900,
+    "h": 900,
+    "webp": "/images/gallery/loading.webp"
+  },
+  "/images/gallery/nuts.jpg": {
+    "w": 900,
+    "h": 1050,
+    "webp": "/images/gallery/nuts.webp"
+  },
+  "/images/gallery/packing.jpg": {
+    "w": 900,
+    "h": 930,
+    "webp": "/images/gallery/packing.webp"
+  },
+  "/images/gallery/pallets.jpg": {
+    "w": 900,
+    "h": 720,
+    "webp": "/images/gallery/pallets.webp"
+  },
+  "/images/gallery/pomegranates.jpg": {
+    "w": 900,
+    "h": 900,
+    "webp": "/images/gallery/pomegranates.webp"
+  },
+  "/images/gallery/raisins.jpg": {
+    "w": 900,
+    "h": 760,
+    "webp": "/images/gallery/raisins.webp"
+  },
+  "/images/gallery/truck.jpg": {
+    "w": 900,
+    "h": 1050,
+    "webp": "/images/gallery/truck.webp"
+  },
+  "/images/gallery/warehouse.jpg": {
+    "w": 900,
+    "h": 760,
+    "webp": "/images/gallery/warehouse.webp"
+  },
+  "/images/hero-home.jpg": {
+    "w": 2200,
+    "h": 1200,
+    "webp": "/images/hero-home.webp"
+  },
+  "/images/og-image.jpg": {
+    "w": 1200,
+    "h": 630,
+    "webp": "/images/og-image.webp"
+  },
+  "/images/platforms/aliexpress.png": {
+    "w": 80,
+    "h": 80,
+    "webp": "/images/platforms/aliexpress.webp"
+  },
+  "/images/platforms/amazon.png": {
+    "w": 200,
+    "h": 60,
+    "webp": "/images/platforms/amazon.webp"
+  },
+  "/images/platforms/laam.png": {
+    "w": 200,
+    "h": 56,
+    "webp": "/images/platforms/laam.webp"
+  },
+  "/images/shopping-parcels.jpg": {
+    "w": 1100,
+    "h": 760,
+    "webp": "/images/shopping-parcels.webp"
+  }
+}

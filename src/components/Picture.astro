@@ -1,0 +1,46 @@
+---
+/**
+ * A plain image that still gets the WebP and the intrinsic size.
+ *
+ * ImageFrame is for photos that need the dashed placeholder behind them; this
+ * is for the ones that don't — the logos in the header and footer, the
+ * marketplace marks. They appear on every page, so serving them as WebP with
+ * their size declared is worth more here than anywhere else.
+ *
+ * A src the manifest has never seen (a photo uploaded through /admin) renders
+ * as an ordinary <img>, exactly as it did before.
+ */
+import manifest from '../lib/image-manifest.json';
+
+interface Asset {
+  w: number;
+  h: number;
+  webp?: string;
+}
+
+interface Props {
+  src: string;
+  alt: string;
+  class?: string;
+  loading?: 'lazy' | 'eager';
+  /** Passed straight through — used for the marketplace logo fallback. */
+  onerror?: string;
+}
+const { src, alt, class: klass = '', loading = 'lazy', onerror } = Astro.props;
+const asset = (manifest as Record<string, Asset | undefined>)[src];
+---
+
+<picture>
+  {asset?.webp && <source srcset={asset.webp} type="image/webp" />}
+  <img
+    src={src}
+    alt={alt}
+    width={asset?.w}
+    height={asset?.h}
+    loading={loading}
+    decoding="async"
+    fetchpriority={loading === 'eager' ? 'high' : 'auto'}
+    class={klass}
+    onerror={onerror}
+  />
+</picture>

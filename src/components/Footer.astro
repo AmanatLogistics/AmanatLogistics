@@ -1,5 +1,6 @@
 ---
 import { SITE, NAV } from '../consts';
+import Picture from './Picture.astro';
 import SwallowMark from './SwallowMark.astro';
 import { getContent } from '../lib/store';
 
@@ -17,7 +18,7 @@ const siteLinks = NAV.filter((n) => n.href !== '/contact');
         <div class="flex items-center gap-3">
           {
             footerLogo ? (
-              <img src={footerLogo} alt={SITE.name} class="h-14 w-auto max-w-[260px] object-contain" />
+              <Picture src={footerLogo} alt={SITE.name} class="h-14 w-auto max-w-[260px] object-contain" />
             ) : (
               <>
                 <SwallowMark class="w-11 text-[#F8F3E9]" />

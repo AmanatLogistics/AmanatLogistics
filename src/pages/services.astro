@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Picture from '../components/Picture.astro';
 import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
 import { getContent } from '../lib/store';
@@ -121,10 +122,9 @@ const steps = shoppingSteps.map((s, i) => ({ ...s, n: String(i + 1) }));
           {
             PLATFORMS.map((p) => (
               <span class="flex h-12 w-[128px] items-center justify-center rounded-md bg-white px-4 shadow-sm">
-                <img
+                <Picture
                   src={p.img}
                   alt={`${p.name} logo`}
-                  loading="lazy"
                   class="max-h-7 max-w-full object-contain"
                   onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'font-semibold text-[13px] text-[#5A5147]',textContent:this.alt.replace(' logo','')}))"
                 />

@@ -6,6 +6,14 @@
  *   from the design shows instead (the <img> removes itself on error).
  * Swap in real photos by dropping files into /public/images/… — no code change.
  */
+import manifest from '../lib/image-manifest.json';
+
+interface Asset {
+  w: number;
+  h: number;
+  webp?: string;
+}
+
 interface Props {
   src?: string;
   alt?: string;
@@ -18,6 +26,16 @@ interface Props {
 }
 
 const { src, alt = '', label = 'IMAGE', tone = 'cream', class: klass = '', loading = 'lazy' } = Astro.props;
+
+/**
+ * What scripts/optimise-images.mjs found: a WebP sibling and the real pixel
+ * size of every picture shipped in the repo. A photo uploaded through /admin is
+ * not in here, so it simply renders as a plain <img>, exactly as before.
+ *
+ * The size matters as much as the WebP: without width/height the browser cannot
+ * reserve the space, and the gallery visibly jumped as its pictures arrived.
+ */
+const asset = src ? (manifest as Record<string, Asset | undefined>)[src] : undefined;
 
 const tones: Record<string, { pattern: string; text: string; border: string }> = {
   cream: {
@@ -64,16 +82,23 @@ const isAbsolute = klass.includes('absolute');
   </div>
   {
     src && (
-      <img
-        src={src}
-        alt={alt}
-        loading={loading}
-        decoding="async"
-        fetchpriority={loading === 'eager' ? 'high' : 'auto'}
-        class="relative block h-full w-full object-cover"
-        onload="this.classList.add('img-loaded');this.closest('.img-frame').classList.add('img-done')"
-        onerror="this.closest('.img-frame').classList.add('img-done');this.remove()"
-      />
+      /* <picture> rather than a bare <img>: browsers that take WebP get the
+         smaller file, everything else falls back to the original untouched. */
+      <picture>
+        {asset?.webp && <source srcset={asset.webp} type="image/webp" />}
+        <img
+          src={src}
+          alt={alt}
+          width={asset?.w}
+          height={asset?.h}
+          loading={loading}
+          decoding="async"
+          fetchpriority={loading === 'eager' ? 'high' : 'auto'}
+          class="relative block h-full w-full object-cover"
+          onload="this.classList.add('img-loaded');this.closest('.img-frame').classList.add('img-done')"
+          onerror="this.closest('.img-frame').classList.add('img-done');this.remove()"
+        />
+      </picture>
     )
   }
 </div>

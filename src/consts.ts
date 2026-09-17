@@ -36,7 +36,11 @@ export const STATS = [
   { value: '500+', label: 'Tons Delivered' },
   { value: '1,200+', label: 'Orders Completed' },
   { value: '4', label: 'Countries Served' },
-  { value: 'Since 20XX', label: 'Serving With Trust' },
+  // Was "Since 20XX" — placeholder text that reached the live homepage. No
+  // founding year is stated anywhere in this project and inventing one would be
+  // worse than not showing it, so this says something true instead. Set a real
+  // year here, or in /admin → Trust numbers, whenever you want it back.
+  { value: 'Kandahar', label: 'Sourced At Origin' },
 ];
 
 export const EXPORTS = [

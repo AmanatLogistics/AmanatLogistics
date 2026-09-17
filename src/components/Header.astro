@@ -1,5 +1,6 @@
 ---
 import { NAV, SITE } from '../consts';
+import Picture from './Picture.astro';
 import SwallowMark from './SwallowMark.astro';
 import { getContent } from '../lib/store';
 
@@ -19,7 +20,12 @@ const { brand } = await getContent();
     <a href="/" class="flex items-center gap-3" aria-label={`${SITE.name} — Home`}>
       {
         brand.logo ? (
-          <img src={brand.logo} alt={SITE.name} class="h-12 w-auto max-w-[240px] object-contain md:h-[60px]" />
+          <Picture
+            src={brand.logo}
+            alt={SITE.name}
+            loading="eager"
+            class="h-12 w-auto max-w-[240px] object-contain md:h-[60px]"
+          />
         ) : (
           <>
             <SwallowMark class="w-10 text-plum md:w-[46px]" />

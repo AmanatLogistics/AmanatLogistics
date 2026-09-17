@@ -1,14 +1,15 @@
 {
   "name": "amanat-website",
   "version": "1.0.0",
-  "description": "Amanat Logistics — premium export & freight website (Astro + Tailwind + Resend)",
+  "description": "Amanat Logistics \u2014 premium export & freight website (Astro + Tailwind + Resend)",
   "type": "module",
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "images": "node scripts/optimise-images.mjs"
   },
   "keywords": [],
   "author": "",
