@@ -594,6 +594,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
                 <input type="hidden" value="${esc(value)}" />
                 <span class="imgpick-actions">
                   <button type="button" class="btn sm upload-btn">${value ? 'Replace photo…' : 'Upload photo…'}</button>
+                  <button type="button" class="btn sm link-btn">Use a link…</button>
                   <button type="button" class="btn sm clearimg-btn"${value ? '' : ' hidden'}>Remove</button>
                 </span>
               </span></div>`;
@@ -625,6 +626,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             <div class="pbody">
               <div class="imgpick-actions">
                 <button type="button" class="btn sm upload-btn">${img ? 'Replace photo…' : 'Upload photo…'}</button>
+                <button type="button" class="btn sm link-btn">Use a link…</button>
                 <button type="button" class="btn sm clearimg-btn"${img ? '' : ' hidden'}>Clear</button>
               </div>
               ${selects}
@@ -758,6 +760,58 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             markDirty(panel, true);
             (wrap.lastElementChild as HTMLElement)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
+
+          if (t.classList.contains('link-btn')) {
+            /**
+             * Point a picture at a URL instead of uploading a file.
+             *
+             * Unsplash, Pexels and the like serve their photos from a CDN and are happy
+             * to be linked, so this is how to use one without downloading it first. It
+             * is also how to reuse an image already hosted somewhere else. Nothing is
+             * copied here — the visitor's browser fetches it from wherever it lives.
+             */
+            const holder = (t.closest('.f[data-type=image]') ??
+              (t.closest('.row-item') ?? panel).querySelector('.f[data-type=image]')) as HTMLElement;
+            const field = holder.querySelector('input[type=hidden]') as HTMLInputElement;
+            const current = field.value.startsWith('http') ? field.value : '';
+            const entered = window.prompt(
+              'Paste the address of the image.\n\nIt has to be a direct link to the picture itself — one ending .jpg, .png or .webp, or an image CDN link. A link to a web page will not work.',
+              current,
+            );
+            if (entered === null) return;
+
+            const url = entered.trim();
+            if (!url) return;
+            if (!/^https:\/\//i.test(url)) {
+              showToast('The address has to start with https://', 'err');
+              return;
+            }
+
+            const img = holder.querySelector('img') as HTMLImageElement;
+            const btn = t as HTMLButtonElement;
+            btn.disabled = true;
+            btn.textContent = 'Checking…';
+
+            // Load it before accepting it, so a typo or a link to a page is caught here
+            // rather than becoming a hole on the live site.
+            const probe = new Image();
+            probe.onload = () => {
+              field.value = url;
+              img.src = url;
+              (holder.querySelector('.clearimg-btn') as HTMLElement | null)?.removeAttribute('hidden');
+              markDirty(panel, true);
+              btn.disabled = false;
+              btn.textContent = 'Use a link…';
+              showToast('Image linked — remember to Save changes', 'ok');
+            };
+            probe.onerror = () => {
+              btn.disabled = false;
+              btn.textContent = 'Use a link…';
+              showToast('That address did not load as an image. Check it opens the picture itself.', 'err');
+            };
+            probe.src = url;
+          }
+
 
           if (t.classList.contains('upload-btn')) {
             // The image field this button belongs to: either the button sits inside it,
