@@ -21,7 +21,8 @@ import LanguageToggle from '../../../components/tracker/LanguageToggle.astro';
 import { findOrder, isConfigured, type SheetOrder } from '../../../lib/orders/api';
 import { formatCount, formatWeight, ORDER_STAGE_COUNT } from '../../../lib/orders/model';
 import { ot, stageOfLabel, stageTitleIn, stepsIn } from '../../../lib/orders/i18n';
-import { formatDate, type Shipment } from '../../../lib/tracker/shipments';
+import { findByCode, formatDate, type Shipment } from '../../../lib/tracker/shipments';
+import { isConfigured as trackerConfigured } from '../../../lib/tracker/db';
 import { htmlLang, isRtl, langFromUrl } from '../../../lib/tracker/i18n';
 
 export const prerender = false;
@@ -45,6 +46,23 @@ if (searched && isConfigured()) {
   } catch (e) {
     console.error('Order lookup failed:', e);
     lookupFailed = true;
+  }
+}
+
+// Not on the sheet — it may be a shipment entered by hand in /tracking/admin,
+// which lives in the tracker's own database and is shown at /tracking.
+if (searched && !order && trackerConfigured()) {
+  let inTracker = false;
+  try {
+    inTracker = (await findByCode(code)) !== null;
+  } catch (e) {
+    console.error('Tracker fallback lookup failed:', e);
+  }
+  if (inTracker) {
+    const target = new URL('/tracking', Astro.url);
+    target.searchParams.set('code', code);
+    if (lang !== 'en') target.searchParams.set('lang', lang);
+    return Astro.redirect(`${target.pathname}${target.search}`, 303);
   }
 }
 

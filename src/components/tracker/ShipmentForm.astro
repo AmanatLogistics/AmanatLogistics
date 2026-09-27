@@ -10,6 +10,7 @@
  */
 import {
   SHIPPING_METHODS,
+  STEP_TEMPLATES,
   type ShipmentInput,
   type ShipmentStep,
 } from '../../lib/tracker/shipments';
@@ -135,6 +136,15 @@ const { data, steps, submitLabel, error = null } = Astro.props;
     </span>
   </div>
 
+  <div class="template-row" data-template-picker data-templates={JSON.stringify(STEP_TEMPLATES)}>
+    <label for="step_template">Stage template</label>
+    <select id="step_template">
+      {STEP_TEMPLATES.map((tpl) => <option value={tpl.id}>{tpl.label}</option>)}
+    </select>
+    <button class="btn btn-soft" type="button" data-apply-template>Use these stages</button>
+    <span class="hint">Fills in the eight stage names and descriptions. Dates are kept.</span>
+  </div>
+
   <div class="steps-grid">
     {
       steps.map((s) => (
@@ -177,3 +187,43 @@ const { data, steps, submitLabel, error = null } = Astro.props;
     <slot name="extra-actions" />
   </div>
 </form>
+
+<script>
+  // Stage templates: fill the eight name/description boxes from the chosen
+  // route, and keep the "Current status step" list in step with the new names.
+  // Nothing is saved until the form is submitted.
+  type Tpl = { id: string; label: string; steps: { step_title: string; step_description: string }[] };
+
+  document.querySelectorAll<HTMLElement>('[data-template-picker]').forEach((picker) => {
+    const templates = JSON.parse(picker.dataset.templates ?? '[]') as Tpl[];
+    const select = picker.querySelector('select');
+    const button = picker.querySelector<HTMLButtonElement>('[data-apply-template]');
+    const form = picker.closest('form');
+    if (!select || !button || !form) return;
+
+    button.addEventListener('click', () => {
+      const tpl = templates.find((t) => t.id === select.value);
+      if (!tpl) return;
+      if (!confirm(`Replace the stage names and descriptions with "${tpl.label}"?`)) return;
+
+      tpl.steps.forEach((step, i) => {
+        const n = i + 1;
+        const title = form.querySelector<HTMLInputElement>(`[name="step_title_${n}"]`);
+        const desc = form.querySelector<HTMLInputElement>(`[name="step_description_${n}"]`);
+        if (title) title.value = step.step_title;
+        if (desc) desc.value = step.step_description;
+        const option = form.querySelector<HTMLOptionElement>(`#current_step option[value="${n}"]`);
+        if (option) option.textContent = `${n}. ${step.step_title}`;
+      });
+    });
+  });
+
+  // Typing a stage name by hand updates its entry in the step list as well.
+  document.querySelectorAll<HTMLInputElement>('input[name^="step_title_"]').forEach((input) => {
+    input.addEventListener('input', () => {
+      const n = input.name.slice('step_title_'.length);
+      const option = document.querySelector<HTMLOptionElement>(`#current_step option[value="${n}"]`);
+      if (option) option.textContent = `${n}. ${input.value.trim() || `Step ${n}`}`;
+    });
+  });
+</script>

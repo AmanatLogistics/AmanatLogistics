@@ -290,7 +290,15 @@ const badgeTone = (bucket: 'pending' | 'transit' | 'received') =>
                     >
                       <td data-label="Tracking #">
                         <span class="cell">
-                          <strong>{s.tracking_number}</strong>
+                          <a
+                            class="code-link"
+                            href={`/tracking?code=${encodeURIComponent(s.tracking_number)}`}
+                            target="_blank"
+                            rel="noopener"
+                            title="Open what the customer sees"
+                          >
+                            <strong>{s.tracking_number}</strong>
+                          </a>
                           <span class="sub">{s.invoice_number}</span>
                         </span>
                       </td>

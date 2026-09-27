@@ -9,6 +9,7 @@ import {
   SHIPPING_METHODS,
   STEP_COUNT,
   DEFAULT_STEPS,
+  today,
   type ShipmentInput,
   type ShipmentStep,
 } from './shipments';
@@ -78,6 +79,12 @@ export function parseShipmentForm(form: FormData): ParsedForm {
     !data.estimated_delivery
   ) {
     error = 'Please fill in all required fields (marked *).';
+  } else if (data.actual_delivery && data.actual_delivery > today()) {
+    // Both are YYYY-MM-DD, so they compare correctly as strings. A future date
+    // here is almost always the estimate typed into the wrong box — and it
+    // would tell the dashboard the shipment has already arrived.
+    error =
+      'Actual delivery cannot be a future date. Leave it blank until the shipment arrives — use Estimated delivery for the expected date.';
   }
 
   return { data, steps, error };

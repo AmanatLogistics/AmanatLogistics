@@ -66,6 +66,76 @@ export const DEFAULT_STEPS: { step_title: string; step_description: string }[] =
   { step_title: 'Delivered', step_description: 'Your shipment has been delivered.' },
 ];
 
+/**
+ * Ready-made stage lists for the add/edit form, so a shipment on a different
+ * route (by air to the USA, say) doesn't have to carry the Tashkent stages or
+ * have all eight retyped. Applying one only fills in the names and
+ * descriptions; dates and the current step are left alone.
+ *
+ * "Shipment Received", "Departed Origin" and "Delivered" reuse the standard
+ * wording, so their Pashto comes from the written dictionary in ./i18n.ts. The
+ * other stages are new text: add them to CONTENT_PS there to hand-write their
+ * Pashto, otherwise the machine-translation fallback is used.
+ *
+ * "In Transit" is deliberately not used outside the Tashkent route — its
+ * written Pashto says "at the Uzbekistan border".
+ */
+export interface StepTemplate {
+  id: string;
+  label: string;
+  steps: { step_title: string; step_description: string }[];
+}
+
+const RECEIVED = DEFAULT_STEPS[0];
+const DEPARTED = DEFAULT_STEPS[2];
+const DELIVERED = DEFAULT_STEPS[7];
+
+export const STEP_TEMPLATES: StepTemplate[] = [
+  { id: 'tashkent', label: 'Kandahar → Tashkent (road, then air)', steps: DEFAULT_STEPS },
+  {
+    id: 'air',
+    label: 'International air freight',
+    steps: [
+      RECEIVED,
+      { step_title: 'Export Customs Clearance', step_description: 'Your shipment is being cleared through export customs.' },
+      DEPARTED,
+      { step_title: 'Handed to Airline', step_description: 'Your shipment has been handed over to the airline.' },
+      { step_title: 'In Flight', step_description: 'Your shipment is on its way to the destination country.' },
+      { step_title: 'Arrived at Destination', step_description: 'Your shipment has arrived in the destination country.' },
+      { step_title: 'Import Customs Clearance', step_description: 'Your shipment is being cleared through import customs.' },
+      DELIVERED,
+    ],
+  },
+  {
+    id: 'sea',
+    label: 'Sea freight',
+    steps: [
+      RECEIVED,
+      { step_title: 'Export Customs Clearance', step_description: 'Your shipment is being cleared through export customs.' },
+      DEPARTED,
+      { step_title: 'At Port of Loading', step_description: 'Your shipment has reached the port of loading.' },
+      { step_title: 'On the Vessel', step_description: 'Your shipment is at sea, on its way to the destination port.' },
+      { step_title: 'Arrived at Destination Port', step_description: 'Your shipment has arrived at the destination port.' },
+      { step_title: 'Import Customs Clearance', step_description: 'Your shipment is being cleared through import customs.' },
+      DELIVERED,
+    ],
+  },
+  {
+    id: 'road',
+    label: 'Road freight',
+    steps: [
+      RECEIVED,
+      { step_title: 'Export Customs Clearance', step_description: 'Your shipment is being cleared through export customs.' },
+      DEPARTED,
+      { step_title: 'On the Road', step_description: 'Your shipment is on the road to the border.' },
+      { step_title: 'At the Border', step_description: 'Your shipment is crossing the border.' },
+      { step_title: 'Import Customs Clearance', step_description: 'Your shipment is being cleared through import customs.' },
+      { step_title: 'Out for Delivery', step_description: 'Your shipment is out for delivery.' },
+      DELIVERED,
+    ],
+  },
+];
+
 /** The 8 blank steps a brand-new shipment form starts from. */
 export function blankSteps(): ShipmentStep[] {
   return DEFAULT_STEPS.map((s, i) => ({
