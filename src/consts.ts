@@ -179,6 +179,30 @@ export const DEFAULT_CONTENT = {
     { title: 'Secure end-to-end shipping', text: 'Careful packing, customs handling, and tracked freight from our facility to your port.' },
     { title: 'Reliable partnership', text: 'A single accountable partner for officials, importers, and institutional buyers.' },
   ],
+  // Home page — the partnership with Faiz Fayez LTD, the Kandahar fruit
+  // traders whose consignments Amanat carries. Their site (faizfayezltd.com)
+  // names Amanat as its logistics partner; this is the same partnership seen
+  // from this side. Set "show" to Hide in /admin to take it off the page.
+  partner: {
+    show: 'Show',
+    eyebrow: 'Our trade partner',
+    title: 'In partnership with Faiz Fayez LTD',
+    text: 'Faiz Fayez LTD trades dry and fresh fruit out of Kandahar. We carry their consignments to buyers abroad: road, air and sea freight, customs clearance and export papers, handled together from their warehouse to delivery.',
+    name: 'Faiz Fayez LTD',
+    role: 'Dry & fresh fruit traders',
+    since: '2025',
+    link: 'https://faizfayezltd.com/',
+    button: 'Visit Faiz Fayez LTD',
+    // Leave empty for the built-in "FF" monogram in their colours.
+    logo: '',
+  },
+  // Figures beside the partnership band. The first one is shown largest.
+  partnerStats: [
+    { value: '2,700', label: 'Tons shipped together' },
+    { value: '1,200', label: 'Tons of dried figs' },
+    { value: '850', label: 'Tons of raisins' },
+    { value: '650', label: 'Tons of pomegranates' },
+  ],
   // Mission & Values cards on the About page (colors stay fixed by position)
   values: VALUES.map(({ title, line }) => ({ title, line })),
   // About page story paragraphs

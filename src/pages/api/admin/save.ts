@@ -26,6 +26,8 @@ const ALLOWED = new Set([
   'freightModes',
   'shopping',
   'shoppingSteps',
+  'partner',
+  'partnerStats',
 ]);
 
 export const POST: APIRoute = async ({ request }) => {

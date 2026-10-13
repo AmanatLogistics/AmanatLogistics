@@ -149,6 +149,7 @@ export async function getContent(): Promise<SiteContent> {
     seo: { ...DEFAULT_CONTENT.seo, ...o.seo },
     images: { ...DEFAULT_CONTENT.images, ...o.images },
     shopping: { ...DEFAULT_CONTENT.shopping, ...o.shopping },
+    partner: { ...DEFAULT_CONTENT.partner, ...o.partner },
     pageHeaders: {
       services: { ...DEFAULT_CONTENT.pageHeaders.services, ...o.pageHeaders?.services },
       about: { ...DEFAULT_CONTENT.pageHeaders.about, ...o.pageHeaders?.about },
@@ -167,6 +168,7 @@ export async function getContent(): Promise<SiteContent> {
     platforms: o.platforms ?? DEFAULT_CONTENT.platforms,
     why: o.why ?? DEFAULT_CONTENT.why,
     values: o.values ?? DEFAULT_CONTENT.values,
+    partnerStats: o.partnerStats ?? DEFAULT_CONTENT.partnerStats,
   };
 }
 

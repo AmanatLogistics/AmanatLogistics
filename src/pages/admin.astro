@@ -425,6 +425,31 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             ],
           },
           {
+            id: 'partner', title: 'Partnership — Faiz Fayez', icon: I.users, kind: 'object',
+            hint: 'The partnership band on the Home page, and the small partner link under the hero buttons. Choose Hide to take both off the page.',
+            fields: [
+              { key: 'show', label: 'On the Home page', type: 'select', options: ['Show', 'Hide'] },
+              { key: 'eyebrow', label: 'Small label above the title', ph: 'Our trade partner' },
+              { key: 'title', label: 'Title', wide: true, ph: 'In partnership with Faiz Fayez LTD' },
+              { key: 'text', label: 'Text', wide: true },
+              { key: 'name', label: 'Partner name', ph: 'Faiz Fayez LTD' },
+              { key: 'role', label: 'What they do', ph: 'Dry & fresh fruit traders' },
+              { key: 'since', label: 'Partners since (year)', ph: '2025' },
+              { key: 'link', label: 'Their website', ph: 'https://faizfayezltd.com/' },
+              { key: 'button', label: 'Button text', ph: 'Visit Faiz Fayez LTD' },
+              { key: 'logo', label: 'Their logo — optional (without one, an “FF” monogram shows)', type: 'image' },
+            ],
+          },
+          {
+            id: 'partnerStats', title: 'Partnership — figures', icon: I.stats, kind: 'list',
+            addLabel: 'Add a figure', itemName: 'figure',
+            hint: 'The figures beside the partnership band on the Home page. The first one is shown largest, so make it the total. Up to five are shown.',
+            fields: [
+              { key: 'value', label: 'Number', ph: 'e.g. 2,700' },
+              { key: 'label', label: 'Label', ph: 'e.g. Tons shipped together' },
+            ],
+          },
+          {
             id: 'services', title: 'Service descriptions', icon: I.box, kind: 'object',
             hint: 'The two big service cards shown on the Home page and Services page.',
             fields: [

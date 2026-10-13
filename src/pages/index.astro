@@ -3,12 +3,30 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
 import RouteMap from '../components/RouteMap.astro';
+import Picture from '../components/Picture.astro';
+import SwallowMark from '../components/SwallowMark.astro';
 import { getContent } from '../lib/store';
 import { liveStats, roundedPlus } from '../lib/orders/stats';
 
 export const prerender = false;
 
-const { hero, stats: adminStats, services, why, destinations, exports: EXPORTS } = await getContent();
+const {
+  brand,
+  hero,
+  stats: adminStats,
+  services,
+  why,
+  destinations,
+  exports: EXPORTS,
+  partner,
+  partnerStats,
+} = await getContent();
+
+// The partnership band needs a name to say who the partner is; without one, or
+// with "Hide" chosen in /admin, it stays off the page along with the hero link.
+const showPartner = partner.show !== 'Hide' && Boolean(partner.name?.trim());
+const partnerFigures = partnerStats.filter((f) => f.value?.trim() && f.label?.trim()).slice(0, 5);
+const partnerLink = partner.link?.trim() || '';
 
 /**
  * A trust number whose value is the word "auto" is worked out from the
@@ -96,6 +114,30 @@ const countryList =
           <span class="transition-transform group-hover:translate-x-1">→</span>
         </a>
       </div>
+      {
+        showPartner && (
+          <a
+            href="#partnership"
+            class="mt-2 inline-flex items-center gap-3 rounded-full border border-[#E6BD6D]/30 bg-[#2c1119]/45 py-1.5 pl-1.5 pr-5 transition-colors hover:border-gold-light/70"
+          >
+            <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-[#F7ECDA]">
+              {partner.logo ? (
+                <Picture src={partner.logo} alt="" class="h-7 w-7 object-contain" />
+              ) : (
+                <svg width="36" height="36" viewBox="0 0 48 48" aria-hidden="true">
+                  <rect width="48" height="48" fill="#1f4d3b" />
+                  <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
+                  <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
+                </svg>
+              )}
+            </span>
+            <span class="flex flex-col leading-tight">
+              <small class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-light/80">In partnership with</small>
+              <strong class="text-[14.5px] font-semibold text-[#F7ECDA]">{partner.name}</strong>
+            </span>
+          </a>
+        )
+      }
     </div>
   </section>
 
@@ -277,6 +319,103 @@ const countryList =
       </ul>
     </div>
   </section>
+
+  <!-- ============ PARTNERSHIP ============ -->
+  <!--
+    Faiz Fayez LTD's own site tells its buyers that Amanat Logistics carries
+    their fruit. This is the same partnership said from this side, so a buyer
+    arriving here sees it too. Text, figures and the on/off switch are in
+    /admin → Partnership.
+  -->
+  {
+    showPartner && (
+      <section id="partnership" class="scroll-mt-24 border-t border-line bg-paper">
+        <div class="mx-auto max-w-[1240px] px-5 py-20 md:px-10 md:py-[88px]">
+          <div class="grid grid-cols-1 overflow-hidden rounded-2xl border border-line bg-cream shadow-[0_8px_28px_rgba(61,34,51,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
+            <div class="flex flex-col items-start gap-5 p-8 md:p-12">
+              <div class="flex items-center gap-3" aria-hidden="true">
+                <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
+                  {brand.logo ? (
+                    <Picture src={brand.logo} alt="" class="h-12 w-12 object-contain" />
+                  ) : (
+                    <SwallowMark class="w-9 text-plum" />
+                  )}
+                </span>
+                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-accent-deep">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m11 17 2 2a1 1 0 1 0 3-3" />
+                    <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" />
+                    <path d="m21 3 1 11h-2" />
+                    <path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" />
+                    <path d="M3 4h8" />
+                  </svg>
+                </span>
+                <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
+                  {partner.logo ? (
+                    <Picture src={partner.logo} alt="" class="h-12 w-12 object-contain" />
+                  ) : (
+                    <svg width="46" height="46" viewBox="0 0 48 48">
+                      <rect width="48" height="48" rx="12" fill="#1f4d3b" />
+                      <rect x="5.5" y="5.5" width="37" height="37" rx="8.5" fill="none" stroke="#e2a72e" stroke-opacity=".5" stroke-width="1" />
+                      <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
+                      <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
+                    </svg>
+                  )}
+                </span>
+              </div>
+
+              {partner.eyebrow && <Eyebrow text={partner.eyebrow} />}
+              <h2 class="m-0 font-serif text-[28px] font-bold leading-tight text-plum md:text-[36px]" style="text-wrap:balance;">
+                {partner.title || `In partnership with ${partner.name}`}
+              </h2>
+              {partner.text && <p class="m-0 max-w-[58ch] text-[16px] leading-relaxed text-muted">{partner.text}</p>}
+
+              <p class="m-0 flex flex-col gap-0.5 text-[14px] text-muted">
+                <strong class="font-semibold text-ink">{partner.name}</strong>
+                <span>{[partner.role, partner.since && `Partners since ${partner.since}`].filter(Boolean).join(' · ')}</span>
+              </p>
+
+              {
+                partnerLink && (
+                  <a
+                    href={partnerLink}
+                    target="_blank"
+                    rel="noopener"
+                    class="mt-1 inline-flex items-center gap-2 rounded-full bg-plum px-7 py-3 text-[15px] font-semibold text-[#F8F3E9] transition-colors hover:bg-plum-hover"
+                  >
+                    {partner.button || `Visit ${partner.name}`} <span aria-hidden="true">↗</span>
+                  </a>
+                )
+              }
+            </div>
+
+            {
+              partnerFigures.length > 0 && (
+                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#5a1b2b] p-0">
+                  {partnerFigures.map((f, i) => (
+                    <li
+                      class:list={[
+                        'flex flex-col justify-center gap-1.5 bg-plum px-7 py-8 md:px-9',
+                        // The first figure — the total — gets the full width, and so
+                        // does a last one that would otherwise sit alone in its row.
+                        (i === 0 || (i === partnerFigures.length - 1 && i % 2 === 1)) && 'col-span-2',
+                        i === 0 && 'bg-fig md:py-10',
+                      ]}
+                    >
+                      <span class:list={['font-serif font-bold leading-none text-gold-light', i === 0 ? 'text-[44px] md:text-[54px]' : 'text-[30px] md:text-[34px]']}>
+                        {f.value}
+                      </span>
+                      <span class="eyebrow text-[12px] text-[#E0D2CA] md:text-[12.5px]">{f.label}</span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            }
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   <!-- ============ WHY AMANAT ============ -->
   <section class="border-t border-line bg-cream">
