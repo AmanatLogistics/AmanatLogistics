@@ -17,7 +17,7 @@ const valueCards = values.map((v, i) => ({ ...v, ...palette[i % palette.length] 
 
 <BaseLayout title="About" active="/about">
   <!-- ============ PAGE HEADER (over image) ============ -->
-  <section class="relative overflow-hidden bg-plum">
+  <section class="relative overflow-hidden bg-fig">
     <ImageFrame
       src={images.aboutHeader}
       alt="Cargo and warehouse scene at Amanat Logistics"
@@ -26,11 +26,11 @@ const valueCards = values.map((v, i) => ({ ...v, ...palette[i % palette.length] 
       class="absolute inset-0 h-full w-full"
       label="FULL-WIDTH IMAGE: warehouse / cargo scene<br>about-header.jpg — 2400×900px"
     />
-    <div class="absolute inset-0" style="background:linear-gradient(90deg,rgba(44,24,32,0.92) 0%,rgba(60,25,40,0.68) 55%,rgba(60,25,40,0.34) 100%);"></div>
+    <div class="absolute inset-0" style="background:linear-gradient(90deg,rgba(13,27,42,0.93) 0%,rgba(13,27,42,0.72) 55%,rgba(13,27,42,0.38) 100%);"></div>
     <div class="relative mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-20 md:px-10 md:py-24">
       <Eyebrow text={H.eyebrow} tone="dark" />
-      <h1 class="m-0 max-w-[20ch] font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
-      <p class="m-0 max-w-[58ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+      <h1 class="m-0 max-w-[20ch] font-serif text-[38px] font-bold leading-[1.12] text-[#F5F7FA] md:text-[52px]">{H.title}</h1>
+      <p class="m-0 max-w-[58ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[18px]">
         {H.subtitle}
       </p>
     </div>
@@ -132,10 +132,10 @@ const valueCards = values.map((v, i) => ({ ...v, ...palette[i % palette.length] 
   <section class="bg-ink">
     <div class="mx-auto flex max-w-[1240px] flex-wrap items-center justify-between gap-10 px-5 py-16 md:px-10">
       <div class="flex flex-col gap-2">
-        <h2 class="m-0 font-serif text-[26px] font-bold leading-tight text-[#F8F3E9] md:text-[32px]">Interested in partnering with us?</h2>
-        <span class="text-[16px] text-[#B8AB9C]">Let's talk about your cargo, your routes, and how we can deliver.</span>
+        <h2 class="m-0 font-serif text-[26px] font-bold leading-tight text-[#F5F7FA] md:text-[32px]">Interested in partnering with us?</h2>
+        <span class="text-[16px] text-[#9DAABA]">Let's talk about your cargo, your routes, and how we can deliver.</span>
       </div>
-      <a href="/contact#form" class="whitespace-nowrap rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-[#C89B52] hover:text-ink">
+      <a href="/contact#form" class="whitespace-nowrap rounded-md bg-accent px-8 py-4 text-[15px] font-bold text-ink shadow-[0_2px_8px_rgba(229,154,28,0.28)] transition-colors hover:bg-gold-light">
         Request a Quote
       </a>
     </div>

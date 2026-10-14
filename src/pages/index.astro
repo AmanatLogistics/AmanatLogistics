@@ -18,6 +18,8 @@ const {
   why,
   destinations,
   logistics,
+  exports: cargoTypes,
+  contact,
   partner,
   partnerStats,
 } = await getContent();
@@ -93,6 +95,11 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 
 <BaseLayout title="Home" active="/">
   <!-- ============ HERO ============ -->
+  <!--
+    Two columns on a wide screen: the pitch on the left, and on the right the
+    thing most returning visitors came for — tracking a shipment. It used to be
+    a separate band further down the page; up here it is one glance away.
+  -->
   <section class="relative overflow-hidden bg-fig">
     <ImageFrame
       src={hero.image}
@@ -102,135 +109,148 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
       class="absolute inset-0 h-full w-full"
       label="FULL-WIDTH IMAGE: cargo being loaded / trucks / warehouse<br>at least 2400×1100px"
     />
-    <!-- warm layered light: amber glow + wine scrim (reads rich with or without a photo) -->
+    <!-- navy scrim, heaviest behind the text, with a faint route grid on top -->
     <div
       class="absolute inset-0"
       style="background:
-        radial-gradient(115% 125% at 88% 8%, rgba(198,137,47,0.28) 0%, rgba(198,137,47,0) 46%),
-        radial-gradient(90% 120% at 0% 100%, rgba(53,20,29,0.85) 0%, rgba(53,20,29,0) 55%),
-        linear-gradient(103deg, rgba(41,16,22,0.96) 0%, rgba(72,24,40,0.82) 48%, rgba(72,24,40,0.5) 100%);"
+        radial-gradient(80% 90% at 92% 0%, rgba(229,154,28,0.16) 0%, rgba(229,154,28,0) 55%),
+        linear-gradient(100deg, rgba(9,19,31,0.97) 0%, rgba(13,27,42,0.9) 45%, rgba(13,27,42,0.62) 100%);"
     >
     </div>
+    <div class="route-grid absolute inset-0"></div>
 
-    <div class="relative mx-auto flex max-w-[1240px] flex-col items-start gap-6 px-5 py-24 md:px-10 md:py-[136px]">
-      <div class="flex items-center gap-3">
-        <span class="h-px w-9 bg-gold-light/70"></span>
-        <span class="eyebrow text-gold-light">{hero.eyebrow}</span>
-      </div>
-      <h1 class="m-0 max-w-[16ch] font-serif text-[42px] font-semibold leading-[1.04] text-[#F7ECDA] sm:text-[56px] md:text-[68px]" style="text-wrap:balance;">
-        {hero.title}
-      </h1>
-      <p class="m-0 max-w-[50ch] text-[17px] leading-relaxed text-[#E4CFC2] md:text-[19px]">
-        {hero.subtitle}
-      </p>
-      <div class="mt-3 flex flex-wrap items-center gap-4">
-        <a href="/contact#form" class="rounded-full bg-gold px-8 py-3.5 text-[15px] font-semibold text-ink shadow-[0_8px_24px_rgba(192,135,46,0.32)] transition-transform hover:-translate-y-0.5">
-          Request a Quote
-        </a>
-        <a href="/services" class="group flex items-center gap-2 px-3 py-3.5 text-[15px] font-semibold text-[#F0E7DD] transition-colors hover:text-gold-light">
-          Explore our services
-          <span class="transition-transform group-hover:translate-x-1">→</span>
-        </a>
-      </div>
-      {
-        showPartner && (
-          <a
-            href="#partnership"
-            class="mt-2 inline-flex items-center gap-3 rounded-full border border-[#E6BD6D]/30 bg-[#2c1119]/45 py-1.5 pl-1.5 pr-5 transition-colors hover:border-gold-light/70"
-          >
-            <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-full bg-[#F7ECDA]">
-              {partner.logo ? (
-                <Picture src={partner.logo} alt="" class="h-7 w-7 object-contain" />
-              ) : (
-                <svg width="36" height="36" viewBox="0 0 48 48" aria-hidden="true">
-                  <rect width="48" height="48" fill="#1f4d3b" />
-                  <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
-                  <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
-                </svg>
-              )}
-            </span>
-            <span class="flex flex-col leading-tight">
-              <small class="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold-light/80">In partnership with</small>
-              <strong class="text-[14.5px] font-semibold text-[#F7ECDA]">{partner.name}</strong>
-            </span>
+    <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 pb-28 pt-20 md:px-10 md:pb-36 md:pt-28 lg:grid-cols-[1.25fr_0.75fr] lg:gap-16">
+      <div class="flex flex-col items-start gap-6">
+        <span class="eyebrow inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-gold-light">
+          <span class="h-2 w-2 rounded-full bg-accent"></span>
+          {hero.eyebrow}
+        </span>
+        <h1 class="m-0 max-w-[15ch] font-serif text-[44px] font-bold uppercase leading-[0.98] tracking-[-0.01em] text-[#F5F7FA] sm:text-[58px] md:text-[72px]" style="text-wrap:balance;">
+          {hero.title}
+        </h1>
+        <p class="m-0 max-w-[52ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[19px]">
+          {hero.subtitle}
+        </p>
+        <div class="mt-2 flex flex-wrap items-center gap-3">
+          <a href="/contact#form" class="rounded-md bg-accent px-7 py-3.5 text-[15.5px] font-bold text-ink shadow-[0_10px_30px_rgba(229,154,28,0.30)] transition hover:-translate-y-0.5 hover:bg-gold-light">
+            Request a Quote
           </a>
-        )
-      }
+          <a href="/services" class="group flex items-center gap-2 rounded-md border border-white/20 px-6 py-3.5 text-[15.5px] font-semibold text-[#F5F7FA] transition-colors hover:border-gold-light hover:text-gold-light">
+            Our services
+            <span class="transition-transform group-hover:translate-x-1">→</span>
+          </a>
+        </div>
+        <ul class="m-0 mt-1 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[14px] font-semibold uppercase tracking-[0.08em] text-[#9DAABA]">
+          {['Road', 'Air', 'Sea', 'Customs', 'Warehousing'].map((m) => (
+            <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rotate-45 bg-accent"></span>{m}</li>
+          ))}
+        </ul>
+        {
+          showPartner && (
+            <a
+              href="#partnership"
+              class="mt-1 inline-flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 py-1.5 pl-1.5 pr-5 transition-colors hover:border-gold-light/70"
+            >
+              <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-md bg-[#F5F7FA]">
+                {partner.logo ? (
+                  <Picture src={partner.logo} alt="" class="h-7 w-7 object-contain" />
+                ) : (
+                  <svg width="36" height="36" viewBox="0 0 48 48" aria-hidden="true">
+                    <rect width="48" height="48" fill="#1f4d3b" />
+                    <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
+                    <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
+                  </svg>
+                )}
+              </span>
+              <span class="flex flex-col leading-tight">
+                <small class="text-[11px] font-bold uppercase tracking-[0.14em] text-gold-light/85">In partnership with</small>
+                <strong class="text-[15px] font-semibold text-[#F5F7FA]">{partner.name}</strong>
+              </span>
+            </a>
+          )
+        }
+      </div>
+
+      <!-- Track a shipment. Plain GET form: submits straight to the tracking page, no JS needed. -->
+      <div class="rounded-xl bg-paper p-6 shadow-[0_24px_60px_rgba(0,0,0,0.35)] md:p-8">
+        <div class="flex items-center gap-3">
+          <span class="flex h-10 w-10 items-center justify-center rounded-md bg-fig text-gold-light">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" />
+            </svg>
+          </span>
+          <div class="flex flex-col">
+            <span class="eyebrow text-[11px] text-label">Already shipped with us?</span>
+            <h2 class="m-0 font-serif text-[24px] font-bold leading-tight text-ink">Track your shipment</h2>
+          </div>
+        </div>
+        <form method="get" action="/tracking" class="mt-6 flex flex-col gap-3">
+          <label for="home-track" class="text-[13.5px] font-semibold text-muted-dark">Tracking or invoice number</label>
+          <input
+            id="home-track"
+            name="code"
+            type="text"
+            required
+            placeholder="Enter your number"
+            class="amn-field rounded-md border border-line bg-cream px-4 py-3.5 text-[15.5px] text-ink placeholder:text-muted/70"
+          />
+          <button
+            type="submit"
+            class="rounded-md bg-fig px-6 py-3.5 text-[15.5px] font-bold text-[#F5F7FA] transition-colors hover:bg-plum"
+          >
+            Track Now
+          </button>
+        </form>
+        <div class="mt-6 border-t border-line pt-5 text-[14.5px] leading-relaxed text-muted">
+          Need a price instead? Call or WhatsApp{' '}
+          <a href={`tel:${contact.phoneExport.replace(/\s/g, '')}`} class="whitespace-nowrap font-semibold text-plum hover:text-plum-hover">{contact.phoneExport}</a>.
+        </div>
+      </div>
     </div>
   </section>
 
   <!-- ============ TRUST STATS ============ -->
-  <section class="border-b border-line bg-sand">
-    <div class="mx-auto grid max-w-[1240px] grid-cols-2 gap-8 px-5 py-11 md:grid-cols-4 md:px-10">
+  <!-- A white strip that overlaps the foot of the hero, so the numbers read as
+       part of the opening rather than as a separate band. -->
+  <section class="relative z-10 bg-cream px-5 md:px-10">
+    <div class="mx-auto -mt-14 grid max-w-[1240px] grid-cols-2 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(15,26,38,0.10)] md:grid-cols-4">
       {
         STATS.map((s, i) => (
-          <div class:list={['flex flex-col items-center gap-1.5 text-center', i > 0 && 'md:border-l md:border-[#DDD1BC]']}>
-            <span class="font-serif text-[30px] font-bold text-plum md:text-[34px]">{s.value}</span>
-            <span class="eyebrow text-[12px] text-label md:text-[13px]">{s.label}</span>
+          <div class:list={[
+            'flex flex-col gap-1 px-6 py-6 md:px-8 md:py-7',
+            i % 2 === 1 && 'border-l border-line',
+            i >= 2 && 'border-t border-line md:border-t-0',
+            i === 2 && 'md:border-l',
+          ]}>
+            <span class="font-serif text-[30px] font-bold leading-none text-ink md:text-[38px]">{s.value}</span>
+            <span class="eyebrow text-[11.5px] text-muted md:text-[12px]">{s.label}</span>
           </div>
         ))
       }
     </div>
   </section>
 
-  <!-- ============ TRACK A SHIPMENT ============ -->
-  <section class="border-b border-line bg-cream">
-    <div class="mx-auto flex max-w-[1240px] flex-col gap-6 px-5 py-12 md:flex-row md:items-center md:justify-between md:px-10 md:py-14">
-      <div class="flex max-w-[46ch] flex-col gap-2">
-        <Eyebrow text="Already Shipped With Us?" />
-        <h2 class="m-0 font-serif text-[26px] font-bold leading-tight text-plum md:text-[30px]">
-          Track your shipment
-        </h2>
-        <p class="m-0 text-[15.5px] leading-relaxed text-muted">
-          Enter your tracking number or invoice number to see exactly where your consignment is.
-        </p>
-      </div>
-
-      <!-- Plain GET form: submits straight to the tracking page, no JS needed. -->
-      <form method="get" action="/tracking" class="flex w-full flex-col gap-3 sm:flex-row md:max-w-[520px]">
-        <label for="home-track" class="sr-only">Tracking number or invoice number</label>
-        <input
-          id="home-track"
-          name="code"
-          type="text"
-          required
-          placeholder="Tracking or invoice number"
-          class="amn-field flex-1 rounded-lg border border-line bg-paper px-4 py-3.5 text-[15px] text-ink placeholder:text-muted/70"
-        />
-        <button
-          type="submit"
-          class="rounded-lg bg-accent px-7 py-3.5 text-[15px] font-semibold text-paper transition-colors hover:bg-plum-hover"
-        >
-          Track Now
-        </button>
-      </form>
-    </div>
-  </section>
-
   <!-- ============ WHAT WE DO ============ -->
   <!--
     Amanat is a logistics company: what a visitor should learn first is what it
-    can move and how. These cards say that in six lines. The produce photos
-    that used to sit here are still on /services, under "Cargo We Carry".
+    can move and how. These cards say that in six lines.
 
-    This used to follow a "Two services" pair of cards, freight and personal
-    shopping. Amanat no longer offers shopping, and a pair of one is just the
-    intro to this section — so that intro (/admin → Service descriptions) now
-    sits here, above the cards it introduces.
+    The intro above them (/admin → Service descriptions) is what used to head a
+    "Two services" pair of cards, before personal shopping was dropped.
   -->
-  <section class="bg-sand">
-    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-[88px]">
+  <section class="bg-cream">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 pb-20 pt-16 md:px-10 md:pb-24 md:pt-20">
       <div class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end reveal">
         <div class="flex max-w-[640px] flex-col gap-4">
           <Eyebrow text={services.exportTitle || 'What We Do'} />
-          <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">
+          <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.05] text-plum md:text-[44px]">
             Everything it takes to move your cargo.
           </h2>
-          {services.exportText && <p class="m-0 text-[16px] leading-relaxed text-muted">{services.exportText}</p>}
+          {services.exportText && <p class="m-0 text-[16.5px] leading-relaxed text-muted">{services.exportText}</p>}
         </div>
         <a
           href="/services"
-          class="flex flex-none items-center gap-2 text-[15px] font-semibold text-accent-deep transition-colors hover:text-plum"
+          class="flex flex-none items-center gap-2 text-[15.5px] font-bold text-accent-deep transition-colors hover:text-plum"
         >
           See all services <span class="text-[17px]">→</span>
         </a>
@@ -238,16 +258,72 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 
       <ul class="m-0 grid list-none grid-cols-1 gap-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
         {
-          services6.map((c) => (
-            <li class="flex flex-col gap-3 rounded-xl border border-line bg-paper p-7 reveal md:p-8">
-              <span class="mb-1 flex h-12 w-12 items-center justify-center rounded-lg bg-plum text-gold-light">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={c.svg} />
-              </span>
-              <h3 class="m-0 font-serif text-[20px] font-bold leading-snug text-plum">{c.title}</h3>
-              <p class="m-0 text-[15px] leading-relaxed text-muted">{c.text}</p>
+          services6.map((c, i) => (
+            <li class="group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-line bg-paper p-7 transition duration-300 hover:-translate-y-1 hover:border-[#C3CBD5] hover:shadow-[0_18px_40px_rgba(15,26,38,0.10)] reveal md:p-8">
+              <span class="absolute inset-x-0 top-0 h-[3px] origin-left scale-x-0 bg-accent transition-transform duration-300 group-hover:scale-x-100"></span>
+              <div class="mb-2 flex items-start justify-between">
+                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-fig text-gold-light">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={c.svg} />
+                </span>
+                <span class="font-serif text-[15px] font-bold tracking-[0.06em] text-[#C3CBD5]">{String(i + 1).padStart(2, '0')}</span>
+              </div>
+              <h3 class="m-0 font-serif text-[22px] font-bold leading-snug text-ink">{c.title}</h3>
+              <p class="m-0 text-[15.5px] leading-relaxed text-muted">{c.text}</p>
             </li>
           ))
         }
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============ CARGO WE SPECIALISE IN ============ -->
+  <!--
+    The small share of the page that is about produce. Most of what leaves
+    Kandahar with Amanat is dry fruit and fresh fruit, and knowing how to carry
+    it is a real selling point — but it is the cargo, not the business. The
+    tiles come from /admin → Cargo we carry; general cargo closes the row so the
+    point lands: this is what we know best, not all we move.
+  -->
+  <section class="border-y border-line bg-paper">
+    <div class="mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-10 px-5 py-16 md:px-10 md:py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
+      <div class="flex flex-col gap-4 reveal">
+        <Eyebrow text="Cargo We Specialise In" />
+        <h2 class="m-0 font-serif text-[28px] font-bold leading-[1.08] text-plum md:text-[36px]">
+          Kandahar's dry fruit and fresh produce — and any other cargo.
+        </h2>
+        <p class="m-0 text-[16px] leading-relaxed text-muted">
+          Most of what leaves Kandahar with us is dry fruit, nuts and fresh fruit, so perishable, food-grade cargo is what we know best: ventilated loading, cold storage, and the phytosanitary papers buyers ask for. General cargo travels the same careful way.
+        </p>
+        <a href="/services" class="mt-1 flex items-center gap-2 self-start text-[15.5px] font-bold text-accent-deep transition-colors hover:text-plum">
+          Cargo we carry <span class="text-[17px]">→</span>
+        </a>
+      </div>
+      <ul class="m-0 grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3">
+        {
+          cargoTypes.slice(0, 5).map((c) => (
+            <li class="group relative overflow-hidden rounded-lg border border-line reveal">
+              <ImageFrame
+                src={c.img}
+                alt={c.alt}
+                label={c.name}
+                sizes="(max-width: 640px) 46vw, 220px"
+                class="h-[118px] w-full transition-transform duration-500 group-hover:scale-[1.05] md:h-[132px]"
+              />
+              <div
+                class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2.5 pt-8"
+                style="background:linear-gradient(0deg,rgba(13,27,42,0.88),rgba(13,27,42,0));"
+              >
+                <span class="text-[14.5px] font-semibold text-[#F5F7FA]">{c.name}</span>
+              </div>
+            </li>
+          ))
+        }
+        <li class="flex h-[118px] flex-col justify-between rounded-lg bg-fig p-3.5 md:h-[132px]">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f6c25c" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 8 12 3 3 8v8l9 5 9-5Z" /><path d="M3 8l9 5 9-5M12 13v8" />
+          </svg>
+          <span class="text-[14.5px] font-semibold text-[#F5F7FA]">General cargo</span>
+        </li>
       </ul>
     </div>
   </section>
@@ -261,9 +337,9 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
   -->
   {
     showPartner && (
-      <section id="partnership" class="scroll-mt-24 border-t border-line bg-paper">
+      <section id="partnership" class="scroll-mt-24 bg-cream">
         <div class="mx-auto max-w-[1240px] px-5 py-20 md:px-10 md:py-[88px]">
-          <div class="grid grid-cols-1 overflow-hidden rounded-2xl border border-line bg-cream shadow-[0_8px_28px_rgba(61,34,51,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
+          <div class="grid grid-cols-1 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(15,26,38,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
             <div class="flex flex-col items-start gap-5 p-8 md:p-12">
               <div class="flex items-center gap-3" aria-hidden="true">
                 <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
@@ -313,7 +389,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
                     href={partnerLink}
                     target="_blank"
                     rel="noopener"
-                    class="mt-1 inline-flex items-center gap-2 rounded-full bg-plum px-7 py-3 text-[15px] font-semibold text-[#F8F3E9] transition-colors hover:bg-plum-hover"
+                    class="mt-1 inline-flex items-center gap-2 rounded-md bg-plum px-7 py-3 text-[15px] font-bold text-[#F5F7FA] transition-colors hover:bg-plum-hover"
                   >
                     {partner.button || `Visit ${partner.name}`} <span aria-hidden="true">↗</span>
                   </a>
@@ -323,21 +399,21 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 
             {
               partnerFigures.length > 0 && (
-                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#5a1b2b] p-0">
+                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#1b2c3f] p-0">
                   {partnerFigures.map((f, i) => (
                     <li
                       class:list={[
-                        'flex flex-col justify-center gap-1.5 bg-plum px-7 py-8 md:px-9',
+                        'flex flex-col justify-center gap-1.5 bg-fig px-7 py-8 md:px-9',
                         // The first figure — the total — gets the full width, and so
                         // does a last one that would otherwise sit alone in its row.
                         (i === 0 || (i === partnerFigures.length - 1 && i % 2 === 1)) && 'col-span-2',
-                        i === 0 && 'bg-fig md:py-10',
+                        i === 0 && 'bg-plum md:py-10',
                       ]}
                     >
                       <span class:list={['font-serif font-bold leading-none text-gold-light', i === 0 ? 'text-[44px] md:text-[54px]' : 'text-[30px] md:text-[34px]']}>
                         {f.value}
                       </span>
-                      <span class="eyebrow text-[12px] text-[#E0D2CA] md:text-[12.5px]">{f.label}</span>
+                      <span class="eyebrow text-[12px] text-[#C6D0DC] md:text-[12.5px]">{f.label}</span>
                     </li>
                   ))}
                 </ul>
@@ -350,16 +426,19 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
   }
 
   <!-- ============ WHY AMANAT ============ -->
-  <section class="border-t border-line bg-cream">
-    <div class="mx-auto flex max-w-[1240px] flex-col gap-11 px-5 py-20 md:px-10 md:py-[88px]">
-      <Eyebrow text="Why Amanat" class="reveal" />
-      <div class="grid grid-cols-1 gap-7 md:grid-cols-3">
+  <section class="bg-paper">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[640px] flex-col gap-4 reveal">
+        <Eyebrow text="Why Amanat" />
+        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.05] text-plum md:text-[44px]">One team, answerable from pickup to delivery.</h2>
+      </div>
+      <div class="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-line bg-line md:grid-cols-3">
         {
-          why.map((c) => (
-            <div class="flex flex-col gap-3 rounded-[10px] border border-line bg-paper p-8 reveal">
-              <div class="mb-1 h-3 w-3 rotate-45 bg-accent"></div>
-              <span class="font-serif text-[20px] font-bold leading-snug text-plum">{c.title}</span>
-              <span class="text-[15px] leading-relaxed text-muted">{c.text}</span>
+          why.map((c, i) => (
+            <div class="flex flex-col gap-3 bg-paper p-8 reveal md:p-9">
+              <span class="font-serif text-[40px] font-bold leading-none text-accent">{String(i + 1).padStart(2, '0')}</span>
+              <span class="font-serif text-[22px] font-bold leading-snug text-ink">{c.title}</span>
+              <span class="text-[15.5px] leading-relaxed text-muted">{c.text}</span>
             </div>
           ))
         }
@@ -368,24 +447,24 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
   </section>
 
   <!-- ============ ROUTES PREVIEW ============ -->
-  <section class="relative overflow-hidden bg-fig">
+  <section class="route-grid relative overflow-hidden bg-fig">
     <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 py-20 md:grid-cols-[0.9fr_1.1fr] md:gap-[72px] md:px-10 md:py-24">
       <div class="flex flex-col gap-[22px]">
         <Eyebrow text="Routes & Coverage" tone="dark" />
-        <h2 class="m-0 font-serif text-[30px] font-semibold leading-tight text-[#F6ECDA] md:text-[40px]" style="text-wrap:pretty;">
+        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.08] text-[#F5F7FA] md:text-[44px]" style="text-wrap:pretty;">
           We currently ship to {countryList} — with more destinations coming.
         </h2>
         <div class="mt-1 flex flex-wrap gap-2.5">
           {destinations.map((d) => (
-            <span class="rounded-full border border-[#8a5a68] px-4 py-1.5 text-[13.5px] font-medium text-[#EDDAC4]">{d.name}</span>
+            <span class="rounded-md border border-[#34506e] bg-white/5 px-4 py-1.5 text-[14px] font-semibold text-[#C6D0DC]">{d.name}</span>
           ))}
-          <span class="rounded-full border border-dashed border-[#8a5a68] px-4 py-1.5 text-[13.5px] font-medium text-[#c79a6a]">More coming</span>
+          <span class="rounded-md border border-dashed border-[#34506e] px-4 py-1.5 text-[14px] font-semibold text-[#f6c25c]">More coming</span>
         </div>
-        <a href="/contact" class="mt-2 flex items-center gap-2 self-start text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F8F3E9]">
+        <a href="/contact" class="mt-2 flex items-center gap-2 self-start text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F5F7FA]">
           Ask about your destination <span class="text-[17px]">→</span>
         </a>
       </div>
-      <div class="rounded-2xl border border-[#7a3346] bg-[#2c1119]/40 p-4 md:p-6">
+      <div class="rounded-2xl border border-[#22364d] bg-[#07121e]/40 p-4 md:p-6">
         <RouteMap destinations={destinations} class="h-auto w-full" />
       </div>
     </div>

@@ -11,20 +11,20 @@ const H = pageHeaders.services;
 
 // Freight SVG icons stay fixed by position; title/text come from the admin.
 const freightIcons = [
-  '<path d="M6 30 L42 30 L37 40 L11 40 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><path d="M24 30 L24 12 L34 20 L24 20" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><path d="M4 36 Q8 39 12 36 T20 36 T28 36 T36 36" stroke="#8C5A2B" stroke-width="2"/>',
-  '<path d="M6 26 L42 16 L42 22 L18 30 L12 40 L10 40 L13 29 L6 30 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/>',
-  '<rect x="6" y="18" width="22" height="16" stroke="#8C5A2B" stroke-width="2"/><path d="M28 24 L36 24 L42 30 L42 34 L28 34 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><circle cx="15" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/><circle cx="35" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/>',
+  '<path d="M6 30 L42 30 L37 40 L11 40 Z" stroke="#6b1a33" stroke-width="2" stroke-linejoin="round"/><path d="M24 30 L24 12 L34 20 L24 20" stroke="#6b1a33" stroke-width="2" stroke-linejoin="round"/><path d="M4 36 Q8 39 12 36 T20 36 T28 36 T36 36" stroke="#6b1a33" stroke-width="2"/>',
+  '<path d="M6 26 L42 16 L42 22 L18 30 L12 40 L10 40 L13 29 L6 30 Z" stroke="#6b1a33" stroke-width="2" stroke-linejoin="round"/>',
+  '<rect x="6" y="18" width="22" height="16" stroke="#6b1a33" stroke-width="2"/><path d="M28 24 L36 24 L42 30 L42 34 L28 34 Z" stroke="#6b1a33" stroke-width="2" stroke-linejoin="round"/><circle cx="15" cy="36" r="3" stroke="#6b1a33" stroke-width="2"/><circle cx="35" cy="36" r="3" stroke="#6b1a33" stroke-width="2"/>',
 ];
 const freightModes = freightData.map((m, i) => ({ ...m, svg: freightIcons[i % freightIcons.length] }));
 ---
 
 <BaseLayout title="Services" active="/services">
   <!-- ============ PAGE HEADER ============ -->
-  <section class="bg-plum">
+  <section class="route-grid bg-fig">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
       <Eyebrow text={H.eyebrow} tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">{H.title}</h1>
-      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F5F7FA] md:text-[52px]">{H.title}</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[18px]">
         {H.subtitle}
       </p>
     </div>
@@ -78,7 +78,7 @@ const freightModes = freightData.map((m, i) => ({ ...m, svg: freightIcons[i % fr
       <p class="m-0 max-w-[52ch] text-[16.5px] leading-relaxed text-muted-dark">
         Tell us what you need to ship, from where to where, and we'll respond within one business day with routing, pricing, and timelines.
       </p>
-      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover">
+      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-bold text-ink shadow-[0_2px_8px_rgba(229,154,28,0.28)] transition-colors hover:bg-gold-light">
         Request a Quote
       </a>
     </div>

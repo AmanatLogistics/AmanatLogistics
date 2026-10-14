@@ -13,7 +13,7 @@ const { brand } = await getContent();
 
 <header
   class="sticky top-0 z-50 border-b border-line backdrop-blur-md"
-  style="background:rgba(246,241,232,0.96);"
+  style="background:rgba(255,255,255,0.95);"
 >
   <div class="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-6 px-5 md:h-[84px] md:px-10">
     <!-- Logo / wordmark -->
@@ -47,8 +47,8 @@ const { brand } = await getContent();
             <a
               href={item.href}
               class:list={[
-                'text-[14.5px] transition-colors hover:text-plum-hover',
-                isActive ? 'border-b-2 border-gold pb-0.5 font-semibold text-plum-hover' : 'font-medium text-ink/80',
+                'text-[15.5px] transition-colors hover:text-plum-hover',
+                isActive ? 'border-b-2 border-accent pb-0.5 font-bold text-ink' : 'font-semibold text-ink/75',
               ]}
             >
               {item.label}
@@ -58,7 +58,7 @@ const { brand } = await getContent();
       }
       <a
         href="/contact#form"
-        class="rounded-md bg-accent px-[22px] py-3 text-[14px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover"
+        class="rounded-md bg-accent px-[22px] py-3 text-[14.5px] font-bold text-ink shadow-[0_2px_8px_rgba(229,154,28,0.28)] transition-colors hover:bg-gold-light"
       >
         Request a Quote
       </a>
@@ -98,7 +98,7 @@ const { brand } = await getContent();
     }
     <a
       href="/contact#form"
-      class="mt-2 rounded-md bg-accent px-4 py-3 text-center text-[15px] font-semibold text-paper"
+      class="mt-2 rounded-md bg-accent px-4 py-3 text-center text-[15px] font-bold text-ink"
     >
       Request a Quote
     </a>

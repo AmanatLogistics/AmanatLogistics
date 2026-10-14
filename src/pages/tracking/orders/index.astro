@@ -123,7 +123,7 @@ const asShipment: Shipment | null = order
   {
     rtl && (
       <Fragment slot="head">
-        {/* Fraunces and Archivo have no Arabic-script glyphs — load a Naskh face
+        {/* Barlow has no Arabic-script glyphs — load a Naskh face
             only when the page is actually showing Pashto. */}
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
@@ -134,13 +134,13 @@ const asShipment: Shipment | null = order
   }
 
   <!-- ============ PAGE HEADER ============ -->
-  <section class="bg-plum" lang={htmlLang[lang]} dir={rtl ? 'rtl' : 'ltr'}>
+  <section class="route-grid bg-fig" lang={htmlLang[lang]} dir={rtl ? 'rtl' : 'ltr'}>
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
       <Eyebrow text={ot(lang, 'eyebrow')} tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F5F7FA] md:text-[52px]">
         {ot(lang, 'pageTitle')}
       </h1>
-      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[18px]">
         {ot(lang, 'pageSubtitle')}
       </p>
     </div>
@@ -180,7 +180,7 @@ const asShipment: Shipment | null = order
           />
           <button
             type="submit"
-            class="flex items-center justify-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-[15px] font-semibold text-paper transition-colors hover:bg-plum-hover"
+            class="flex items-center justify-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-[15px] font-bold text-ink transition-colors hover:bg-gold-light"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" class="flex-none" aria-hidden="true">
               <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"></circle>
@@ -193,7 +193,7 @@ const asShipment: Shipment | null = order
         <!-- Results -->
         {
           !isConfigured() && searched && (
-            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+            <p class="mt-7 rounded-lg border border-[#C6D0DC] bg-[#F5F7FA] px-4 py-3.5 text-[14.5px] text-[#6b1a33]">
               {ot(lang, 'unavailable')}
             </p>
           )
@@ -201,7 +201,7 @@ const asShipment: Shipment | null = order
 
         {
           lookupFailed && (
-            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+            <p class="mt-7 rounded-lg border border-[#C6D0DC] bg-[#F5F7FA] px-4 py-3.5 text-[14.5px] text-[#6b1a33]">
               {ot(lang, 'lookupFailed')}
             </p>
           )
@@ -294,21 +294,21 @@ const asShipment: Shipment | null = order
 </BaseLayout>
 
 {/* Arabic-script type for the Pashto view. Scoped to this page's sections so
-    the site's Fraunces/Archivo identity is untouched everywhere else. */}
+    the site's Barlow identity is untouched everywhere else. */}
 {
   rtl && (
     <style is:global>
       /* The Latin face is listed FIRST on purpose. A browser picks the first
-         family that actually has the glyph, and Archivo/Fraunces carry no
+         family that actually has the glyph, and the Barlow faces carry no
          Arabic script — so Pashto still falls through to Naskh, while the
          tracking numbers, dates, weights and plate numbers sprinkled through
          this page stay in the site's own typeface instead of being rendered in
          an Arabic face that was never drawn for them. */
       [dir='rtl'] {
-        font-family: 'Archivo', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', Tahoma, sans-serif;
+        font-family: 'Barlow', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', Tahoma, sans-serif;
       }
       [dir='rtl'] .font-serif {
-        font-family: 'Fraunces', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', Georgia, serif;
+        font-family: 'Barlow Semi Condensed', 'Noto Naskh Arabic', 'Noto Naskh Arabic UI', sans-serif;
       }
       /* Naskh sits lower than Latin faces and needs a little more room. */
       [dir='rtl'] h1,
