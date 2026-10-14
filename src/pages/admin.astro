@@ -460,12 +460,10 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
           },
           {
             id: 'services', title: 'Service descriptions', icon: I.box, kind: 'object',
-            hint: 'The two big service cards shown on the Home page and Services page.',
+            hint: 'The small label and the intro paragraph above the “What we do” cards on the Home page.',
             fields: [
-              { key: 'exportTitle', label: 'Service 1 — title', ph: 'Freight & Logistics' },
-              { key: 'exportText', label: 'Service 1 — description', wide: true },
-              { key: 'shoppingTitle', label: 'Service 2 — title', ph: 'Global Personal Shopping' },
-              { key: 'shoppingText', label: 'Service 2 — description', wide: true },
+              { key: 'exportTitle', label: 'Small label', ph: 'Freight & Logistics' },
+              { key: 'exportText', label: 'Intro paragraph', wide: true },
             ],
           },
           {
@@ -475,23 +473,6 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             fields: [
               { key: 'title', label: 'Mode', ph: 'e.g. Sea Freight' },
               { key: 'text', label: 'Description', wide: true },
-            ],
-          },
-          {
-            id: 'shopping', title: 'Shopping — intro & photo', icon: I.tag, kind: 'object',
-            hint: 'The Global Personal Shopping intro paragraph and photo on the Services page.',
-            fields: [
-              { key: 'description', label: 'Intro paragraph', wide: true },
-              { key: 'image', label: 'Photo (parcels / packed orders)', type: 'image' },
-            ],
-          },
-          {
-            id: 'shoppingSteps', title: 'Shopping — how it works', icon: I.tag, kind: 'list',
-            addLabel: 'Add a step', itemName: 'step',
-            hint: 'The numbered steps under Global Personal Shopping. Numbers are added automatically.',
-            fields: [
-              { key: 'title', label: 'Step title', ph: 'e.g. We place the order' },
-              { key: 'text', label: 'Step description', wide: true },
             ],
           },
           {
@@ -525,8 +506,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             id: 'contact', title: 'Contact details', icon: I.phone, kind: 'object',
             hint: 'Used in the footer, the Contact page, the WhatsApp button, and quote emails.',
             fields: [
-              { key: 'phoneExport', label: 'Export / logistics phone', ph: '+93 …' },
-              { key: 'phoneShopping', label: 'Shopping phone', ph: '+93 …' },
+              { key: 'phoneExport', label: 'Phone & WhatsApp', ph: '+93 …' },
               { key: 'email', label: 'Email address', ph: 'info@amanatlogistics.com' },
               { key: 'location', label: 'Location', ph: 'Kandahar, Afghanistan' },
             ],
@@ -569,15 +549,6 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
               { key: 'name', label: 'Full name', ph: 'e.g. Abdul Amanat' },
               { key: 'role', label: 'Role', ph: 'e.g. Founder & Managing Director' },
               { key: 'img', label: 'Photo — optional (square works best)', type: 'image' },
-            ],
-          },
-          {
-            id: 'platforms', title: 'Shopping platforms', icon: I.tag, kind: 'list',
-            addLabel: 'Add a platform', itemName: 'platform',
-            hint: 'Store logos shown under "Global Personal Shopping" on the Services page.',
-            fields: [
-              { key: 'name', label: 'Store name', ph: 'e.g. Amazon' },
-              { key: 'img', label: 'Logo', type: 'image' },
             ],
           },
           {
@@ -863,8 +834,8 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
               btn.textContent = 'Uploading…';
               const fd = new FormData();
               fd.append('file', file);
-              // Logos (brand + shopping platforms) get auto-trimmed so they never look small.
-              const trim = panel.dataset.section === 'brand' || panel.dataset.section === 'platforms' ? '?trim=1' : '';
+              // Logos (ours and the partner's) get auto-trimmed so they never look small.
+              const trim = panel.dataset.section === 'brand' || panel.dataset.section === 'partner' ? '?trim=1' : '';
               const res = await fetch(`/api/admin/upload${trim}`, { method: 'POST', body: fd }).catch(() => null);
               const body = await res?.json().catch(() => null);
               if (res?.ok && body?.url) {

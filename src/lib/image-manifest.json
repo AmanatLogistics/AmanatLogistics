@@ -155,27 +155,5 @@
     "webp": "/images/og-image.webp",
     "small": "/images/og-image-480.webp",
     "smallW": 480
-  },
-  "/images/platforms/aliexpress.png": {
-    "w": 80,
-    "h": 80,
-    "webp": "/images/platforms/aliexpress.webp"
-  },
-  "/images/platforms/amazon.png": {
-    "w": 200,
-    "h": 60,
-    "webp": "/images/platforms/amazon.webp"
-  },
-  "/images/platforms/laam.png": {
-    "w": 200,
-    "h": 56,
-    "webp": "/images/platforms/laam.webp"
-  },
-  "/images/shopping-parcels.jpg": {
-    "w": 1100,
-    "h": 760,
-    "webp": "/images/shopping-parcels.webp",
-    "small": "/images/shopping-parcels-480.webp",
-    "smallW": 480
   }
 }

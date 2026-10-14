@@ -1,21 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import Picture from '../components/Picture.astro';
 import Eyebrow from '../components/Eyebrow.astro';
 import ImageFrame from '../components/ImageFrame.astro';
 import { getContent } from '../lib/store';
 
 export const prerender = false;
 
-const {
-  exports: EXPORTS,
-  platforms: PLATFORMS,
-  services,
-  shopping,
-  shoppingSteps,
-  freightModes: freightData,
-  pageHeaders,
-} = await getContent();
+const { exports: EXPORTS, freightModes: freightData, pageHeaders } = await getContent();
 const H = pageHeaders.services;
 
 // Freight SVG icons stay fixed by position; title/text come from the admin.
@@ -25,7 +16,6 @@ const freightIcons = [
   '<rect x="6" y="18" width="22" height="16" stroke="#8C5A2B" stroke-width="2"/><path d="M28 24 L36 24 L42 30 L42 34 L28 34 Z" stroke="#8C5A2B" stroke-width="2" stroke-linejoin="round"/><circle cx="15" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/><circle cx="35" cy="36" r="3" stroke="#8C5A2B" stroke-width="2"/>',
 ];
 const freightModes = freightData.map((m, i) => ({ ...m, svg: freightIcons[i % freightIcons.length] }));
-const steps = shoppingSteps.map((s, i) => ({ ...s, n: String(i + 1) }));
 ---
 
 <BaseLayout title="Services" active="/services">
@@ -44,7 +34,7 @@ const steps = shoppingSteps.map((s, i) => ({ ...s, n: String(i + 1) }));
   <section class="bg-paper">
     <div class="mx-auto flex max-w-[1240px] flex-col gap-14 px-5 py-20 md:px-10 md:py-24">
       <div class="flex max-w-[680px] flex-col gap-4 reveal">
-        <Eyebrow text="Lead Service — Freight & Logistics" />
+        <Eyebrow text="Freight & Logistics" />
         <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">Your cargo, moved from Afghanistan to the world.</h2>
         <p class="m-0 text-[16.5px] leading-[1.7] text-muted-dark">
           We arrange the freight, prepare the export documents, clear customs, and handle your cargo at our Kandahar facility — then track it by road, air, or sea until it reaches your buyer. One team, accountable from pickup to delivery.
@@ -81,68 +71,12 @@ const steps = shoppingSteps.map((s, i) => ({ ...s, n: String(i + 1) }));
     </div>
   </section>
 
-  <!-- ============ PERSONAL SHOPPING ============ -->
-  <section class="bg-olive">
-    <div class="mx-auto flex max-w-[1240px] flex-col gap-[52px] px-5 py-20 md:px-10 md:py-24">
-      <div class="grid grid-cols-1 items-center gap-12 md:grid-cols-2 md:gap-16">
-        <div class="flex flex-col gap-5 reveal">
-          <Eyebrow text="Secondary Service" tone="dark" />
-          <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-[#F5F3EA] md:text-[38px]">{services.shoppingTitle}</h2>
-          <p class="m-0 text-[16.5px] leading-[1.7] text-[#CFD3C4]">{shopping.description}</p>
-        </div>
-        <ImageFrame
-          src={shopping.image}
-          alt="Packed parcels and consolidated orders ready for delivery"
-          tone="olive"
-          class="h-[240px] rounded-[10px] md:h-[300px] reveal"
-          label="IMAGE: parcels / packed orders ready for delivery,<br>or client on phone reviewing a product"
-        />
-      </div>
-
-      <!-- Step flow — flexes to any number of steps -->
-      <div class="flex flex-col gap-6 pt-3">
-        <div class="flex flex-col items-stretch gap-5 md:flex-row md:flex-wrap">
-          {
-            steps.map((s, i) => (
-              <>
-                <div class="flex flex-1 flex-col gap-3 rounded-xl bg-paper p-8 md:min-w-[240px] reveal">
-                  <span class="font-serif text-[30px] font-bold text-gold">{s.n}</span>
-                  <span class="font-serif text-[19px] font-bold text-plum">{s.title}</span>
-                  <span class="text-[14.5px] leading-relaxed text-muted">{s.text}</span>
-                </div>
-                {i < steps.length - 1 && (
-                  <div class="hidden items-center justify-center text-[26px] text-gold-light md:flex">→</div>
-                )}
-              </>
-            ))
-          }
-        </div>
-        <div class="mt-2 flex flex-wrap items-center gap-4">
-          <span class="eyebrow text-[12px] text-[#B7BEA9]">Supported Platforms</span>
-          {
-            PLATFORMS.map((p) => (
-              <span class="flex h-12 w-[128px] items-center justify-center rounded-md bg-white px-4 shadow-sm">
-                <Picture
-                  src={p.img}
-                  alt={`${p.name} logo`}
-                  class="max-h-7 max-w-full object-contain"
-                  onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'font-semibold text-[13px] text-[#5A5147]',textContent:this.alt.replace(' logo','')}))"
-                />
-              </span>
-            ))
-          }
-          <span class="flex h-12 items-center px-2 font-serif text-[15px] italic text-[#C6CBB8]">&amp; more</span>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- ============ CTA ============ -->
   <section class="border-y border-line bg-sand">
     <div class="mx-auto flex max-w-[1240px] flex-col items-center gap-5 px-5 py-16 text-center md:px-10 md:py-[76px]">
-      <h2 class="m-0 max-w-[24ch] font-serif text-[28px] font-bold leading-tight text-plum md:text-[34px]">Ready to move your order — or ours?</h2>
+      <h2 class="m-0 max-w-[24ch] font-serif text-[28px] font-bold leading-tight text-plum md:text-[34px]">Ready to move your cargo?</h2>
       <p class="m-0 max-w-[52ch] text-[16.5px] leading-relaxed text-muted-dark">
-        Tell us what you need to ship or purchase, and we'll respond within one business day.
+        Tell us what you need to ship, from where to where, and we'll respond within one business day with routing, pricing, and timelines.
       </p>
       <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover">
         Request a Quote

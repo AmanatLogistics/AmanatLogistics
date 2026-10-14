@@ -9,12 +9,11 @@ export const SITE = {
   tagline: 'Kandahar · Afghanistan',
   domain: 'https://amanatlogistics.com',
   description:
-    'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight to markets worldwide, plus global personal shopping.',
+    'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight, export documents and warehousing for traders worldwide.',
 };
 
 export const CONTACT = {
   phoneExport: '+93 70 009 8848',
-  phoneShopping: '+93 70 684 0090',
   email: 'info@amanatlogistics.com',
   location: 'Kandahar, Afghanistan',
   // Where the quote form delivers to. Change if you route inquiries elsewhere.
@@ -88,16 +87,6 @@ export const GALLERY = [
 
 export const GALLERY_CATS = ['All', 'Products', 'Warehouse & Storage', 'Shipments'];
 
-// Personal Shopping — stores we buy from on your behalf.
-// Drop a logo file at `img` (see /public/images/platforms) and it shows automatically;
-// until then the store name shows as text.
-export const PLATFORMS = [
-  { name: 'Amazon', img: '/images/platforms/amazon.png' },
-  { name: 'Daraz', img: '/images/platforms/daraz.webp' },
-  { name: 'AliExpress', img: '/images/platforms/aliexpress.png' },
-  { name: 'LAAM', img: '/images/platforms/laam.png' },
-];
-
 /* ============================================================
    Editable content — defaults for everything the admin panel
    (/admin) can change without code. Saved edits override these.
@@ -121,7 +110,7 @@ export const DEFAULT_CONTENT = {
   // Search-engine / social preview text + image
   seo: {
     description:
-      'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight to markets worldwide, plus global personal shopping.',
+      'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight, export documents and warehousing for traders worldwide.',
     ogImage: '/images/og-image.jpg',
   },
   // Decorative photos used across inner pages
@@ -136,11 +125,11 @@ export const DEFAULT_CONTENT = {
   },
   // Coloured header band on each inner page
   pageHeaders: {
-    services: { eyebrow: 'What We Do', title: 'Our Services', subtitle: 'Freight forwarding, customs clearance and cargo handling from Kandahar to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust.' },
+    services: { eyebrow: 'What We Do', title: 'Our Services', subtitle: 'Freight forwarding, customs clearance, export documents and cargo handling — everything it takes to move your cargo from Kandahar to buyers worldwide.' },
     about: { eyebrow: 'Our Story', title: 'About Amanat Logistics', subtitle: "A Kandahar-based logistics company moving Afghanistan's trade across borders — with a name that means trust." },
     routes: { eyebrow: 'Where We Ship', title: 'Routes & Coverage', subtitle: 'Established freight corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.' },
     gallery: { eyebrow: 'Our Work in Pictures', title: 'Gallery', subtitle: 'The cargo we carry, our facilities, and our shipments — real photography builds real trust.' },
-    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Reach the right team directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.' },
+    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Call or WhatsApp us directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.' },
     tracking: { eyebrow: 'Shipment Tracking', title: 'Track Your Shipment', subtitle: 'Enter your tracking number or invoice number to follow your consignment from our Kandahar warehouse right through to delivery.' },
   },
   // Services page — three freight-mode cards
@@ -149,33 +138,17 @@ export const DEFAULT_CONTENT = {
     { title: 'Air Freight', text: 'Fast, temperature-aware air cargo for perishables, samples and priority shipments — days from Kandahar to your airport.' },
     { title: 'Land / Road Freight', text: 'Regional overland corridors to neighboring markets, with customs brokerage at both borders.' },
   ],
-  // Services page — Global Personal Shopping block (intro + photo)
-  shopping: {
-    description:
-      "Want a product sold online but can't order it yourself? Simply send us a product link or a screenshot from Amazon, Daraz, or any other online store. Amanat places the order on your behalf, consolidates it, and delivers it to you — with clear, itemized pricing and no hidden fees.",
-    image: '/images/shopping-parcels.jpg',
-  },
-  // Services page — Global Personal Shopping 3-step flow
-  shoppingSteps: [
-    { title: 'Send us the link or screenshot', text: 'Share the product page or a screenshot from Amazon, Daraz, or any store.' },
-    { title: 'We place the order', text: 'We purchase and consolidate your items, confirming every cost up front.' },
-    { title: 'We deliver to you', text: 'Tracked delivery to your door, with updates the whole way.' },
-  ],
   stats: STATS,
   contact: CONTACT,
   exports: EXPORTS,
   destinations: DESTINATIONS,
   gallery: GALLERY,
   team: TEAM,
-  platforms: PLATFORMS,
-  // Two service cards (Home page + Services page intros)
+  // Home page — the label and intro above the "What we do" cards
   services: {
     exportTitle: 'Freight & Logistics',
     exportText:
       'Road, air and sea freight out of Afghanistan, with customs clearance, export documents and careful cargo handling at every step — from pickup to delivery.',
-    shoppingTitle: 'Global Personal Shopping',
-    shoppingText:
-      'We order products from Amazon, Daraz & more on your behalf — purchased, consolidated, and delivered to your door with transparent, itemized pricing.',
   },
   // "Why Amanat" cards on the Home page
   why: [

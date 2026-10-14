@@ -32,12 +32,8 @@ const fieldClass =
         <Eyebrow text="Direct Contact" />
         <div class="flex flex-col">
           <div class="flex flex-col gap-1 border-b border-line py-5">
-            <span class="eyebrow text-[12px] text-label">Amanat Logistics — Freight</span>
+            <span class="eyebrow text-[12px] text-label">Phone &amp; WhatsApp</span>
             <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="font-serif text-[22px] font-bold text-plum">{CONTACT.phoneExport}</a>
-          </div>
-          <div class="flex flex-col gap-1 border-b border-line py-5">
-            <span class="eyebrow text-[12px] text-label">Amanat Shopping</span>
-            <a href={`tel:${CONTACT.phoneShopping.replace(/\s/g, '')}`} class="font-serif text-[22px] font-bold text-plum">{CONTACT.phoneShopping}</a>
           </div>
           <div class="flex flex-col gap-1 border-b border-line py-5">
             <span class="eyebrow text-[12px] text-label">Email</span>
@@ -88,8 +84,15 @@ const fieldClass =
           <label class="flex flex-col gap-1.5">
             <span class="text-[13px] font-semibold text-muted-dark">Service</span>
             <select name="service" class={fieldClass}>
-              <option>Freight &amp; Logistics</option>
-              <option>Personal Shopping</option>
+              <!-- First, so a visitor who skips this field is not recorded as wanting
+                   road freight. -->
+              <option>Not sure yet / several</option>
+              <option>Road Freight</option>
+              <option>Air Cargo</option>
+              <option>Sea Freight</option>
+              <option>Customs Clearance &amp; Documents</option>
+              <option>Warehousing &amp; Handling</option>
+              <option>Something else</option>
             </select>
           </label>
 

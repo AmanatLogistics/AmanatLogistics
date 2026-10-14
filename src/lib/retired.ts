@@ -1,7 +1,8 @@
 /**
- * The site's own wording from when it presented Amanat as a fruit exporter
- * ("Premium Figs & Dry Fruits, From Kandahar to the World."), and what each
- * piece became when it was rewritten for a freight and logistics company.
+ * Built-in wording the site has since retired, and what each piece became:
+ *   - from when it presented Amanat as a fruit exporter ("Premium Figs & Dry
+ *     Fruits, From Kandahar to the World.");
+ *   - from when it still offered global personal shopping.
  *
  * Why this is needed: /admin saves a whole section at once. Any section saved
  * before the rewrite holds the old text in every field — including the fields
@@ -33,6 +34,8 @@ const OBJECTS: Record<string, Swaps> = {
   seo: {
     description: {
       'Premium figs & dry fruits, from Kandahar to the world — exported with integrity, delivered with care. Export & freight plus global personal shopping.':
+        D.seo.description,
+      'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight to markets worldwide, plus global personal shopping.':
         D.seo.description,
     },
   },
@@ -68,6 +71,8 @@ const PAGE_HEADERS: Record<string, Swaps> = {
     subtitle: {
       "From Kandahar's orchards to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust.":
         D.pageHeaders.services.subtitle,
+      'Freight forwarding, customs clearance and cargo handling from Kandahar to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust.':
+        D.pageHeaders.services.subtitle,
     },
   },
   about: {
@@ -90,6 +95,8 @@ const PAGE_HEADERS: Record<string, Swaps> = {
   contact: {
     subtitle: {
       'Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.':
+        D.pageHeaders.contact.subtitle,
+      'Reach the right team directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.':
         D.pageHeaders.contact.subtitle,
     },
   },
@@ -148,8 +155,8 @@ function swapFields<T>(item: T, swaps: Swaps): T {
   return out as T;
 }
 
-/** Saved content with every leftover piece of the old fruit wording replaced. */
-export function retireFruitWording(o: Partial<SiteContent>): Partial<SiteContent> {
+/** Saved content with every leftover piece of retired built-in wording replaced. */
+export function retireOldWording(o: Partial<SiteContent>): Partial<SiteContent> {
   const out: Record<string, unknown> = { ...o };
 
   for (const [section, swaps] of Object.entries(OBJECTS)) {

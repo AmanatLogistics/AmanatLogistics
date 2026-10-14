@@ -17,10 +17,9 @@ pages stay fast. Suggested minimum sizes are shown.
 ## Page images
 | File | Page | Min size |
 |------|------|----------|
-| `hero-home.jpg` | Home hero background | 2400×1100 |
+| `hero-home.jpg` | (old) figs hero — the hero now uses `gallery/loading.jpg` until a wider cargo photo is uploaded | 2400×1100 |
 | `about-header.jpg` | About page header background | 2400×900 |
-| `about-story.jpg` | About — orchard / drying yard | 1000×960 |
-| `shopping-parcels.jpg` | Services — personal shopping | 1000×620 |
+| `about-story.jpg` | (old) orchard photo — About now uses `gallery/container.jpg` | 1000×960 |
 | `routes-worldmap.svg` | Home + Routes — world map with routes | 2200×1040 |
 
 ## Exports (`/exports/`)
