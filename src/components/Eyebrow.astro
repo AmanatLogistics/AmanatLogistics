@@ -1,4 +1,6 @@
 ---
+import BrandBird from './BrandBird.astro';
+
 interface Props {
   text: string;
   /** color scheme: on light or on dark backgrounds */
@@ -7,10 +9,11 @@ interface Props {
 }
 const { text, tone = 'light', class: klass = '' } = Astro.props;
 const color = tone === 'dark' ? 'text-gold-light' : 'text-label';
-const line = 'bg-accent';
+// The logo's bird marks every section label, in place of the usual rule.
+const bird = tone === 'dark' ? 'text-gold-light' : 'text-plum';
 ---
 
 <div class={`flex items-center gap-2.5 ${klass}`}>
-  <span class={`h-[3px] w-6 rounded-full ${line}`}></span>
+  <BrandBird class={`w-[22px] ${bird}`} />
   <span class={`eyebrow ${color}`}>{text}</span>
 </div>
