@@ -15,8 +15,8 @@ const H = pageHeaders.routes;
   <section class="route-grid bg-fig">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
       <Eyebrow text={H.eyebrow} tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F5F7FA] md:text-[52px]">{H.title}</h1>
-      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[18px]">
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#FFF7F9] md:text-[52px]">{H.title}</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#E8D3DA] md:text-[18px]">
         {H.subtitle}
       </p>
     </div>
@@ -25,17 +25,17 @@ const H = pageHeaders.routes;
   <!-- ============ ROUTE MAP ============ -->
   <section class="bg-fig">
     <div class="mx-auto flex max-w-[1240px] flex-col gap-4 px-5 py-20 md:px-10">
-      <div class="rounded-2xl border border-[#22364d] bg-[#07121e]/40 p-4 md:p-8">
+      <div class="rounded-2xl border border-[#4a2233] bg-[#1a0911]/40 p-4 md:p-8">
         <RouteMap destinations={DESTINATIONS} class="mx-auto h-auto w-full max-w-[760px]" />
       </div>
       <div class="flex flex-wrap items-center gap-6 pt-1">
         <div class="flex items-center gap-2">
           <div class="h-3 w-3 rounded-full bg-accent"></div>
-          <span class="text-[13px] text-[#9DAABA]">Origin — Kandahar, Afghanistan</span>
+          <span class="text-[13px] text-[#C2A6B0]">Origin — Kandahar, Afghanistan</span>
         </div>
         <div class="flex items-center gap-2">
           <div class="h-[2px] w-[18px] bg-gold-light"></div>
-          <span class="text-[13px] text-[#9DAABA]">Active freight route</span>
+          <span class="text-[13px] text-[#C2A6B0]">Active freight route</span>
         </div>
       </div>
     </div>
@@ -53,7 +53,7 @@ const H = pageHeaders.routes;
           DESTINATIONS.map((d) => (
             <div class="flex flex-col gap-4 rounded-xl border border-line bg-cream p-7 reveal">
               <div class="flex items-center gap-3.5">
-                <div class="flex h-[38px] w-[56px] items-center justify-center rounded-[5px] border border-dashed border-gold font-mono text-[8px] text-label" style="background:repeating-linear-gradient(45deg,#EDF0F4,#EDF0F4 6px,#E3E8EE 6px,#E3E8EE 12px);">
+                <div class="flex h-[38px] w-[56px] items-center justify-center rounded-[5px] border border-dashed border-gold font-mono text-[8px] text-label" style="background:repeating-linear-gradient(45deg,#F6EFF2,#F6EFF2 6px,#EFE5E9 6px,#EFE5E9 12px);">
                   FLAG
                 </div>
                 <div class="flex flex-col gap-0.5">
@@ -62,17 +62,17 @@ const H = pageHeaders.routes;
                 </div>
               </div>
               <div class="flex flex-col gap-2 border-t border-line pt-4">
-                <span class="eyebrow text-[12px] text-[#7F8B99]">What we deliver</span>
+                <span class="eyebrow text-[12px] text-[#8E7C84]">What we deliver</span>
                 <span class="text-[15px] leading-relaxed text-muted-dark">{d.delivers}</span>
               </div>
             </div>
           ))
         }
         <!-- Add-more card -->
-        <div class="flex min-h-[190px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#C3CBD5] p-7 text-center">
+        <div class="flex min-h-[190px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-[#DCCBD2] p-7 text-center">
           <div class="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-dashed border-gold text-[20px] text-label">+</div>
           <span class="font-serif text-[17px] font-bold text-label">More destinations</span>
-          <span class="text-[13.5px] leading-snug text-[#7F8B99]">Space to add new countries as coverage expands.</span>
+          <span class="text-[13.5px] leading-snug text-[#8E7C84]">Space to add new countries as coverage expands.</span>
         </div>
       </div>
       <div class="flex items-center justify-center gap-3 pt-2">
@@ -90,7 +90,7 @@ const H = pageHeaders.routes;
       <p class="m-0 max-w-[52ch] text-[16.5px] leading-relaxed text-muted-dark">
         Tell us your destination and volume — we'll confirm routing, timelines, and documentation.
       </p>
-      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-bold text-ink shadow-[0_2px_8px_rgba(229,154,28,0.28)] transition-colors hover:bg-gold-light">
+      <a href="/contact#form" class="mt-1.5 rounded-md bg-accent px-8 py-4 text-[15px] font-bold text-white shadow-[0_2px_8px_rgba(126,46,71,0.28)] transition-colors hover:bg-plum-hover">
         Request a Quote
       </a>
     </div>

@@ -13,6 +13,11 @@
     "small": "/images/about-story-480.webp",
     "smallW": 480
   },
+  "/images/brand-logo-maroon.png": {
+    "w": 646,
+    "h": 619,
+    "webp": "/images/brand-logo-maroon.webp"
+  },
   "/images/brand-logo-white.png": {
     "w": 249,
     "h": 238,

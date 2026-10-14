@@ -10,7 +10,7 @@ const year = new Date().getFullYear();
 const siteLinks = NAV.filter((n) => n.href !== '/contact');
 ---
 
-<footer class="relative overflow-hidden border-t border-white/10 bg-[#09131f]">
+<footer class="relative overflow-hidden border-t border-white/10 bg-[#210b15]">
   <div class="relative mx-auto flex max-w-[1240px] flex-col gap-10 px-5 pb-10 pt-16 md:px-10">
     <div class="flex flex-col justify-between gap-10 md:flex-row md:items-start md:gap-12">
       <!-- Brand -->
@@ -21,16 +21,16 @@ const siteLinks = NAV.filter((n) => n.href !== '/contact');
               <Picture src={footerLogo} alt={SITE.name} class="h-14 w-auto max-w-[260px] object-contain" />
             ) : (
               <>
-                <SwallowMark class="w-11 text-[#F5F7FA]" />
+                <SwallowMark class="w-11 text-[#FFF7F9]" />
                 <span class="flex flex-col leading-[1.05]">
-                  <span class="font-sans text-[22px] font-extrabold tracking-tight text-[#F5F7FA]">Amanat</span>
+                  <span class="font-sans text-[22px] font-extrabold tracking-tight text-[#FFF7F9]">Amanat</span>
                   <span class="text-[10px] font-semibold tracking-[0.3em] text-gold-light">LOGISTICS</span>
                 </span>
               </>
             )
           }
         </div>
-        <span class="text-[14px] leading-relaxed text-[#9DAABA]">
+        <span class="text-[14px] leading-relaxed text-[#C2A6B0]">
           Freight, customs and logistics from Kandahar to the world — moved with integrity, delivered with care.
         </span>
       </div>
@@ -41,7 +41,7 @@ const siteLinks = NAV.filter((n) => n.href !== '/contact');
           <span class="eyebrow text-[12px] text-gold-light">Site</span>
           {
             siteLinks.map((item) => (
-              <a href={item.href} class="text-[14px] text-[#9DAABA] transition-colors hover:text-[#F5F7FA]">
+              <a href={item.href} class="text-[14px] text-[#C2A6B0] transition-colors hover:text-[#FFF7F9]">
                 {item.label}
               </a>
             ))
@@ -50,20 +50,20 @@ const siteLinks = NAV.filter((n) => n.href !== '/contact');
         <!-- Contact -->
         <div class="flex flex-col gap-2.5">
           <span class="eyebrow text-[12px] text-gold-light">Contact</span>
-          <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="text-[14px] text-[#9DAABA] transition-colors hover:text-[#F5F7FA]">
+          <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="text-[14px] text-[#C2A6B0] transition-colors hover:text-[#FFF7F9]">
             Phone: {CONTACT.phoneExport}
           </a>
-          <a href={`mailto:${CONTACT.email}`} class="text-[14px] text-[#9DAABA] transition-colors hover:text-[#F5F7FA]">
+          <a href={`mailto:${CONTACT.email}`} class="text-[14px] text-[#C2A6B0] transition-colors hover:text-[#FFF7F9]">
             {CONTACT.email}
           </a>
-          <span class="text-[14px] text-[#9DAABA]">{CONTACT.location}</span>
+          <span class="text-[14px] text-[#C2A6B0]">{CONTACT.location}</span>
         </div>
       </div>
     </div>
 
     <div class="flex flex-col justify-between gap-3 border-t border-[rgba(255,255,255,0.12)] pt-6 sm:flex-row">
-      <span class="text-[13px] text-[#9DAABA]">© {year} {SITE.name}. All rights reserved.</span>
-      <span class="text-[13px] text-[#9DAABA]">{CONTACT.location}</span>
+      <span class="text-[13px] text-[#C2A6B0]">© {year} {SITE.name}. All rights reserved.</span>
+      <span class="text-[13px] text-[#C2A6B0]">{CONTACT.location}</span>
     </div>
   </div>
 </footer>

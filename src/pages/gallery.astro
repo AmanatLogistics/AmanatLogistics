@@ -16,8 +16,8 @@ const H = pageHeaders.gallery;
   <section class="route-grid bg-fig">
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
       <Eyebrow text={H.eyebrow} tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F5F7FA] md:text-[52px]">{H.title}</h1>
-      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[18px]">
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#FFF7F9] md:text-[52px]">{H.title}</h1>
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#E8D3DA] md:text-[18px]">
         {H.subtitle}
       </p>
     </div>
@@ -36,8 +36,8 @@ const H = pageHeaders.gallery;
               class:list={[
                 'gallery-tab rounded-full border px-5 py-2.5 text-[14px] font-semibold transition-all',
                 i === 0
-                  ? 'border-accent bg-accent text-ink'
-                  : 'border-[#C6D0DC] bg-transparent text-muted-dark hover:border-gold hover:text-plum-hover',
+                  ? 'border-accent bg-accent text-white'
+                  : 'border-[#E8D3DA] bg-transparent text-muted-dark hover:border-gold hover:text-plum-hover',
               ]}
               aria-selected={i === 0 ? 'true' : 'false'}
             >
@@ -57,8 +57,8 @@ const H = pageHeaders.gallery;
               style={`--gh:${(g as { h?: number }).h ?? [300, 220, 260, 230][i % 4]}px`}
             >
               <ImageFrame src={g.img} alt={g.alt} class={`w-full`} label={g.alt} />
-              <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-3.5 pt-6 opacity-0 transition-opacity duration-300 group-hover:opacity-100" style="background:linear-gradient(0deg,rgba(13,27,42,0.82),rgba(13,27,42,0));">
-                <span class="text-[12px] font-semibold text-[#F5F7FA]">{g.cat}</span>
+              <div class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-3.5 pt-6 opacity-0 transition-opacity duration-300 group-hover:opacity-100" style="background:linear-gradient(0deg,rgba(42,16,25,0.82),rgba(42,16,25,0));">
+                <span class="text-[12px] font-semibold text-[#FFF7F9]">{g.cat}</span>
               </div>
             </div>
           ))
@@ -88,8 +88,8 @@ const H = pageHeaders.gallery;
     const items = document.querySelectorAll<HTMLElement>('.gallery-item');
     if (!tabs.length) return;
 
-    const active = 'border-accent bg-accent text-ink';
-    const inactive = 'border-[#C6D0DC] bg-transparent text-muted-dark';
+    const active = 'border-accent bg-accent text-white';
+    const inactive = 'border-[#E8D3DA] bg-transparent text-muted-dark';
 
     tabs.forEach((tab) => {
       tab.addEventListener('click', () => {

@@ -2,45 +2,46 @@
 
 /* ============================================================
    Amanat Logistics — design system (Tailwind v4, CSS-first)
-   Direction: a freight company, not a fruit house. Cool white and
-   steel-grey surfaces, deep navy for the heavy bands, the maroon of
-   the Amanat logo for headings and brand moments, and signal amber
-   for everything you can press. Type is Barlow — drawn from road and
-   highway signage — with its semi-condensed cut for headings.
+   Built from the logo: its maroon (#7E2E47) is the one brand colour.
+   Dark bands are the same maroon taken almost to black, highlights on
+   them are a pale blush of it, and the neutrals carry a trace of it so
+   white and grey never look borrowed from another brand. Type is Barlow
+   — drawn from road and highway signage — with its semi-condensed cut
+   for headings.
 
    Token names are kept from the first design (cream, plum, fig…) so
-   every page picks the new look up without renaming classes; read
-   them as roles, not colours:
+   every page picks the palette up without renaming classes; read them
+   as roles, not colours:
      cream  page background     paper  cards / light sections
-     sand   bands               ink    body text
-     plum   brand maroon        fig    navy — dark bands, footer
-     accent / gold   amber — buttons, links, highlights
+     sand   tinted bands        ink    body text
+     plum   logo maroon         fig    maroon-black — dark bands, footer
+     accent  buttons & links (maroon)   gold-light  highlights on dark
    ============================================================ */
 @theme {
   /* Light surfaces */
-  --color-cream: #f2f4f7; /* page background — cool off-white */
+  --color-cream: #f8f5f6; /* page background — white with a trace of the maroon */
   --color-paper: #ffffff; /* cards / light sections */
-  --color-sand: #e7ebf0; /* bands / stats */
+  --color-sand: #f3ebee; /* tinted bands */
 
   /* Ink + dark surfaces */
-  --color-ink: #0f1a26; /* navy-black — body text */
-  --color-plum: #6b1a33; /* maroon from the Amanat logo — headings, brand */
-  --color-plum-hover: #861f40;
-  --color-fig: #0d1b2a; /* deep navy — hero, page headers, footer */
+  --color-ink: #1f1419; /* near-black — body text */
+  --color-plum: #7e2e47; /* the logo's maroon — headings, brand */
+  --color-plum-hover: #64223a;
+  --color-fig: #2a1019; /* maroon-black — hero, page headers, footer */
   --color-olive: #2f6f62; /* teal-green — small accents (contact form dot, image frames) */
 
-  /* Signal amber (primary action) + alert red */
-  --color-accent: #e59a1c; /* amber — CTAs, links */
-  --color-accent-deep: #a86708;
-  --color-gold: #e59a1c;
-  --color-gold-light: #f6c25c;
-  --color-pom: #c2412d; /* red — sparing highlight */
+  /* Actions + highlights */
+  --color-accent: #7e2e47; /* buttons, links */
+  --color-accent-deep: #7e2e47;
+  --color-gold: #c86a86; /* rose — highlights on light */
+  --color-gold-light: #f2c6d3; /* blush — highlights on dark */
+  --color-pom: #c2412d; /* red — sparing alert */
 
   /* Lines + muted text */
-  --color-line: #dce1e8;
-  --color-muted: #566272;
-  --color-muted-dark: #36414e;
-  --color-label: #6b1a33; /* eyebrow labels — brand maroon */
+  --color-line: #ebe2e6;
+  --color-muted: #6c5f65;
+  --color-muted-dark: #463a40;
+  --color-label: #7e2e47; /* eyebrow labels */
 
   /* Type. `font-serif` is the heading face: the class name is from the first
      design and is used on every heading, so it is re-pointed rather than renamed. */
@@ -86,8 +87,8 @@ h2.font-serif {
    for its own sake: it is what keeps a flat navy block from reading as empty. */
 .route-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
   background-size: 44px 44px;
 }
 

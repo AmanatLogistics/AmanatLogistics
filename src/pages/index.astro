@@ -113,36 +113,36 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
     <div
       class="absolute inset-0"
       style="background:
-        radial-gradient(80% 90% at 92% 0%, rgba(229,154,28,0.16) 0%, rgba(229,154,28,0) 55%),
-        linear-gradient(100deg, rgba(9,19,31,0.97) 0%, rgba(13,27,42,0.9) 45%, rgba(13,27,42,0.62) 100%);"
+        radial-gradient(70% 90% at 100% 0%, rgba(126,46,71,0.45) 0%, rgba(126,46,71,0) 60%),
+        linear-gradient(100deg, rgba(30,10,19,0.96) 0%, rgba(42,16,25,0.86) 42%, rgba(42,16,25,0.45) 100%);"
     >
     </div>
     <div class="route-grid absolute inset-0"></div>
 
     <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 pb-28 pt-20 md:px-10 md:pb-36 md:pt-28 lg:grid-cols-[1.25fr_0.75fr] lg:gap-16">
       <div class="flex flex-col items-start gap-6">
-        <span class="eyebrow inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-gold-light">
-          <span class="h-2 w-2 rounded-full bg-accent"></span>
+        <span class="eyebrow inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-gold-light">
+          <span class="h-2 w-2 rounded-full bg-gold-light"></span>
           {hero.eyebrow}
         </span>
-        <h1 class="m-0 max-w-[15ch] font-serif text-[44px] font-bold uppercase leading-[0.98] tracking-[-0.01em] text-[#F5F7FA] sm:text-[58px] md:text-[72px]" style="text-wrap:balance;">
+        <h1 class="m-0 max-w-[17ch] font-serif text-[44px] font-bold leading-[1.0] tracking-[-0.015em] text-[#FFF7F9] sm:text-[56px] md:text-[68px]" style="text-wrap:balance;">
           {hero.title}
         </h1>
-        <p class="m-0 max-w-[52ch] text-[17px] leading-relaxed text-[#C6D0DC] md:text-[19px]">
+        <p class="m-0 max-w-[52ch] text-[17px] leading-relaxed text-[#E8D3DA] md:text-[19px]">
           {hero.subtitle}
         </p>
         <div class="mt-2 flex flex-wrap items-center gap-3">
-          <a href="/contact#form" class="rounded-md bg-accent px-7 py-3.5 text-[15.5px] font-bold text-ink shadow-[0_10px_30px_rgba(229,154,28,0.30)] transition hover:-translate-y-0.5 hover:bg-gold-light">
+          <a href="/contact#form" class="rounded-md bg-white px-7 py-3.5 text-[15.5px] font-bold text-plum shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:-translate-y-0.5 hover:bg-gold-light">
             Request a Quote
           </a>
-          <a href="/services" class="group flex items-center gap-2 rounded-md border border-white/20 px-6 py-3.5 text-[15.5px] font-semibold text-[#F5F7FA] transition-colors hover:border-gold-light hover:text-gold-light">
+          <a href="/services" class="group flex items-center gap-2 rounded-md border border-white/20 px-6 py-3.5 text-[15.5px] font-semibold text-[#FFF7F9] transition-colors hover:border-gold-light hover:text-gold-light">
             Our services
             <span class="transition-transform group-hover:translate-x-1">→</span>
           </a>
         </div>
-        <ul class="m-0 mt-1 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[14px] font-semibold uppercase tracking-[0.08em] text-[#9DAABA]">
+        <ul class="m-0 mt-1 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[14px] font-semibold uppercase tracking-[0.08em] text-[#C2A6B0]">
           {['Road', 'Air', 'Sea', 'Customs', 'Warehousing'].map((m) => (
-            <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rotate-45 bg-accent"></span>{m}</li>
+            <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rotate-45 bg-gold-light"></span>{m}</li>
           ))}
         </ul>
         {
@@ -151,7 +151,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
               href="#partnership"
               class="mt-1 inline-flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 py-1.5 pl-1.5 pr-5 transition-colors hover:border-gold-light/70"
             >
-              <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-md bg-[#F5F7FA]">
+              <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-md bg-[#FFF7F9]">
                 {partner.logo ? (
                   <Picture src={partner.logo} alt="" class="h-7 w-7 object-contain" />
                 ) : (
@@ -164,7 +164,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
               </span>
               <span class="flex flex-col leading-tight">
                 <small class="text-[11px] font-bold uppercase tracking-[0.14em] text-gold-light/85">In partnership with</small>
-                <strong class="text-[15px] font-semibold text-[#F5F7FA]">{partner.name}</strong>
+                <strong class="text-[15px] font-semibold text-[#FFF7F9]">{partner.name}</strong>
               </span>
             </a>
           )
@@ -196,7 +196,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
           />
           <button
             type="submit"
-            class="rounded-md bg-fig px-6 py-3.5 text-[15.5px] font-bold text-[#F5F7FA] transition-colors hover:bg-plum"
+            class="rounded-md bg-fig px-6 py-3.5 text-[15.5px] font-bold text-[#FFF7F9] transition-colors hover:bg-plum"
           >
             Track Now
           </button>
@@ -213,7 +213,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
   <!-- A white strip that overlaps the foot of the hero, so the numbers read as
        part of the opening rather than as a separate band. -->
   <section class="relative z-10 bg-cream px-5 md:px-10">
-    <div class="mx-auto -mt-14 grid max-w-[1240px] grid-cols-2 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(15,26,38,0.10)] md:grid-cols-4">
+    <div class="mx-auto -mt-14 grid max-w-[1240px] grid-cols-2 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(42,16,25,0.10)] md:grid-cols-4">
       {
         STATS.map((s, i) => (
           <div class:list={[
@@ -222,7 +222,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
             i >= 2 && 'border-t border-line md:border-t-0',
             i === 2 && 'md:border-l',
           ]}>
-            <span class="font-serif text-[30px] font-bold leading-none text-ink md:text-[38px]">{s.value}</span>
+            <span class="font-serif text-[30px] font-bold leading-none text-plum md:text-[38px]">{s.value}</span>
             <span class="eyebrow text-[11.5px] text-muted md:text-[12px]">{s.label}</span>
           </div>
         ))
@@ -259,13 +259,13 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
       <ul class="m-0 grid list-none grid-cols-1 gap-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
         {
           services6.map((c, i) => (
-            <li class="group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-line bg-paper p-7 transition duration-300 hover:-translate-y-1 hover:border-[#C3CBD5] hover:shadow-[0_18px_40px_rgba(15,26,38,0.10)] reveal md:p-8">
+            <li class="group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-line bg-paper p-7 transition duration-300 hover:-translate-y-1 hover:border-[#DCCBD2] hover:shadow-[0_18px_40px_rgba(42,16,25,0.12)] reveal md:p-8">
               <span class="absolute inset-x-0 top-0 h-[3px] origin-left scale-x-0 bg-accent transition-transform duration-300 group-hover:scale-x-100"></span>
               <div class="mb-2 flex items-start justify-between">
-                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-fig text-gold-light">
+                <span class="flex h-12 w-12 items-center justify-center rounded-lg bg-sand text-plum transition-colors duration-300 group-hover:bg-plum group-hover:text-white">
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={c.svg} />
                 </span>
-                <span class="font-serif text-[15px] font-bold tracking-[0.06em] text-[#C3CBD5]">{String(i + 1).padStart(2, '0')}</span>
+                <span class="font-serif text-[15px] font-bold tracking-[0.06em] text-[#DCCBD2]">{String(i + 1).padStart(2, '0')}</span>
               </div>
               <h3 class="m-0 font-serif text-[22px] font-bold leading-snug text-ink">{c.title}</h3>
               <p class="m-0 text-[15.5px] leading-relaxed text-muted">{c.text}</p>
@@ -273,6 +273,38 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
           ))
         }
       </ul>
+    </div>
+  </section>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <!-- The four things that happen to every consignment, in order. A buyer who
+       has never shipped out of Afghanistan learns more here than from any claim. -->
+  <section class="bg-paper">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-12 px-5 py-20 md:px-10 md:py-24">
+      <div class="flex max-w-[640px] flex-col gap-4 reveal">
+        <Eyebrow text="How It Works" />
+        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.05] text-plum md:text-[44px]">From booking to delivery, in four steps.</h2>
+      </div>
+      <ol class="relative m-0 grid list-none grid-cols-1 gap-10 p-0 md:grid-cols-4 md:gap-6">
+        <!-- the line that joins the steps on a wide screen -->
+        <span class="absolute left-0 right-0 top-7 hidden h-px bg-line md:block" aria-hidden="true"></span>
+        {
+          [
+            { t: 'Book & quote', d: 'Tell us the cargo, weight and destination. We confirm route, price and timeline within one business day.' },
+            { t: 'Papers & customs', d: 'We prepare the invoice, packing list and certificates, then clear customs in Kandahar.' },
+            { t: 'Transit, tracked', d: 'Your cargo moves by road, air or sea — and you follow every stage on our tracking page.' },
+            { t: 'Delivered', d: 'Cleared at the border and handed over to your buyer, with the paperwork to match.' },
+          ].map((step, i) => (
+            <li class="relative flex flex-col gap-3 reveal">
+              <span class="relative z-10 flex h-14 w-14 items-center justify-center rounded-full border-4 border-paper bg-plum font-serif text-[20px] font-bold text-white shadow-[0_0_0_1px_#EBE2E6]">
+                {i + 1}
+              </span>
+              <h3 class="m-0 mt-1 font-serif text-[22px] font-bold text-ink">{step.t}</h3>
+              <p class="m-0 text-[15.5px] leading-relaxed text-muted">{step.d}</p>
+            </li>
+          ))
+        }
+      </ol>
     </div>
   </section>
 
@@ -284,7 +316,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
     tiles come from /admin → Cargo we carry; general cargo closes the row so the
     point lands: this is what we know best, not all we move.
   -->
-  <section class="border-y border-line bg-paper">
+  <section class="bg-sand">
     <div class="mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-10 px-5 py-16 md:px-10 md:py-20 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
       <div class="flex flex-col gap-4 reveal">
         <Eyebrow text="Cargo We Specialise In" />
@@ -311,18 +343,18 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
               />
               <div
                 class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2.5 pt-8"
-                style="background:linear-gradient(0deg,rgba(13,27,42,0.88),rgba(13,27,42,0));"
+                style="background:linear-gradient(0deg,rgba(42,16,25,0.88),rgba(42,16,25,0));"
               >
-                <span class="text-[14.5px] font-semibold text-[#F5F7FA]">{c.name}</span>
+                <span class="text-[14.5px] font-semibold text-[#FFF7F9]">{c.name}</span>
               </div>
             </li>
           ))
         }
         <li class="flex h-[118px] flex-col justify-between rounded-lg bg-fig p-3.5 md:h-[132px]">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f6c25c" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#F2C6D3" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 8 12 3 3 8v8l9 5 9-5Z" /><path d="M3 8l9 5 9-5M12 13v8" />
           </svg>
-          <span class="text-[14.5px] font-semibold text-[#F5F7FA]">General cargo</span>
+          <span class="text-[14.5px] font-semibold text-[#FFF7F9]">General cargo</span>
         </li>
       </ul>
     </div>
@@ -337,9 +369,9 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
   -->
   {
     showPartner && (
-      <section id="partnership" class="scroll-mt-24 bg-cream">
+      <section id="partnership" class="scroll-mt-36 bg-cream">
         <div class="mx-auto max-w-[1240px] px-5 py-20 md:px-10 md:py-[88px]">
-          <div class="grid grid-cols-1 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(15,26,38,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
+          <div class="grid grid-cols-1 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(42,16,25,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
             <div class="flex flex-col items-start gap-5 p-8 md:p-12">
               <div class="flex items-center gap-3" aria-hidden="true">
                 <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
@@ -389,7 +421,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
                     href={partnerLink}
                     target="_blank"
                     rel="noopener"
-                    class="mt-1 inline-flex items-center gap-2 rounded-md bg-plum px-7 py-3 text-[15px] font-bold text-[#F5F7FA] transition-colors hover:bg-plum-hover"
+                    class="mt-1 inline-flex items-center gap-2 rounded-md bg-plum px-7 py-3 text-[15px] font-bold text-[#FFF7F9] transition-colors hover:bg-plum-hover"
                   >
                     {partner.button || `Visit ${partner.name}`} <span aria-hidden="true">↗</span>
                   </a>
@@ -399,7 +431,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 
             {
               partnerFigures.length > 0 && (
-                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#1b2c3f] p-0">
+                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#3d1828] p-0">
                   {partnerFigures.map((f, i) => (
                     <li
                       class:list={[
@@ -413,7 +445,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
                       <span class:list={['font-serif font-bold leading-none text-gold-light', i === 0 ? 'text-[44px] md:text-[54px]' : 'text-[30px] md:text-[34px]']}>
                         {f.value}
                       </span>
-                      <span class="eyebrow text-[12px] text-[#C6D0DC] md:text-[12.5px]">{f.label}</span>
+                      <span class="eyebrow text-[12px] text-[#E8D3DA] md:text-[12.5px]">{f.label}</span>
                     </li>
                   ))}
                 </ul>
@@ -451,21 +483,37 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
     <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 py-20 md:grid-cols-[0.9fr_1.1fr] md:gap-[72px] md:px-10 md:py-24">
       <div class="flex flex-col gap-[22px]">
         <Eyebrow text="Routes & Coverage" tone="dark" />
-        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.08] text-[#F5F7FA] md:text-[44px]" style="text-wrap:pretty;">
+        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.08] text-[#FFF7F9] md:text-[44px]" style="text-wrap:pretty;">
           We currently ship to {countryList} — with more destinations coming.
         </h2>
         <div class="mt-1 flex flex-wrap gap-2.5">
           {destinations.map((d) => (
-            <span class="rounded-md border border-[#34506e] bg-white/5 px-4 py-1.5 text-[14px] font-semibold text-[#C6D0DC]">{d.name}</span>
+            <span class="rounded-md border border-[#643246] bg-white/5 px-4 py-1.5 text-[14px] font-semibold text-[#E8D3DA]">{d.name}</span>
           ))}
-          <span class="rounded-md border border-dashed border-[#34506e] px-4 py-1.5 text-[14px] font-semibold text-[#f6c25c]">More coming</span>
+          <span class="rounded-md border border-dashed border-[#643246] px-4 py-1.5 text-[14px] font-semibold text-[#F2C6D3]">More coming</span>
         </div>
-        <a href="/contact" class="mt-2 flex items-center gap-2 self-start text-[15px] font-semibold text-gold-light transition-colors hover:text-[#F5F7FA]">
+        <a href="/contact" class="mt-2 flex items-center gap-2 self-start text-[15px] font-semibold text-gold-light transition-colors hover:text-[#FFF7F9]">
           Ask about your destination <span class="text-[17px]">→</span>
         </a>
       </div>
-      <div class="rounded-2xl border border-[#22364d] bg-[#07121e]/40 p-4 md:p-6">
+      <div class="rounded-2xl border border-[#4a2233] bg-[#1a0911]/40 p-4 md:p-6">
         <RouteMap destinations={destinations} class="h-auto w-full" />
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLOSING CALL TO ACTION ============ -->
+  <section class="relative overflow-hidden bg-plum">
+    <div class="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/5" aria-hidden="true"></div>
+    <div class="pointer-events-none absolute -bottom-32 right-40 h-72 w-72 rounded-full bg-white/5" aria-hidden="true"></div>
+    <div class="relative mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-8 px-5 py-16 md:flex-row md:items-center md:px-10 md:py-20">
+      <div class="flex max-w-[34ch] flex-col gap-3">
+        <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.05] text-white md:text-[44px]">Ready to move your cargo?</h2>
+        <p class="m-0 text-[17px] leading-relaxed text-[#F2C6D3]">Tell us what, how much and where to. We reply within one business day.</p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a href="/contact#form" class="rounded-md bg-white px-7 py-3.5 text-[15.5px] font-bold text-plum transition hover:-translate-y-0.5 hover:bg-gold-light">Request a Quote</a>
+        <a href={`https://wa.me/${contact.phoneExport.replace(/\D/g, '')}`} target="_blank" rel="noopener" class="rounded-md border border-white/40 px-7 py-3.5 text-[15.5px] font-bold text-white transition-colors hover:border-white hover:bg-white/10">WhatsApp us</a>
       </div>
     </div>
   </section>

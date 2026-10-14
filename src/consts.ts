@@ -97,7 +97,7 @@ export const DEFAULT_CONTENT = {
   // Your real logo — upload in /admin under "Logo & brand".
   // When set, it replaces the built-in swallow mark across the site.
   brand: {
-    logo: '/images/brand-logo.png', // colour version, shown on the light header
+    logo: '/images/brand-logo-maroon.png', // colour version (the logo's own maroon), shown on the light header
     logoLight: '/images/brand-logo-white.png', // white version, shown on the dark footer
   },
   hero: {
