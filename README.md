@@ -38,7 +38,7 @@ admin password. From there you can edit — changes go live instantly, no redepl
 
 - Home hero headline, sub-headline, and background photo
 - Trust numbers (tons delivered, orders, countries…)
-- Contact details (phones, email, location — also updates WhatsApp button)
+- Contact details (phone, email, location — also updates WhatsApp button)
 - Export products (add/remove, with photos)
 - Destination countries on the Routes page
 - Gallery photos (upload, categorize, add/remove)

@@ -96,6 +96,8 @@ const PAGE_HEADERS: Record<string, Swaps> = {
     subtitle: {
       'Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.':
         D.pageHeaders.contact.subtitle,
+      'Reach the right team directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.':
+        D.pageHeaders.contact.subtitle,
     },
   },
 };

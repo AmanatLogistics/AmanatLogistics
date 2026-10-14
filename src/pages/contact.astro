@@ -84,6 +84,9 @@ const fieldClass =
           <label class="flex flex-col gap-1.5">
             <span class="text-[13px] font-semibold text-muted-dark">Service</span>
             <select name="service" class={fieldClass}>
+              <!-- First, so a visitor who skips this field is not recorded as wanting
+                   road freight. -->
+              <option>Not sure yet / several</option>
               <option>Road Freight</option>
               <option>Air Cargo</option>
               <option>Sea Freight</option>

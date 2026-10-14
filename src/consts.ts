@@ -129,7 +129,7 @@ export const DEFAULT_CONTENT = {
     about: { eyebrow: 'Our Story', title: 'About Amanat Logistics', subtitle: "A Kandahar-based logistics company moving Afghanistan's trade across borders — with a name that means trust." },
     routes: { eyebrow: 'Where We Ship', title: 'Routes & Coverage', subtitle: 'Established freight corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.' },
     gallery: { eyebrow: 'Our Work in Pictures', title: 'Gallery', subtitle: 'The cargo we carry, our facilities, and our shipments — real photography builds real trust.' },
-    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Reach the right team directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.' },
+    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Call or WhatsApp us directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.' },
     tracking: { eyebrow: 'Shipment Tracking', title: 'Track Your Shipment', subtitle: 'Enter your tracking number or invoice number to follow your consignment from our Kandahar warehouse right through to delivery.' },
   },
   // Services page — three freight-mode cards
