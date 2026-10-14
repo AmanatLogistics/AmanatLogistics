@@ -3,8 +3,8 @@
  * A plain image that still gets the WebP and the intrinsic size.
  *
  * ImageFrame is for photos that need the dashed placeholder behind them; this
- * is for the ones that don't — the logos in the header and footer, the
- * marketplace marks. They appear on every page, so serving them as WebP with
+ * is for the ones that don't — the logos in the header, footer and partnership
+ * band. They appear on every page, so serving them as WebP with
  * their size declared is worth more here than anywhere else.
  *
  * A src the manifest has never seen (a photo uploaded through /admin) renders
@@ -32,7 +32,7 @@ interface Props {
    * Only worth giving where the image is shown small.
    */
   sizes?: string;
-  /** Passed straight through — used for the marketplace logo fallback. */
+  /** Passed straight through to the <img>, e.g. to swap in text if a logo fails. */
   onerror?: string;
 }
 const { src, alt, class: klass = '', loading = 'lazy', onerror, sizes } = Astro.props;

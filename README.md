@@ -43,7 +43,6 @@ admin password. From there you can edit — changes go live instantly, no redepl
 - Destination countries on the Routes page
 - Gallery photos (upload, categorize, add/remove)
 - Team members on the About page
-- Shopping platform logos
 
 **Setup (once):**
 1. Set `ADMIN_PASSWORD` in `.env` (local) and in Vercel → Settings → Environment

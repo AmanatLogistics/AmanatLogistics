@@ -139,8 +139,7 @@ export const POST: APIRoute = async ({ request }) => {
         </p>
         <p style="font-size:15px;line-height:1.65;color:#5A5147;margin:0 0 20px;">
           For anything urgent, call us:<br/>
-          Freight &amp; Logistics — +93 70 009 8848<br/>
-          Personal Shopping — +93 70 684 0090
+          Freight &amp; Logistics — +93 70 009 8848
         </p>
         <p style="font-size:13px;color:#8C6D3F;margin:0;">Freight, customs and logistics, from Kandahar to the world.</p>
       </div>

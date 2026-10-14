@@ -19,7 +19,7 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { DEFAULT_CONTENT, type SiteContent } from '../consts';
-import { retireFruitWording } from './retired';
+import { retireOldWording } from './retired';
 
 /** One row holds the whole content document. */
 const CONTENT_ID = 'site';
@@ -140,9 +140,9 @@ async function readOverrides(): Promise<Partial<SiteContent>> {
 
 /** Defaults merged with whatever the admin has saved. */
 export async function getContent(): Promise<SiteContent> {
-  // Sections saved while the site still sold fruit carry the old built-in text;
+  // Sections saved before a rewrite carry the old built-in text;
   // see retired.ts for why that is swapped here rather than left to win.
-  const o = retireFruitWording(await readOverrides());
+  const o = retireOldWording(await readOverrides());
   return {
     brand: { ...DEFAULT_CONTENT.brand, ...o.brand },
     hero: { ...DEFAULT_CONTENT.hero, ...o.hero },
@@ -151,7 +151,6 @@ export async function getContent(): Promise<SiteContent> {
     about: { ...DEFAULT_CONTENT.about, ...o.about },
     seo: { ...DEFAULT_CONTENT.seo, ...o.seo },
     images: { ...DEFAULT_CONTENT.images, ...o.images },
-    shopping: { ...DEFAULT_CONTENT.shopping, ...o.shopping },
     partner: { ...DEFAULT_CONTENT.partner, ...o.partner },
     pageHeaders: {
       services: { ...DEFAULT_CONTENT.pageHeaders.services, ...o.pageHeaders?.services },
@@ -162,13 +161,11 @@ export async function getContent(): Promise<SiteContent> {
       tracking: { ...DEFAULT_CONTENT.pageHeaders.tracking, ...o.pageHeaders?.tracking },
     },
     freightModes: o.freightModes ?? DEFAULT_CONTENT.freightModes,
-    shoppingSteps: o.shoppingSteps ?? DEFAULT_CONTENT.shoppingSteps,
     stats: o.stats ?? DEFAULT_CONTENT.stats,
     exports: o.exports ?? DEFAULT_CONTENT.exports,
     destinations: o.destinations ?? DEFAULT_CONTENT.destinations,
     gallery: o.gallery ?? DEFAULT_CONTENT.gallery,
     team: o.team ?? DEFAULT_CONTENT.team,
-    platforms: o.platforms ?? DEFAULT_CONTENT.platforms,
     why: o.why ?? DEFAULT_CONTENT.why,
     values: o.values ?? DEFAULT_CONTENT.values,
     logistics: o.logistics ?? DEFAULT_CONTENT.logistics,
