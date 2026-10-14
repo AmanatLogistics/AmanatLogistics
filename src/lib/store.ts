@@ -19,6 +19,7 @@
  */
 import { neon } from '@neondatabase/serverless';
 import { DEFAULT_CONTENT, type SiteContent } from '../consts';
+import { retireFruitWording } from './retired';
 
 /** One row holds the whole content document. */
 const CONTENT_ID = 'site';
@@ -139,7 +140,9 @@ async function readOverrides(): Promise<Partial<SiteContent>> {
 
 /** Defaults merged with whatever the admin has saved. */
 export async function getContent(): Promise<SiteContent> {
-  const o = await readOverrides();
+  // Sections saved while the site still sold fruit carry the old built-in text;
+  // see retired.ts for why that is swapped here rather than left to win.
+  const o = retireFruitWording(await readOverrides());
   return {
     brand: { ...DEFAULT_CONTENT.brand, ...o.brand },
     hero: { ...DEFAULT_CONTENT.hero, ...o.hero },
