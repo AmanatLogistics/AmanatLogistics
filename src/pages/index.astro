@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Eyebrow from '../components/Eyebrow.astro';
+import BrandBird from '../components/BrandBird.astro';
 import ImageFrame from '../components/ImageFrame.astro';
 import RouteMap from '../components/RouteMap.astro';
 import Picture from '../components/Picture.astro';
@@ -28,6 +29,12 @@ const {
 // with "Hide" chosen in /admin, it stays off the page along with the hero link.
 const showPartner = partner.show !== 'Hide' && Boolean(partner.name?.trim());
 const partnerFigures = partnerStats.filter((f) => f.value?.trim() && f.label?.trim()).slice(0, 5);
+// The first figure is the total; the rest are drawn as bars against it, so the
+// split reads at a glance. A value that is not a plain number gets no bar.
+const asNumber = (v: string) => Number(v.replace(/[^\d.]/g, '')) || 0;
+const partnerTotal = partnerFigures[0];
+const partnerParts = partnerFigures.slice(1);
+const partnerMax = Math.max(asNumber(partnerTotal?.value ?? ''), ...partnerParts.map((f) => asNumber(f.value)), 1);
 const partnerLink = partner.link?.trim() || '';
 
 /**
@@ -96,134 +103,85 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 <BaseLayout title="Home" active="/">
   <!-- ============ HERO ============ -->
   <!--
-    Two columns on a wide screen: the pitch on the left, and on the right the
-    thing most returning visitors came for — tracking a shipment. It used to be
-    a separate band further down the page; up here it is one glance away.
+    Split down the middle: the logo's own maroon on the left, carrying the
+    words and a large cut of the logo's bird; the cargo photograph on the
+    right, meeting the maroon on a slant. On a phone the photo comes first.
   -->
-  <section class="relative overflow-hidden bg-fig">
-    <ImageFrame
-      src={hero.image}
-      alt="Palletised cargo being loaded onto an aircraft"
-      tone="plum"
-      loading="eager"
-      class="absolute inset-0 h-full w-full"
-      label="FULL-WIDTH IMAGE: cargo being loaded / trucks / warehouse<br>at least 2400×1100px"
-    />
-    <!-- navy scrim, heaviest behind the text, with a faint route grid on top -->
-    <div
-      class="absolute inset-0"
-      style="background:
-        radial-gradient(70% 90% at 100% 0%, rgba(126,46,71,0.45) 0%, rgba(126,46,71,0) 60%),
-        linear-gradient(100deg, rgba(30,10,19,0.96) 0%, rgba(42,16,25,0.86) 42%, rgba(42,16,25,0.45) 100%);"
-    >
+  <section class="relative grid grid-cols-1 overflow-hidden bg-plum lg:min-h-[620px] lg:grid-cols-2">
+    <div class="relative order-1 h-64 sm:h-80 lg:order-2 lg:h-auto">
+      <ImageFrame
+        src={hero.image}
+        alt="Palletised cargo being loaded onto an aircraft"
+        tone="plum"
+        loading="eager"
+        class="absolute inset-0 h-full w-full lg:[clip-path:polygon(14%_0,100%_0,100%_100%,0_100%)]"
+        label="CARGO PHOTO<br>at least 1600×1200px"
+      />
     </div>
-    <div class="route-grid absolute inset-0"></div>
 
-    <div class="relative mx-auto grid max-w-[1240px] grid-cols-1 items-center gap-12 px-5 pb-28 pt-20 md:px-10 md:pb-36 md:pt-28 lg:grid-cols-[1.25fr_0.75fr] lg:gap-16">
-      <div class="flex flex-col items-start gap-6">
-        <span class="eyebrow inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3.5 py-1.5 text-gold-light">
-          <span class="h-2 w-2 rounded-full bg-gold-light"></span>
-          {hero.eyebrow}
-        </span>
-        <h1 class="m-0 max-w-[17ch] font-serif text-[44px] font-bold leading-[1.0] tracking-[-0.015em] text-[#FFF7F9] sm:text-[56px] md:text-[68px]" style="text-wrap:balance;">
-          {hero.title}
-        </h1>
-        <p class="m-0 max-w-[52ch] text-[17px] leading-relaxed text-[#E8D3DA] md:text-[19px]">
-          {hero.subtitle}
-        </p>
-        <div class="mt-2 flex flex-wrap items-center gap-3">
-          <a href="/contact#form" class="rounded-md bg-white px-7 py-3.5 text-[15.5px] font-bold text-plum shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:-translate-y-0.5 hover:bg-gold-light">
-            Request a Quote
-          </a>
-          <a href="/services" class="group flex items-center gap-2 rounded-md border border-white/20 px-6 py-3.5 text-[15.5px] font-semibold text-[#FFF7F9] transition-colors hover:border-gold-light hover:text-gold-light">
-            Our services
-            <span class="transition-transform group-hover:translate-x-1">→</span>
-          </a>
-        </div>
-        <ul class="m-0 mt-1 flex list-none flex-wrap gap-x-5 gap-y-2 p-0 text-[14px] font-semibold uppercase tracking-[0.08em] text-[#C2A6B0]">
-          {['Road', 'Air', 'Sea', 'Customs', 'Warehousing'].map((m) => (
-            <li class="flex items-center gap-2"><span class="h-1.5 w-1.5 rotate-45 bg-gold-light"></span>{m}</li>
-          ))}
-        </ul>
-        {
-          showPartner && (
-            <a
-              href="#partnership"
-              class="mt-1 inline-flex items-center gap-3 rounded-lg border border-white/15 bg-white/5 py-1.5 pl-1.5 pr-5 transition-colors hover:border-gold-light/70"
-            >
-              <span class="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-md bg-[#FFF7F9]">
-                {partner.logo ? (
-                  <Picture src={partner.logo} alt="" class="h-7 w-7 object-contain" />
-                ) : (
-                  <svg width="36" height="36" viewBox="0 0 48 48" aria-hidden="true">
-                    <rect width="48" height="48" fill="#1f4d3b" />
-                    <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
-                    <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
-                  </svg>
-                )}
-              </span>
-              <span class="flex flex-col leading-tight">
-                <small class="text-[11px] font-bold uppercase tracking-[0.14em] text-gold-light/85">In partnership with</small>
-                <strong class="text-[15px] font-semibold text-[#FFF7F9]">{partner.name}</strong>
-              </span>
-            </a>
-          )
-        }
-      </div>
-
-      <!-- Track a shipment. Plain GET form: submits straight to the tracking page, no JS needed. -->
-      <div class="rounded-xl bg-paper p-6 shadow-[0_24px_60px_rgba(0,0,0,0.35)] md:p-8">
-        <div class="flex items-center gap-3">
-          <span class="flex h-10 w-10 items-center justify-center rounded-md bg-fig text-gold-light">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" />
-            </svg>
-          </span>
-          <div class="flex flex-col">
-            <span class="eyebrow text-[11px] text-label">Already shipped with us?</span>
-            <h2 class="m-0 font-serif text-[24px] font-bold leading-tight text-ink">Track your shipment</h2>
-          </div>
-        </div>
-        <form method="get" action="/tracking" class="mt-6 flex flex-col gap-3">
-          <label for="home-track" class="text-[13.5px] font-semibold text-muted-dark">Tracking or invoice number</label>
-          <input
-            id="home-track"
-            name="code"
-            type="text"
-            required
-            placeholder="Enter your number"
-            class="amn-field rounded-md border border-line bg-cream px-4 py-3.5 text-[15.5px] text-ink placeholder:text-muted/70"
-          />
-          <button
-            type="submit"
-            class="rounded-md bg-fig px-6 py-3.5 text-[15.5px] font-bold text-[#FFF7F9] transition-colors hover:bg-plum"
-          >
-            Track Now
-          </button>
-        </form>
-        <div class="mt-6 border-t border-line pt-5 text-[14.5px] leading-relaxed text-muted">
-          Need a price instead? Call or WhatsApp{' '}
-          <a href={`tel:${contact.phoneExport.replace(/\s/g, '')}`} class="whitespace-nowrap font-semibold text-plum hover:text-plum-hover">{contact.phoneExport}</a>.
-        </div>
+    <div class="relative order-2 flex flex-col justify-center gap-6 overflow-hidden px-5 py-14 md:px-10 lg:order-1 lg:py-24 lg:pl-[max(2.5rem,calc((100vw-1240px)/2+2.5rem))] lg:pr-12">
+      <BrandBird class="pointer-events-none absolute -bottom-10 -right-16 w-[420px] text-white/[0.07] lg:-right-24 lg:w-[520px]" />
+      <span class="eyebrow relative text-gold-light">{hero.eyebrow}</span>
+      <h1 class="relative m-0 max-w-[16ch] font-serif text-[42px] font-bold leading-[1.0] tracking-[-0.015em] text-white sm:text-[54px] md:text-[64px]" style="text-wrap:balance;">
+        {hero.title}
+      </h1>
+      <p class="relative m-0 max-w-[48ch] text-[17px] leading-relaxed text-[#F2D9E1] md:text-[18.5px]">
+        {hero.subtitle}
+      </p>
+      <div class="relative mt-2 flex flex-wrap items-center gap-3">
+        <a href="/contact#form" class="rounded-md bg-white px-7 py-3.5 text-[15.5px] font-bold text-plum shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:bg-gold-light">
+          Request a Quote
+        </a>
+        <a href="/services" class="group flex items-center gap-2 px-3 py-3.5 text-[15.5px] font-bold text-white transition-colors hover:text-gold-light">
+          Our services
+          <span class="transition-transform group-hover:translate-x-1">→</span>
+        </a>
       </div>
     </div>
   </section>
 
-  <!-- ============ TRUST STATS ============ -->
-  <!-- A white strip that overlaps the foot of the hero, so the numbers read as
-       part of the opening rather than as a separate band. -->
+  <!-- ============ TRACK A SHIPMENT ============ -->
+  <!-- A wide bar that rides up over the foot of the hero: one line, one box,
+       one button — the shortest route to the thing returning customers want. -->
   <section class="relative z-10 bg-cream px-5 md:px-10">
-    <div class="mx-auto -mt-14 grid max-w-[1240px] grid-cols-2 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(42,16,25,0.10)] md:grid-cols-4">
+    <form
+      method="get"
+      action="/tracking"
+      class="mx-auto -mt-10 grid max-w-[1240px] grid-cols-1 items-center gap-4 rounded-xl bg-paper p-5 shadow-[0_18px_50px_rgba(42,16,25,0.14)] md:grid-cols-[auto_1fr_auto] md:gap-6 md:p-6"
+    >
+      <div class="flex items-center gap-3">
+        <span class="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-sand text-plum">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" />
+          </svg>
+        </span>
+        <div class="flex flex-col leading-tight">
+          <label for="home-track" class="font-serif text-[20px] font-bold text-ink">Track your shipment</label>
+          <span class="text-[13.5px] text-muted">Tracking or invoice number</span>
+        </div>
+      </div>
+      <input
+        id="home-track"
+        name="code"
+        type="text"
+        required
+        placeholder="Enter your number"
+        class="amn-field w-full rounded-md border border-line bg-cream px-4 py-3.5 text-[15.5px] text-ink placeholder:text-muted/70"
+      />
+      <button type="submit" class="rounded-md bg-plum px-8 py-3.5 text-[15.5px] font-bold text-white transition-colors hover:bg-plum-hover">
+        Track Now
+      </button>
+    </form>
+  </section>
+
+  <!-- ============ TRUST STATS ============ -->
+  <section class="bg-cream">
+    <div class="mx-auto grid max-w-[1240px] grid-cols-2 gap-y-8 px-5 pb-4 pt-14 md:grid-cols-4 md:px-10 md:pt-16">
       {
         STATS.map((s, i) => (
-          <div class:list={[
-            'flex flex-col gap-1 px-6 py-6 md:px-8 md:py-7',
-            i % 2 === 1 && 'border-l border-line',
-            i >= 2 && 'border-t border-line md:border-t-0',
-            i === 2 && 'md:border-l',
-          ]}>
-            <span class="font-serif text-[30px] font-bold leading-none text-plum md:text-[38px]">{s.value}</span>
-            <span class="eyebrow text-[11.5px] text-muted md:text-[12px]">{s.label}</span>
+          <div class:list={['flex flex-col gap-1.5 px-2 md:px-6', i % 2 === 1 && 'border-l border-line', i === 2 && 'md:border-l md:border-line']}>
+            <span class="font-serif text-[34px] font-bold leading-none text-plum md:text-[44px]">{s.value}</span>
+            <span class="text-[14px] font-semibold text-muted md:text-[15px]">{s.label}</span>
           </div>
         ))
       }
@@ -239,7 +197,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
     "Two services" pair of cards, before personal shopping was dropped.
   -->
   <section class="bg-cream">
-    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 pb-20 pt-16 md:px-10 md:pb-24 md:pt-20">
+    <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-24">
       <div class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end reveal">
         <div class="flex max-w-[640px] flex-col gap-4">
           <Eyebrow text={services.exportTitle || 'What We Do'} />
@@ -373,30 +331,20 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
         <div class="mx-auto max-w-[1240px] px-5 py-20 md:px-10 md:py-[88px]">
           <div class="grid grid-cols-1 overflow-hidden rounded-xl border border-line bg-paper shadow-[0_14px_40px_rgba(42,16,25,0.08)] reveal lg:grid-cols-[1.15fr_1fr]">
             <div class="flex flex-col items-start gap-5 p-8 md:p-12">
-              <div class="flex items-center gap-3" aria-hidden="true">
-                <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
+              <div class="flex items-center" aria-hidden="true">
+                <!-- the two marks overlapping, rather than set apart with a handshake -->
+                <span class="relative z-10 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-paper shadow-[0_0_0_1px_#EBE2E6]">
                   {brand.logo ? (
-                    <Picture src={brand.logo} alt="" class="h-12 w-12 object-contain" />
+                    <Picture src={brand.logo} alt="" class="h-11 w-11 object-contain" />
                   ) : (
                     <SwallowMark class="w-9 text-plum" />
                   )}
                 </span>
-                <span class="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-accent-deep">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m11 17 2 2a1 1 0 1 0 3-3" />
-                    <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" />
-                    <path d="m21 3 1 11h-2" />
-                    <path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3" />
-                    <path d="M3 4h8" />
-                  </svg>
-                </span>
-                <span class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-line bg-paper">
+                <span class="-ml-4 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border-4 border-paper bg-[#1f4d3b] shadow-[0_0_0_1px_#EBE2E6]">
                   {partner.logo ? (
-                    <Picture src={partner.logo} alt="" class="h-12 w-12 object-contain" />
+                    <Picture src={partner.logo} alt="" class="h-11 w-11 object-contain" />
                   ) : (
-                    <svg width="46" height="46" viewBox="0 0 48 48">
-                      <rect width="48" height="48" rx="12" fill="#1f4d3b" />
-                      <rect x="5.5" y="5.5" width="37" height="37" rx="8.5" fill="none" stroke="#e2a72e" stroke-opacity=".5" stroke-width="1" />
+                    <svg width="40" height="40" viewBox="0 0 48 48">
                       <path d="M13 13h11v3.6h-7v5h6v3.6h-6V35h-4Z" fill="#e2a72e" />
                       <path d="M24 17h11v3.6h-7v5h6v3.6h-6V39h-4Z" fill="#f6ecd2" />
                     </svg>
@@ -430,25 +378,31 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
             </div>
 
             {
-              partnerFigures.length > 0 && (
-                <ul class="m-0 grid list-none auto-rows-fr grid-cols-2 gap-px bg-[#3d1828] p-0">
-                  {partnerFigures.map((f, i) => (
-                    <li
-                      class:list={[
-                        'flex flex-col justify-center gap-1.5 bg-fig px-7 py-8 md:px-9',
-                        // The first figure — the total — gets the full width, and so
-                        // does a last one that would otherwise sit alone in its row.
-                        (i === 0 || (i === partnerFigures.length - 1 && i % 2 === 1)) && 'col-span-2',
-                        i === 0 && 'bg-plum md:py-10',
-                      ]}
-                    >
-                      <span class:list={['font-serif font-bold leading-none text-gold-light', i === 0 ? 'text-[44px] md:text-[54px]' : 'text-[30px] md:text-[34px]']}>
-                        {f.value}
-                      </span>
-                      <span class="eyebrow text-[12px] text-[#E8D3DA] md:text-[12.5px]">{f.label}</span>
-                    </li>
-                  ))}
-                </ul>
+              partnerTotal && (
+                <div class="relative flex flex-col justify-center gap-7 overflow-hidden bg-fig px-7 py-10 md:px-10">
+                  <BrandBird class="pointer-events-none absolute -right-10 -top-6 w-[260px] text-white/[0.05]" />
+                  <div class="relative flex flex-col gap-1">
+                    <span class="font-serif text-[52px] font-bold leading-none text-white md:text-[64px]">{partnerTotal.value}</span>
+                    <span class="text-[15px] font-semibold text-gold-light">{partnerTotal.label}</span>
+                  </div>
+                  {partnerParts.length > 0 && (
+                    <ul class="relative m-0 flex list-none flex-col gap-5 p-0">
+                      {partnerParts.map((f) => (
+                        <li class="flex flex-col gap-2">
+                          <div class="flex items-baseline justify-between gap-4">
+                            <span class="text-[15px] font-semibold text-[#E8D3DA]">{f.label}</span>
+                            <span class="font-serif text-[22px] font-bold text-white">{f.value}</span>
+                          </div>
+                          {asNumber(f.value) > 0 && (
+                            <span class="block h-2 overflow-hidden rounded-full bg-white/10">
+                              <span class="block h-full rounded-full bg-gold-light" style={`width:${Math.max(4, Math.round((asNumber(f.value) / partnerMax) * 100))}%`}></span>
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               )
             }
           </div>
@@ -504,8 +458,7 @@ const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logis
 
   <!-- ============ CLOSING CALL TO ACTION ============ -->
   <section class="relative overflow-hidden bg-plum">
-    <div class="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/5" aria-hidden="true"></div>
-    <div class="pointer-events-none absolute -bottom-32 right-40 h-72 w-72 rounded-full bg-white/5" aria-hidden="true"></div>
+    <BrandBird class="pointer-events-none absolute -bottom-16 right-[8%] w-[380px] text-white/[0.08]" />
     <div class="relative mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-8 px-5 py-16 md:flex-row md:items-center md:px-10 md:py-20">
       <div class="flex max-w-[34ch] flex-col gap-3">
         <h2 class="m-0 font-serif text-[32px] font-bold leading-[1.05] text-white md:text-[44px]">Ready to move your cargo?</h2>
