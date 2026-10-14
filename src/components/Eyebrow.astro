@@ -7,10 +7,10 @@ interface Props {
 }
 const { text, tone = 'light', class: klass = '' } = Astro.props;
 const color = tone === 'dark' ? 'text-gold-light' : 'text-label';
-const line = tone === 'dark' ? 'bg-gold-light' : 'bg-accent';
+const line = 'bg-accent';
 ---
 
-<div class={`flex items-center gap-3 ${klass}`}>
-  <span class={`h-[1.5px] w-9 ${line}`}></span>
+<div class={`flex items-center gap-2.5 ${klass}`}>
+  <span class={`h-[3px] w-6 rounded-full ${line}`}></span>
   <span class={`eyebrow ${color}`}>{text}</span>
 </div>

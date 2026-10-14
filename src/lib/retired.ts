@@ -2,7 +2,8 @@
  * Built-in wording the site has since retired, and what each piece became:
  *   - from when it presented Amanat as a fruit exporter ("Premium Figs & Dry
  *     Fruits, From Kandahar to the World.");
- *   - from when it still offered global personal shopping.
+ *   - from when it still offered global personal shopping;
+ *   - the black copy of the logo, from before the site took the logo's maroon.
  *
  * Why this is needed: /admin saves a whole section at once. Any section saved
  * before the rewrite holds the old text in every field — including the fields
@@ -23,6 +24,9 @@ const D = DEFAULT_CONTENT;
 
 /** Sections that are a single object of fields. */
 const OBJECTS: Record<string, Swaps> = {
+  brand: {
+    logo: { '/images/brand-logo.png': D.brand.logo },
+  },
   hero: {
     eyebrow: { 'Kandahar, Afghanistan': D.hero.eyebrow },
     title: { 'Premium Figs & Dry Fruits, From Kandahar to the World.': D.hero.title },

@@ -106,7 +106,7 @@ const formLang = lang;
   {
     rtl && (
       <Fragment slot="head">
-        {/* Fraunces and Archivo have no Arabic-script glyphs — load a Naskh face
+        {/* Barlow has no Arabic-script glyphs — load a Naskh face
             only when the page is actually showing Pashto. */}
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap"
@@ -117,13 +117,13 @@ const formLang = lang;
   }
 
   <!-- ============ PAGE HEADER ============ -->
-  <section class="bg-plum" lang={htmlLang[lang]} dir={rtl ? 'rtl' : 'ltr'}>
+  <section class="route-grid bg-fig" lang={htmlLang[lang]} dir={rtl ? 'rtl' : 'ltr'}>
     <div class="mx-auto flex max-w-[1240px] flex-col items-start gap-5 px-5 py-16 md:px-10 md:pb-[76px] md:pt-[84px]">
       <Eyebrow text={t(lang, 'eyebrow')} tone="dark" />
-      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#F8F3E9] md:text-[52px]">
+      <h1 class="m-0 font-serif text-[38px] font-bold leading-[1.12] text-[#FFF7F9] md:text-[52px]">
         {t(lang, 'pageTitle')}
       </h1>
-      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#D9C8BE] md:text-[18px]">
+      <p class="m-0 max-w-[62ch] text-[17px] leading-relaxed text-[#E8D3DA] md:text-[18px]">
         {t(lang, 'pageSubtitle')}
       </p>
     </div>
@@ -163,7 +163,7 @@ const formLang = lang;
           />
           <button
             type="submit"
-            class="flex items-center justify-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-[15px] font-semibold text-paper transition-colors hover:bg-plum-hover"
+            class="flex items-center justify-center gap-2 rounded-lg bg-accent px-7 py-3.5 text-[15px] font-bold text-white transition-colors hover:bg-plum-hover"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" class="flex-none" aria-hidden="true">
               <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"></circle>
@@ -176,7 +176,7 @@ const formLang = lang;
         <!-- Results -->
         {
           !isConfigured() && searched && (
-            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+            <p class="mt-7 rounded-lg border border-[#E8D3DA] bg-[#FFF7F9] px-4 py-3.5 text-[14.5px] text-[#6b1a33]">
               {t(lang, 'unavailable')}
             </p>
           )
@@ -184,7 +184,7 @@ const formLang = lang;
 
         {
           lookupFailed && (
-            <p class="mt-7 rounded-lg border border-[#E8C9A8] bg-[#FBF0E2] px-4 py-3.5 text-[14.5px] text-[#8C5A2B]">
+            <p class="mt-7 rounded-lg border border-[#E8D3DA] bg-[#FFF7F9] px-4 py-3.5 text-[14.5px] text-[#6b1a33]">
               {t(lang, 'lookupFailed')}
             </p>
           )
@@ -246,7 +246,7 @@ const formLang = lang;
 </BaseLayout>
 
 {/* Arabic-script type for the Pashto view. Scoped to the tracking sections so
-    the site's Fraunces/Archivo identity is untouched everywhere else. */}
+    the site's Barlow identity is untouched everywhere else. */}
 {
   rtl && (
     <style is:global>

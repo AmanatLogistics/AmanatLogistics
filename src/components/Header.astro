@@ -8,13 +8,37 @@ interface Props {
   active?: string;
 }
 const { active } = Astro.props;
-const { brand } = await getContent();
+const { brand, contact } = await getContent();
 ---
 
 <header
   class="sticky top-0 z-50 border-b border-line backdrop-blur-md"
-  style="background:rgba(246,241,232,0.96);"
+  style="background:rgba(255,255,255,0.95);"
 >
+  <!-- Contact bar: the two things a freight customer reaches for first —
+       a number to call and a way to track — on every page, wide screens only. -->
+  <div class="hidden bg-fig text-[13.5px] text-[#E8D3DA] md:block">
+    <div class="mx-auto flex h-10 max-w-[1240px] items-center justify-between px-10">
+      <div class="flex items-center gap-6">
+        <a href={`tel:${contact.phoneExport.replace(/\s/g, '')}`} class="flex items-center gap-2 font-semibold transition-colors hover:text-white">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.7A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.4 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c1 .3 2 .6 3 .7a2 2 0 0 1 1.6 2Z"/></svg>
+          {contact.phoneExport}
+        </a>
+        <a href={`mailto:${contact.email}`} class="flex items-center gap-2 transition-colors hover:text-white">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          {contact.email}
+        </a>
+        <span class="hidden items-center gap-2 lg:flex">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+          {contact.location}
+        </span>
+      </div>
+      <a href="/tracking" class="flex items-center gap-1.5 font-semibold text-gold-light transition-colors hover:text-white">
+        Track a shipment <span aria-hidden="true">→</span>
+      </a>
+    </div>
+  </div>
+
   <div class="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-6 px-5 md:h-[84px] md:px-10">
     <!-- Logo / wordmark -->
     <a href="/" class="flex items-center gap-3" aria-label={`${SITE.name} — Home`}>
@@ -47,8 +71,8 @@ const { brand } = await getContent();
             <a
               href={item.href}
               class:list={[
-                'text-[14.5px] transition-colors hover:text-plum-hover',
-                isActive ? 'border-b-2 border-gold pb-0.5 font-semibold text-plum-hover' : 'font-medium text-ink/80',
+                'text-[15.5px] transition-colors hover:text-plum-hover',
+                isActive ? 'border-b-2 border-accent pb-0.5 font-bold text-ink' : 'font-semibold text-ink/75',
               ]}
             >
               {item.label}
@@ -58,7 +82,7 @@ const { brand } = await getContent();
       }
       <a
         href="/contact#form"
-        class="rounded-md bg-accent px-[22px] py-3 text-[14px] font-semibold text-paper shadow-[0_2px_8px_rgba(140,90,43,0.25)] transition-colors hover:bg-plum-hover"
+        class="rounded-md bg-accent px-[22px] py-3 text-[14.5px] font-bold text-white shadow-[0_2px_8px_rgba(126,46,71,0.28)] transition-colors hover:bg-plum-hover"
       >
         Request a Quote
       </a>
@@ -98,7 +122,7 @@ const { brand } = await getContent();
     }
     <a
       href="/contact#form"
-      class="mt-2 rounded-md bg-accent px-4 py-3 text-center text-[15px] font-semibold text-paper"
+      class="mt-2 rounded-md bg-accent px-4 py-3 text-center text-[15px] font-bold text-white"
     >
       Request a Quote
     </a>

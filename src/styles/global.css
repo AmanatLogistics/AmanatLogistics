@@ -2,39 +2,51 @@
 
 /* ============================================================
    Amanat Logistics — design system (Tailwind v4, CSS-first)
-   Direction: warm "harvest export house" — amber-gold + wine +
-   ivory + pistachio, a characterful Fraunces display, generous
-   scale. Deliberately not the default cream/Caslon/terracotta look.
+   Built from the logo: its maroon (#7E2E47) is the one brand colour.
+   Dark bands are the same maroon taken almost to black, highlights on
+   them are a pale blush of it, and the neutrals carry a trace of it so
+   white and grey never look borrowed from another brand. Type is Barlow
+   — drawn from road and highway signage — with its semi-condensed cut
+   for headings.
+
+   Token names are kept from the first design (cream, plum, fig…) so
+   every page picks the palette up without renaming classes; read them
+   as roles, not colours:
+     cream  page background     paper  cards / light sections
+     sand   tinted bands        ink    body text
+     plum   logo maroon         fig    maroon-black — dark bands, footer
+     accent  buttons & links (maroon)   gold-light  highlights on dark
    ============================================================ */
 @theme {
-  /* Warm paper surfaces */
-  --color-cream: #f4ecda; /* page background — warm ivory */
-  --color-paper: #fbf6ea; /* cards / light sections */
-  --color-sand: #eee1c8; /* bands / stats */
+  /* Light surfaces */
+  --color-cream: #f8f5f6; /* page background — white with a trace of the maroon */
+  --color-paper: #ffffff; /* cards / light sections */
+  --color-sand: #f3ebee; /* tinted bands */
 
   /* Ink + dark surfaces */
-  --color-ink: #2a1a12; /* espresso — body text + darkest surface */
-  --color-plum: #641f30; /* wine (brand) — dark bands, footer */
-  --color-plum-hover: #7e2a3f;
-  --color-fig: #35141d; /* deepest wine-black band */
-  --color-olive: #566237; /* pistachio — small accents (contact form dot, image frames) */
+  --color-ink: #1f1419; /* near-black — body text */
+  --color-plum: #7e2e47; /* the logo's maroon — headings, brand */
+  --color-plum-hover: #64223a;
+  --color-fig: #2a1019; /* maroon-black — hero, page headers, footer */
+  --color-olive: #2f6f62; /* teal-green — small accents (contact form dot, image frames) */
 
-  /* Amber-gold accent (primary) + pomegranate pop */
-  --color-accent: #c0872e; /* warm amber-gold — CTAs, links */
-  --color-accent-deep: #9c6a1e;
-  --color-gold: #c0872e;
-  --color-gold-light: #e6bd6d;
-  --color-pom: #b23a2c; /* pomegranate — sparing highlight */
+  /* Actions + highlights */
+  --color-accent: #7e2e47; /* buttons, links */
+  --color-accent-deep: #7e2e47;
+  --color-gold: #c86a86; /* rose — highlights on light */
+  --color-gold-light: #f2c6d3; /* blush — highlights on dark */
+  --color-pom: #c2412d; /* red — sparing alert */
 
   /* Lines + muted text */
-  --color-line: #e3d6bd;
-  --color-muted: #6f5c48;
-  --color-muted-dark: #574636;
-  --color-label: #9b7530; /* eyebrow labels */
+  --color-line: #ebe2e6;
+  --color-muted: #6c5f65;
+  --color-muted-dark: #463a40;
+  --color-label: #7e2e47; /* eyebrow labels */
 
-  /* Type */
-  --font-serif: 'Fraunces', 'Georgia', serif;
-  --font-sans: 'Archivo', system-ui, sans-serif;
+  /* Type. `font-serif` is the heading face: the class name is from the first
+     design and is used on every heading, so it is re-pointed rather than renamed. */
+  --font-serif: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
+  --font-sans: 'Barlow', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
@@ -46,25 +58,38 @@ body {
   margin: 0;
   background: var(--color-cream);
   color: var(--color-ink);
+  font-size: 16.5px;
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Fraunces optical/soft display settings */
+/* Headings: semi-condensed and heavy, like freight signage */
 .font-serif {
-  font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 40, 'WONK' 0;
-  letter-spacing: -0.012em;
+  letter-spacing: -0.01em;
+}
+h1.font-serif,
+h2.font-serif {
+  font-weight: 700;
+  letter-spacing: -0.015em;
 }
 
-/* Eyebrow — refined uppercase sans label */
+/* Eyebrow — compact uppercase tag */
 .eyebrow {
   font-family: var(--font-sans);
-  font-size: 0.72rem;
-  letter-spacing: 0.24em;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
+}
+
+/* Faint route grid behind the navy bands — a nod to the map, not decoration
+   for its own sake: it is what keeps a flat navy block from reading as empty. */
+.route-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 /* ---- Scroll reveal ----

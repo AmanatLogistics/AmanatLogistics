@@ -41,11 +41,11 @@ function arc(a: { x: number; y: number }, b: { x: number; y: number }) {
 <svg viewBox="0 0 620 360" class={klass} xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Freight routes from Kandahar">
   <defs>
     <radialGradient id="rm-glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#e6bd6d" stop-opacity="0.55" />
-      <stop offset="100%" stop-color="#e6bd6d" stop-opacity="0" />
+      <stop offset="0%" stop-color="#F2C6D3" stop-opacity="0.55" />
+      <stop offset="100%" stop-color="#F2C6D3" stop-opacity="0" />
     </radialGradient>
     <pattern id="rm-dots" width="26" height="26" patternUnits="userSpaceOnUse">
-      <circle cx="1.5" cy="1.5" r="1.1" fill="#e6bd6d" opacity="0.1" />
+      <circle cx="1.5" cy="1.5" r="1.1" fill="#F2C6D3" opacity="0.1" />
     </pattern>
   </defs>
 
@@ -53,20 +53,20 @@ function arc(a: { x: number; y: number }, b: { x: number; y: number }) {
 
   {/* arcs */}
   {nodes.map((n) => (
-    <path d={arc(origin, n)} fill="none" stroke="#e6bd6d" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="2 5" stroke-linecap="round" />
+    <path d={arc(origin, n)} fill="none" stroke="#F2C6D3" stroke-width="1.4" stroke-opacity="0.55" stroke-dasharray="2 5" stroke-linecap="round" />
   ))}
 
   {/* destination nodes */}
   {nodes.map((n) => (
     <g>
-      <circle cx={n.x} cy={n.y} r="4.5" fill="#f4ecda" />
-      <circle cx={n.x} cy={n.y} r="4.5" fill="none" stroke="#e6bd6d" stroke-width="1.5" />
+      <circle cx={n.x} cy={n.y} r="4.5" fill="#f8f5f6" />
+      <circle cx={n.x} cy={n.y} r="4.5" fill="none" stroke="#F2C6D3" stroke-width="1.5" />
       <text
         x={n.x}
         y={n.y - 12}
         text-anchor="middle"
-        fill="#EDDAC4"
-        font-family="'Archivo', sans-serif"
+        fill="#E8D3DA"
+        font-family="'Barlow', sans-serif"
         font-size="12.5"
         font-weight="600"
       >{n.name}</text>
@@ -75,7 +75,7 @@ function arc(a: { x: number; y: number }, b: { x: number; y: number }) {
 
   {/* origin */}
   <circle cx={origin.x} cy={origin.y} r="26" fill="url(#rm-glow)" />
-  <circle cx={origin.x} cy={origin.y} r="6.5" fill="#c0872e" />
-  <circle cx={origin.x} cy={origin.y} r="6.5" fill="none" stroke="#f4ecda" stroke-width="1.5" />
-  <text x={origin.x} y={origin.y + 26} text-anchor="middle" fill="#e6bd6d" font-family="'Archivo', sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" style="text-transform:uppercase;">Kandahar · Origin</text>
+  <circle cx={origin.x} cy={origin.y} r="6.5" fill="#C86A86" />
+  <circle cx={origin.x} cy={origin.y} r="6.5" fill="none" stroke="#f8f5f6" stroke-width="1.5" />
+  <text x={origin.x} y={origin.y + 26} text-anchor="middle" fill="#F2C6D3" font-family="'Barlow', sans-serif" font-size="11" font-weight="700" letter-spacing="1.5" style="text-transform:uppercase;">Kandahar · Origin</text>
 </svg>

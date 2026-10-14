@@ -102,7 +102,7 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
   .tk-timeline {
     --tk-done: #2e6b0e;
     --tk-active: var(--color-accent);
-    --tk-idle: #c9bda6;
+    --tk-idle: #DCCBD2;
   }
 
   /* Connecting line, drawn from each step down to the next.
@@ -145,8 +145,8 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
     box-shadow: 0 0 0 4px rgba(192, 135, 46, 0.18);
   }
   .tk-pending .tk-dot {
-    background: #eee5d3;
-    color: #a4937a;
+    background: #F6EFF2;
+    color: #8E7C84;
   }
 
   .tk-completed .tk-title,
@@ -161,6 +161,6 @@ const state = (n: number) => (n < currentStep ? 'completed' : n === currentStep 
     color: var(--color-muted);
   }
   .tk-pending .tk-time {
-    color: #a4937a;
+    color: #8E7C84;
   }
 </style>

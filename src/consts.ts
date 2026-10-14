@@ -58,10 +58,10 @@ export const DESTINATIONS = [
 ];
 
 export const VALUES = [
-  { title: 'Accountability', line: 'One team answerable for your cargo, from pickup to delivery.', bg: '#F0E4CC', dot: '#B08A48' },
-  { title: 'Care', line: 'Careful handling, packing and storage on every consignment, perishables included.', bg: '#EFE0E9', dot: '#8C5A2B' },
-  { title: 'Reliability', line: 'Documented, tracked shipments that arrive exactly as promised.', bg: '#E5EADB', dot: '#43503A' },
-  { title: 'Global Reach', line: 'Established corridors across three continents, growing steadily.', bg: '#F3E1D6', dot: '#7A3B2E' },
+  { title: 'Accountability', line: 'One team answerable for your cargo, from pickup to delivery.', bg: '#FDF0DA', dot: '#E59A1C' },
+  { title: 'Care', line: 'Careful handling, packing and storage on every consignment, perishables included.', bg: '#F5E3E9', dot: '#6B1A33' },
+  { title: 'Reliability', line: 'Documented, tracked shipments that arrive exactly as promised.', bg: '#E2E9F1', dot: '#0D1B2A' },
+  { title: 'Global Reach', line: 'Established corridors across three continents, growing steadily.', bg: '#DFEEEA', dot: '#2F6F62' },
 ];
 
 // Upload real photos in /admin → Team members (they show a placeholder until then).
@@ -70,19 +70,21 @@ export const TEAM = [
   { name: 'Team Member', role: 'Head of Export Operations', img: '' },
 ];
 
+// Shipments and warehouse first: the gallery of a logistics company should open
+// on cargo moving. The produce photos follow, as the cargo we carry most.
 export const GALLERY = [
-  { cat: 'Products', img: '/images/gallery/figs.jpg', alt: 'Dried figs product photo', h: 300 },
   { cat: 'Warehouse & Storage', img: '/images/gallery/warehouse.jpg', alt: 'Warehouse storage stacked cartons', h: 220 },
   { cat: 'Shipments', img: '/images/gallery/loading.jpg', alt: 'Cargo loading shipment', h: 260 },
-  { cat: 'Products', img: '/images/gallery/raisins.jpg', alt: 'Raisins and apricots product photo', h: 230 },
-  { cat: 'Products', img: '/images/gallery/nuts.jpg', alt: 'Almonds and pine nuts', h: 300 },
   { cat: 'Warehouse & Storage', img: '/images/gallery/packing.jpg', alt: 'Grading and packing line', h: 270 },
   { cat: 'Shipments', img: '/images/gallery/pallets.jpg', alt: 'Pallets ready for export', h: 210 },
-  { cat: 'Products', img: '/images/gallery/pomegranates.jpg', alt: 'Fresh pomegranates at harvest', h: 260 },
   { cat: 'Warehouse & Storage', img: '/images/gallery/cold-storage.jpg', alt: 'Cold-storage room interior', h: 240 },
   { cat: 'Shipments', img: '/images/gallery/truck.jpg', alt: 'Truck convoy air cargo hold', h: 300 },
-  { cat: 'Products', img: '/images/gallery/boxes.jpg', alt: 'Packaged retail-ready fig boxes', h: 220 },
   { cat: 'Shipments', img: '/images/gallery/container.jpg', alt: 'Container being sealed at port', h: 250 },
+  { cat: 'Products', img: '/images/gallery/figs.jpg', alt: 'Dried figs product photo', h: 300 },
+  { cat: 'Products', img: '/images/gallery/raisins.jpg', alt: 'Raisins and apricots product photo', h: 230 },
+  { cat: 'Products', img: '/images/gallery/nuts.jpg', alt: 'Almonds and pine nuts', h: 300 },
+  { cat: 'Products', img: '/images/gallery/pomegranates.jpg', alt: 'Fresh pomegranates at harvest', h: 260 },
+  { cat: 'Products', img: '/images/gallery/boxes.jpg', alt: 'Packaged retail-ready fig boxes', h: 220 },
 ];
 
 export const GALLERY_CATS = ['All', 'Products', 'Warehouse & Storage', 'Shipments'];
@@ -95,7 +97,7 @@ export const DEFAULT_CONTENT = {
   // Your real logo — upload in /admin under "Logo & brand".
   // When set, it replaces the built-in swallow mark across the site.
   brand: {
-    logo: '/images/brand-logo.png', // colour version, shown on the light header
+    logo: '/images/brand-logo-maroon.png', // colour version (the logo's own maroon), shown on the light header
     logoLight: '/images/brand-logo-white.png', // white version, shown on the dark footer
   },
   hero: {
