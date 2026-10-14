@@ -168,6 +168,7 @@ export async function getContent(): Promise<SiteContent> {
     platforms: o.platforms ?? DEFAULT_CONTENT.platforms,
     why: o.why ?? DEFAULT_CONTENT.why,
     values: o.values ?? DEFAULT_CONTENT.values,
+    logistics: o.logistics ?? DEFAULT_CONTENT.logistics,
     partnerStats: o.partnerStats ?? DEFAULT_CONTENT.partnerStats,
   };
 }
