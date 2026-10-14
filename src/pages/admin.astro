@@ -410,8 +410,8 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             hint: 'The big headline at the top of the Home page, and its background photo.',
             fields: [
               { key: 'eyebrow', label: 'Small label above headline', ph: 'Kandahar, Afghanistan' },
-              { key: 'title', label: 'Headline', wide: true, ph: 'Premium Figs & Dry Fruits…' },
-              { key: 'subtitle', label: 'Sub-headline', wide: true, ph: 'Trusted export and freight partner…' },
+              { key: 'title', label: 'Headline', wide: true, ph: 'Freight, Customs & Logistics…' },
+              { key: 'subtitle', label: 'Sub-headline', wide: true, ph: 'Road, air and sea freight, customs clearance…' },
               { key: 'image', label: 'Background photo (wide, at least 2400px)', type: 'image' },
             ],
           },
@@ -450,10 +450,19 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             ],
           },
           {
+            id: 'logistics', title: 'What we do cards', icon: I.box, kind: 'list',
+            addLabel: 'Add a card', itemName: 'card',
+            hint: 'The logistics service cards on the Home page (Road Freight, Air Cargo, Customs…). Icons follow the order of the cards.',
+            fields: [
+              { key: 'title', label: 'Service', ph: 'e.g. Customs Clearance' },
+              { key: 'text', label: 'Short description', wide: true },
+            ],
+          },
+          {
             id: 'services', title: 'Service descriptions', icon: I.box, kind: 'object',
             hint: 'The two big service cards shown on the Home page and Services page.',
             fields: [
-              { key: 'exportTitle', label: 'Service 1 — title', ph: 'Export & Freight' },
+              { key: 'exportTitle', label: 'Service 1 — title', ph: 'Freight & Logistics' },
               { key: 'exportText', label: 'Service 1 — description', wide: true },
               { key: 'shoppingTitle', label: 'Service 2 — title', ph: 'Global Personal Shopping' },
               { key: 'shoppingText', label: 'Service 2 — description', wide: true },
@@ -462,7 +471,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
           {
             id: 'freightModes', title: 'Freight modes', icon: I.box, kind: 'list',
             addLabel: 'Add a freight mode', itemName: 'mode',
-            hint: 'The Sea / Air / Land cards under Export & Freight on the Services page.',
+            hint: 'The Sea / Air / Land cards under Freight & Logistics on the Services page.',
             fields: [
               { key: 'title', label: 'Mode', ph: 'e.g. Sea Freight' },
               { key: 'text', label: 'Description', wide: true },
@@ -523,11 +532,11 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             ],
           },
           {
-            id: 'exports', title: 'Products we export', icon: I.box, kind: 'list',
-            addLabel: 'Add a product', itemName: 'product',
-            hint: 'The product cards on the Services page (figs, dried fruits, nuts…).',
+            id: 'exports', title: 'Cargo we carry', icon: I.box, kind: 'list',
+            addLabel: 'Add a cargo type', itemName: 'cargo type',
+            hint: 'The cargo photos under “Cargo We Carry” on the Services page (dry fruit, fresh produce, nuts…).',
             fields: [
-              { key: 'name', label: 'Product name', ph: 'e.g. Figs' },
+              { key: 'name', label: 'Cargo type', ph: 'e.g. Dry fruit' },
               { key: 'alt', label: 'Short photo description', ph: 'e.g. Premium dried Kandahari figs' },
               { key: 'img', label: 'Photo', type: 'image' },
             ],
@@ -539,7 +548,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             fields: [
               { key: 'name', label: 'Country', ph: 'e.g. Germany' },
               { key: 'mode', label: 'Freight modes', ph: 'e.g. Air & sea freight' },
-              { key: 'delivers', label: 'What we deliver there', ph: 'e.g. Figs · dry fruits · nuts' },
+              { key: 'delivers', label: 'What we deliver there', ph: 'e.g. Dry fruit · general cargo' },
             ],
           },
           {
@@ -576,7 +585,7 @@ const cats = GALLERY_CATS.filter((c) => c !== 'All');
             hint: 'The large decorative photos on the About and Routes pages.',
             fields: [
               { key: 'aboutHeader', label: 'About page — header background', type: 'image' },
-              { key: 'aboutStory', label: 'About page — story photo (orchard)', type: 'image' },
+              { key: 'aboutStory', label: 'About page — story photo', type: 'image' },
               { key: 'worldMap', label: 'Routes — world map graphic', type: 'image' },
             ],
           },

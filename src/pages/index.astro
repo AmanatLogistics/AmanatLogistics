@@ -17,7 +17,7 @@ const {
   services,
   why,
   destinations,
-  exports: EXPORTS,
+  logistics,
   partner,
   partnerStats,
 } = await getContent();
@@ -71,6 +71,24 @@ const STATS = adminStats
 const names = destinations.map((d) => d.name);
 const countryList =
   names.length > 1 ? `${names.slice(0, -1).join(', ')} & ${names.at(-1)}` : (names[0] ?? '');
+
+// Line icons for the "What we do" cards, fixed by position like the freight
+// modes on /services; titles and text come from /admin → What we do cards.
+const logisticsIcons = [
+  // road freight — truck
+  '<rect x="3" y="7" width="12" height="9" rx="1"/><path d="M15 10h4l2 3v3h-6z"/><circle cx="7.5" cy="17.5" r="1.8"/><circle cx="17.5" cy="17.5" r="1.8"/>',
+  // air cargo — plane
+  '<path d="M3 13.5 21 7v2.5l-8 4.5-2.5 5H9l1-5-5 1.5z"/>',
+  // sea freight — ship
+  '<path d="M3 15h18l-2.5 4.5h-13z"/><path d="M6 15V9h12v6"/><path d="M12 9V4"/>',
+  // customs — stamp
+  '<path d="M9 4h6v5l-1.5 2h-3L9 9z"/><path d="M5 14h14v3H5z"/><path d="M4 20h16"/>',
+  // documents
+  '<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 15.5h5"/>',
+  // warehouse
+  '<path d="M3 9.5 12 4l9 5.5V20H3z"/><path d="M7 20v-7h10v7"/><path d="M7 16.5h10"/>',
+];
+const services6 = logistics.map((c, i) => ({ ...c, svg: logisticsIcons[i % logisticsIcons.length] }));
 ---
 
 <BaseLayout title="Home" active="/">
@@ -78,11 +96,11 @@ const countryList =
   <section class="relative overflow-hidden bg-fig">
     <ImageFrame
       src={hero.image}
-      alt="Kandahar figs and dry fruits prepared for export"
+      alt="Palletised cargo being loaded onto an aircraft"
       tone="plum"
       loading="eager"
       class="absolute inset-0 h-full w-full"
-      label="FULL-WIDTH IMAGE: Kandahar figs & dry fruits,<br>export cartons / cargo in warm light<br>hero-home.jpg — 2400×1100px"
+      label="FULL-WIDTH IMAGE: cargo being loaded / trucks / warehouse<br>at least 2400×1100px"
     />
     <!-- warm layered light: amber glow + wine scrim (reads rich with or without a photo) -->
     <div
@@ -209,9 +227,9 @@ const countryList =
           class="group relative flex min-h-[380px] flex-col justify-end overflow-hidden rounded-xl bg-plum shadow-[0_8px_28px_rgba(61,34,51,0.18)] reveal"
         >
           <ImageFrame
-            src="/images/gallery/loading.jpg"
+            src="/images/gallery/container.jpg"
             alt=""
-            label="EXPORT & FREIGHT"
+            label="FREIGHT & LOGISTICS"
             class="absolute inset-0 h-full w-full transition-transform duration-700 group-hover:scale-105"
           />
           <div
@@ -264,55 +282,38 @@ const countryList =
     </div>
   </section>
 
-  <!-- ============ WHAT WE EXPORT ============ -->
+  <!-- ============ WHAT WE DO ============ -->
   <!--
-    The home page of a dried-fruit exporter showed no fruit. Five product
-    photographs already existed and only ever appeared on /services, which meant
-    the one thing a buyer comes here to see was two clicks away. This puts the
-    produce on the front page, where it sells.
+    Amanat is a logistics company: what a visitor should learn first is what it
+    can move and how. These cards say that in six lines. The produce photos
+    that used to sit here are still on /services, under "Cargo We Carry".
   -->
   <section class="bg-sand">
     <div class="mx-auto flex max-w-[1240px] flex-col gap-10 px-5 py-20 md:px-10 md:py-[88px]">
       <div class="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end reveal">
         <div class="flex max-w-[640px] flex-col gap-4">
-          <Eyebrow text="What We Export" />
+          <Eyebrow text="What We Do" />
           <h2 class="m-0 font-serif text-[30px] font-bold leading-tight text-plum md:text-[38px]">
-            Kandahar's orchards, graded and ready to ship.
+            Everything it takes to move your cargo.
           </h2>
         </div>
         <a
           href="/services"
           class="flex flex-none items-center gap-2 text-[15px] font-semibold text-accent-deep transition-colors hover:text-plum"
         >
-          See the full range <span class="text-[17px]">→</span>
+          See all services <span class="text-[17px]">→</span>
         </a>
       </div>
 
-      <!--
-        Five across on a wide screen, two on a phone. The last card spans both
-        columns when the count is odd, so the row never ends on a gap.
-      -->
-      <ul class="m-0 grid list-none grid-cols-2 gap-4 p-0 sm:grid-cols-3 lg:grid-cols-5 md:gap-5">
+      <ul class="m-0 grid list-none grid-cols-1 gap-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
         {
-          EXPORTS.map((e) => (
-            <li class="group relative overflow-hidden rounded-xl border border-line bg-paper reveal last:max-sm:col-span-2">
-              <div class="overflow-hidden">
-                <ImageFrame
-                  src={e.img}
-                  alt={e.alt}
-                  label={e.name}
-                  sizes="(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 230px"
-                  class="h-[170px] w-full transition-transform duration-500 group-hover:scale-[1.06] md:h-[210px]"
-                />
-              </div>
-              {/* The label sits over the foot of the picture, so the eye reads
-                  the produce first and the name second. */}
-              <div
-                class="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-3.5 pt-10"
-                style="background:linear-gradient(0deg,rgba(43,20,35,0.88),rgba(43,20,35,0.35) 55%,rgba(43,20,35,0));"
-              >
-                <span class="font-serif text-[17px] font-bold text-[#F8F3E9] md:text-[18px]">{e.name}</span>
-              </div>
+          services6.map((c) => (
+            <li class="flex flex-col gap-3 rounded-xl border border-line bg-paper p-7 reveal md:p-8">
+              <span class="mb-1 flex h-12 w-12 items-center justify-center rounded-lg bg-plum text-gold-light">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" set:html={c.svg} />
+              </span>
+              <h3 class="m-0 font-serif text-[20px] font-bold leading-snug text-plum">{c.title}</h3>
+              <p class="m-0 text-[15px] leading-relaxed text-muted">{c.text}</p>
             </li>
           ))
         }

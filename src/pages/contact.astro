@@ -32,7 +32,7 @@ const fieldClass =
         <Eyebrow text="Direct Contact" />
         <div class="flex flex-col">
           <div class="flex flex-col gap-1 border-b border-line py-5">
-            <span class="eyebrow text-[12px] text-label">Amanat Logistics — Export</span>
+            <span class="eyebrow text-[12px] text-label">Amanat Logistics — Freight</span>
             <a href={`tel:${CONTACT.phoneExport.replace(/\s/g, '')}`} class="font-serif text-[22px] font-bold text-plum">{CONTACT.phoneExport}</a>
           </div>
           <div class="flex flex-col gap-1 border-b border-line py-5">
@@ -88,7 +88,7 @@ const fieldClass =
           <label class="flex flex-col gap-1.5">
             <span class="text-[13px] font-semibold text-muted-dark">Service</span>
             <select name="service" class={fieldClass}>
-              <option>Export &amp; Freight</option>
+              <option>Freight &amp; Logistics</option>
               <option>Personal Shopping</option>
             </select>
           </label>
@@ -105,8 +105,8 @@ const fieldClass =
           </div>
 
           <label class="flex flex-col gap-1.5">
-            <span class="text-[13px] font-semibold text-muted-dark">Product &amp; Estimated Weight</span>
-            <input name="product" placeholder="e.g. Dried figs, ~500 kg" class={fieldClass} />
+            <span class="text-[13px] font-semibold text-muted-dark">Cargo &amp; Estimated Weight</span>
+            <input name="product" placeholder="e.g. 20 cartons of dry fruit, ~500 kg" class={fieldClass} />
           </label>
 
           <label class="flex flex-col gap-1.5">

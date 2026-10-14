@@ -5,7 +5,7 @@ import { getContent } from '../lib/store';
 const { contact: CONTACT } = await getContent();
 const waNumber = CONTACT.phoneExport.replace(/\D/g, '');
 const prefill = encodeURIComponent(
-  "Hello Amanat Logistics, I'd like to ask about your export / shipping services.",
+  "Hello Amanat Logistics, I'd like to ask about your freight / shipping services.",
 );
 const href = `https://wa.me/${waNumber}?text=${prefill}`;
 ---

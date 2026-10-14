@@ -1,6 +1,6 @@
 # Amanat Logistics — Website
 
-Premium export & freight marketing site. Built with **Astro 7 + Tailwind CSS v4**,
+Freight & logistics marketing site. Built with **Astro 7 + Tailwind CSS v4**,
 contact form emails via **Resend**, deploys to **Vercel**.
 
 Pages: Home · About · Services · Routes & Coverage · Track Shipment · Gallery · Contact.

@@ -9,7 +9,7 @@ export const SITE = {
   tagline: 'Kandahar · Afghanistan',
   domain: 'https://amanatlogistics.com',
   description:
-    'Premium figs & dry fruits, from Kandahar to the world — exported with integrity, delivered with care. Export & freight plus global personal shopping.',
+    'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight to markets worldwide, plus global personal shopping.',
 };
 
 export const CONTACT = {
@@ -34,13 +34,13 @@ export const NAV = [
 // Home — trust stats bar. Replace with real numbers when confirmed.
 export const STATS = [
   { value: '500+', label: 'Tons Delivered' },
-  { value: '1,200+', label: 'Orders Completed' },
+  { value: '1,200+', label: 'Shipments Completed' },
   { value: '4', label: 'Countries Served' },
   // Was "Since 20XX" — placeholder text that reached the live homepage. No
   // founding year is stated anywhere in this project and inventing one would be
   // worse than not showing it, so this says something true instead. Set a real
   // year here, or in /admin → Trust numbers, whenever you want it back.
-  { value: 'Kandahar', label: 'Sourced At Origin' },
+  { value: 'Road · Air · Sea', label: 'Freight Modes' },
 ];
 
 export const EXPORTS = [
@@ -52,15 +52,15 @@ export const EXPORTS = [
 ];
 
 export const DESTINATIONS = [
-  { name: 'India', mode: 'Air & land freight', delivers: 'Figs · dry fruits · fresh produce' },
-  { name: 'Canada', mode: 'Air & sea freight', delivers: 'Figs · dry fruits · nuts' },
-  { name: 'United Kingdom', mode: 'Air & sea freight', delivers: 'Figs · dry fruits · fresh produce' },
-  { name: 'United States', mode: 'Air & sea freight', delivers: 'Figs · dry fruits · nuts' },
+  { name: 'India', mode: 'Air & land freight', delivers: 'Dry fruit · fresh produce · general cargo' },
+  { name: 'Canada', mode: 'Air & sea freight', delivers: 'Dry fruit · nuts · general cargo' },
+  { name: 'United Kingdom', mode: 'Air & sea freight', delivers: 'Dry fruit · fresh produce · general cargo' },
+  { name: 'United States', mode: 'Air & sea freight', delivers: 'Dry fruit · nuts · general cargo' },
 ];
 
 export const VALUES = [
-  { title: 'Authenticity', line: "Genuine Afghan origin, sourced directly from Kandahar's growers.", bg: '#F0E4CC', dot: '#B08A48' },
-  { title: 'Quality', line: 'Consistent grading and food-safe handling on every consignment.', bg: '#EFE0E9', dot: '#8C5A2B' },
+  { title: 'Accountability', line: 'One team answerable for your cargo, from pickup to delivery.', bg: '#F0E4CC', dot: '#B08A48' },
+  { title: 'Care', line: 'Careful handling, packing and storage on every consignment, perishables included.', bg: '#EFE0E9', dot: '#8C5A2B' },
   { title: 'Reliability', line: 'Documented, tracked shipments that arrive exactly as promised.', bg: '#E5EADB', dot: '#43503A' },
   { title: 'Global Reach', line: 'Established corridors across three continents, growing steadily.', bg: '#F3E1D6', dot: '#7A3B2E' },
 ];
@@ -110,39 +110,43 @@ export const DEFAULT_CONTENT = {
     logoLight: '/images/brand-logo-white.png', // white version, shown on the dark footer
   },
   hero: {
-    eyebrow: 'Kandahar, Afghanistan',
-    title: 'Premium Figs & Dry Fruits, From Kandahar to the World.',
+    eyebrow: 'Freight & Logistics · Kandahar, Afghanistan',
+    title: 'Freight, Customs & Logistics, From Kandahar to the World.',
     subtitle:
-      "Trusted export and freight partner delivering Afghanistan's finest produce across the globe.",
-    image: '/images/hero-home.jpg',
+      'Road, air and sea freight, customs clearance and export documents — handled end to end by one accountable team, so your cargo arrives as promised.',
+    // A cargo photo rather than the old figs one: the headline is about freight now.
+    // Upload a wider photo (2400px+) in /admin → Home page — hero for a sharper banner.
+    image: '/images/gallery/loading.jpg',
   },
   // Search-engine / social preview text + image
   seo: {
     description:
-      'Premium figs & dry fruits, from Kandahar to the world — exported with integrity, delivered with care. Export & freight plus global personal shopping.',
+      'Freight forwarding, customs clearance and cargo logistics from Kandahar, Afghanistan — road, air and sea freight to markets worldwide, plus global personal shopping.',
     ogImage: '/images/og-image.jpg',
   },
   // Decorative photos used across inner pages
   images: {
     aboutHeader: '/images/about-header.jpg',
-    aboutStory: '/images/about-story.jpg',
+    // Was an orchard photo, from when the site sold fruit; a logistics company
+    // tells its story better with cargo on the move.
+    aboutStory: '/images/gallery/container.jpg',
     // Routes now draw a built-in vector map (RouteMap.astro); upload a graphic
     // here only if you want to replace it with your own artwork.
     worldMap: '',
   },
   // Coloured header band on each inner page
   pageHeaders: {
-    services: { eyebrow: 'What We Do', title: 'Our Services', subtitle: "From Kandahar's orchards to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust." },
-    about: { eyebrow: 'Our Story', title: 'About Amanat Logistics', subtitle: "A Kandahar-rooted company carrying Afghanistan's finest produce to the world — with a name that means trust." },
-    routes: { eyebrow: 'Where We Ship', title: 'Routes & Coverage', subtitle: 'Established export corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.' },
-    gallery: { eyebrow: 'Our Work in Pictures', title: 'Gallery', subtitle: 'Our products, our facilities, and our shipments — real photography builds real trust.' },
-    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Reach the right team directly, or send a detailed quote request below. Serious inquiries from importers, distributors, and officials are always welcome.' },
+    services: { eyebrow: 'What We Do', title: 'Our Services', subtitle: 'Freight forwarding, customs clearance and cargo handling from Kandahar to ports worldwide — and from global marketplaces back to your door. Two services, delivered with the same standard of trust.' },
+    about: { eyebrow: 'Our Story', title: 'About Amanat Logistics', subtitle: "A Kandahar-based logistics company moving Afghanistan's trade across borders — with a name that means trust." },
+    routes: { eyebrow: 'Where We Ship', title: 'Routes & Coverage', subtitle: 'Established freight corridors from Kandahar to markets across three continents — with new destinations added as our partnerships grow.' },
+    gallery: { eyebrow: 'Our Work in Pictures', title: 'Gallery', subtitle: 'The cargo we carry, our facilities, and our shipments — real photography builds real trust.' },
+    contact: { eyebrow: 'Get In Touch', title: 'Contact Us', subtitle: 'Reach the right team directly, or send a detailed quote request below. Exporters, importers, traders, and officials are always welcome.' },
     tracking: { eyebrow: 'Shipment Tracking', title: 'Track Your Shipment', subtitle: 'Enter your tracking number or invoice number to follow your consignment from our Kandahar warehouse right through to delivery.' },
   },
   // Services page — three freight-mode cards
   freightModes: [
-    { title: 'Sea Freight', text: 'Cost-efficient bulk shipping for large dry-fruit consignments, with full container and consolidated options.' },
-    { title: 'Air Freight', text: 'Fast, temperature-aware shipping for fresh fruit and priority orders — days from Kandahar to your port.' },
+    { title: 'Sea Freight', text: 'Cost-efficient bulk shipping for large consignments, with full-container and consolidated options through regional ports.' },
+    { title: 'Air Freight', text: 'Fast, temperature-aware air cargo for perishables, samples and priority shipments — days from Kandahar to your airport.' },
     { title: 'Land / Road Freight', text: 'Regional overland corridors to neighboring markets, with customs brokerage at both borders.' },
   ],
   // Services page — Global Personal Shopping block (intro + photo)
@@ -166,18 +170,18 @@ export const DEFAULT_CONTENT = {
   platforms: PLATFORMS,
   // Two service cards (Home page + Services page intros)
   services: {
-    exportTitle: 'Export & Freight',
+    exportTitle: 'Freight & Logistics',
     exportText:
-      'Premium figs, dry fruits, and fresh fruits from Afghanistan — shipped by sea, air, and land with certified documentation and careful handling at every step.',
+      'Road, air and sea freight out of Afghanistan, with customs clearance, export documents and careful cargo handling at every step — from pickup to delivery.',
     shoppingTitle: 'Global Personal Shopping',
     shoppingText:
       'We order products from Amazon, Daraz & more on your behalf — purchased, consolidated, and delivered to your door with transparent, itemized pricing.',
   },
   // "Why Amanat" cards on the Home page
   why: [
-    { title: 'Authentic Afghan origin', text: "Sourced directly from Kandahar's orchards and growers — provenance you can document." },
+    { title: 'Customs & paperwork handled', text: 'Declarations, certificates and export documents prepared and checked, so cargo is not held at the border.' },
     { title: 'Secure end-to-end shipping', text: 'Careful packing, customs handling, and tracked freight from our facility to your port.' },
-    { title: 'Reliable partnership', text: 'A single accountable partner for officials, importers, and institutional buyers.' },
+    { title: 'Reliable partnership', text: 'A single accountable partner for exporters, importers, traders, and officials.' },
   ],
   // Home page — the partnership with Faiz Fayez LTD, the Kandahar fruit
   // traders whose consignments Amanat carries. Their site (faizfayezltd.com)
@@ -203,13 +207,22 @@ export const DEFAULT_CONTENT = {
     { value: '850', label: 'Tons of raisins' },
     { value: '650', label: 'Tons of pomegranates' },
   ],
+  // "What we do" cards on the Home page (icons stay fixed by position)
+  logistics: [
+    { title: 'Road Freight', text: 'Overland trucking along regional corridors, with border crossings and transit papers arranged for you.' },
+    { title: 'Air Cargo', text: 'Fast air freight for perishables, samples and urgent consignments — booked, palletised and loaded for you.' },
+    { title: 'Sea Freight', text: 'Full-container and consolidated shipments for bulk cargo, routed through regional ports.' },
+    { title: 'Customs Clearance', text: 'Declarations and clearance at origin and at the border, so your cargo keeps moving.' },
+    { title: 'Export Documents', text: 'Invoices, packing lists, certificates of origin and phytosanitary papers, prepared and checked.' },
+    { title: 'Warehousing & Handling', text: 'Storage, packing, palletising and loading at our Kandahar facility, perishables included.' },
+  ],
   // Mission & Values cards on the About page (colors stay fixed by position)
   values: VALUES.map(({ title, line }) => ({ title, line })),
   // About page story paragraphs
   about: {
-    p1: "Amanat Logistics was founded in Kandahar, in the heart of one of the world's great fruit-growing regions. For generations, our land has produced figs, raisins, almonds, and pomegranates prized across the region for their sweetness and quality. We saw an opportunity to bring that heritage to international markets — properly graded, certified, and delivered with care.",
-    p2: '"Amanat" means a trust — something precious placed in your safekeeping. That word guides everything we do. We work directly with growers, control quality at our own facilities, and manage export logistics end to end, so our partners deal with one accountable company built on honesty and consistency.',
-    p3: "Today we serve importers, distributors, and officials across several continents — and we're proud to represent the very best of Afghan agriculture wherever our shipments arrive.",
+    p1: "Amanat Logistics was founded in Kandahar to solve a simple problem: Afghan goods are in demand abroad, but getting them there — through borders, customs, airports and ports — is hard. We built a logistics company to do that part properly, so traders can focus on their trade.",
+    p2: '"Amanat" means a trust — something precious placed in your safekeeping. That word guides everything we do. We arrange the freight, prepare the export documents, clear customs, and handle the cargo at our own facilities, so our clients deal with one accountable company built on honesty and consistency.',
+    p3: "Today we move cargo for exporters, importers, and officials across several continents — from Kandahar's dry fruit and fresh produce to general cargo — and we track every consignment until it arrives.",
   },
 };
 
