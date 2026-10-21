@@ -1,0 +1,134 @@
+---
+/**
+ * Small conveniences for the money forms (payments, expenses, transfers).
+ * Every form works without it; the server checks everything again.
+ *
+ * Markup it looks for, inside <form data-money-form data-rates='{"AFN":70,…}'>:
+ *   select[data-account=K]  options carry data-currency / data-type
+ *   input[data-amount=K]    input[data-rate=K]   [data-cur=K] (currency label)
+ *   [data-usd=K] (≈ $ preview)   select[data-method=K] (follows the account type)
+ *   [data-reload] + button[data-reload-btn]: reload the page (GET) on change
+ *   transfers: pairs "out" and "in", [data-fee], input[data-amount=in] auto-fills
+ * K is a pair name: "main" for payments/expenses, "out"/"in" for transfers.
+ */
+---
+
+<script is:inline>
+  (function () {
+    var WHOLE = { AFN: 1, UZS: 1, PKR: 1 };
+    var METHOD_FOR = { cash: 'cash', bank: 'bank', sarafi: 'sarafi', hawala: 'hawala' };
+    function parse(v) {
+      var t = String(v == null ? '' : v).replace(/[,\s]/g, '');
+      if (t === '') return NaN;
+      var n = Number(t);
+      return isFinite(n) ? n : NaN;
+    }
+    function money(n) {
+      return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    document.querySelectorAll('form[data-money-form]').forEach(function (form) {
+      var rates = {};
+      try { rates = JSON.parse(form.getAttribute('data-rates') || '{}'); } catch (e) {}
+      function one(sel) { return form.querySelector(sel); }
+
+      // Reload (GET) when the party or direction changes, so the server can show balances.
+      var reloadBtn = one('[data-reload-btn]');
+      if (reloadBtn) {
+        reloadBtn.hidden = true;
+        form.querySelectorAll('[data-reload]').forEach(function (el) {
+          el.addEventListener('change', function () {
+            var nn = form.querySelector('[name="new_name"]');
+            if (el.name === 'party' && nn && el.value) nn.value = '';
+            if (form.requestSubmit) form.requestSubmit(reloadBtn); else reloadBtn.click();
+          });
+        });
+        var newName = form.querySelector('[name="new_name"]');
+        var partySel = form.querySelector('select[name="party"]');
+        if (newName && partySel) {
+          newName.addEventListener('input', function () { if (newName.value.trim()) partySel.value = ''; });
+        }
+      }
+
+      function pair(k) {
+        return {
+          k: k,
+          account: one('[data-account="' + k + '"]'),
+          amount: one('[data-amount="' + k + '"]'),
+          rate: one('[data-rate="' + k + '"]'),
+          usd: one('[data-usd="' + k + '"]'),
+          method: one('[data-method="' + k + '"]'),
+          curs: form.querySelectorAll('[data-cur="' + k + '"]'),
+        };
+      }
+      function opt(p) { return p.account && p.account.options[p.account.selectedIndex]; }
+      function cur(p) { var o = opt(p); return (o && o.getAttribute('data-currency')) || ''; }
+      function usdOf(p) {
+        var a = parse(p.amount && p.amount.value), r = parse(p.rate && p.rate.value);
+        return a > 0 && r > 0 ? Math.round((a / r) * 100) / 100 : NaN;
+      }
+      var pairs = ['main', 'out', 'in'].map(pair).filter(function (p) { return p.account; });
+      var pOut = pairs.filter(function (p) { return p.k === 'out'; })[0];
+      var pIn = pairs.filter(function (p) { return p.k === 'in'; })[0];
+      var fee = one('[data-fee]');
+      var sameNote = one('[data-same-note]');
+
+      function preview() {
+        pairs.forEach(function (p) {
+          if (!p.usd) return;
+          var u = usdOf(p);
+          p.usd.textContent = !isNaN(u) && cur(p) && cur(p) !== 'USD' ? '≈ ' + money(u) + ' US dollars' : '';
+        });
+        if (fee && pOut && pIn) {
+          var uo = usdOf(pOut), ui = usdOf(pIn);
+          if (!isNaN(uo) && !isNaN(ui)) {
+            var f = Math.round((uo - ui) * 100) / 100;
+            fee.textContent = f >= 0 ? 'Transfer fee ≈ ' + money(f) + ' (what was lost on the way, in US dollars)' : 'More arrived than left (in US dollars) — check the amounts and rates.';
+          } else fee.textContent = '';
+        }
+      }
+
+      // Transfers: same currency → amount in = amount out and one rate; otherwise convert.
+      var inTouched = !!(pIn && pIn.amount && pIn.amount.value.trim());
+      if (pIn && pIn.amount) pIn.amount.addEventListener('input', function () { inTouched = pIn.amount.value.trim() !== ''; });
+      function syncTransfer() {
+        if (!pOut || !pIn) return;
+        var same = cur(pOut) && cur(pOut) === cur(pIn);
+        if (pIn.rate) {
+          if (same) { pIn.rate.value = pOut.rate.value; pIn.rate.readOnly = true; }
+          else if (cur(pIn) !== 'USD') pIn.rate.readOnly = false;
+        }
+        if (sameNote) sameNote.hidden = !same;
+        if (!inTouched && pIn.amount) {
+          var a = parse(pOut.amount.value), ro = parse(pOut.rate.value), ri = parse(pIn.rate.value);
+          if (a > 0 && cur(pOut) && cur(pIn)) {
+            var v = same ? a : ro > 0 && ri > 0 ? (a / ro) * ri : NaN;
+            if (!isNaN(v)) pIn.amount.value = String(WHOLE[cur(pIn)] ? Math.round(v) : Math.round(v * 100) / 100);
+          } else if (!pOut.amount.value.trim()) pIn.amount.value = '';
+        }
+      }
+
+      pairs.forEach(function (p) {
+        if (p.method) p.method.addEventListener('change', function () { p.method.setAttribute('data-touched', '1'); });
+        p.account.addEventListener('change', function () {
+          var c = cur(p);
+          p.curs.forEach(function (el) { el.textContent = c || '—'; });
+          if (p.rate) {
+            if (c === 'USD') { p.rate.value = '1'; p.rate.readOnly = true; }
+            else { p.rate.readOnly = false; p.rate.value = rates[c] ? String(rates[c]) : ''; }
+          }
+          var o = opt(p);
+          if (p.method && !p.method.getAttribute('data-touched') && o) {
+            var m = METHOD_FOR[o.getAttribute('data-type')];
+            if (m) p.method.value = m;
+          }
+          syncTransfer();
+          preview();
+        });
+        if (p.amount) p.amount.addEventListener('input', function () { syncTransfer(); preview(); });
+        if (p.rate) p.rate.addEventListener('input', function () { syncTransfer(); preview(); });
+      });
+      syncTransfer();
+      preview();
+    });
+  })();
+</script>
