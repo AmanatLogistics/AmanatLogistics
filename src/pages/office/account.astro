@@ -1,0 +1,53 @@
+---
+/** Change your own password. Doing so signs you out everywhere else. */
+import OfficeLayout from '../../layouts/OfficeLayout.astro';
+import PageHead from '../../components/office/PageHead.astro';
+import Flash from '../../components/office/Flash.astro';
+import { guard, sameOrigin, checkPassword, hashPassword, passwordProblem, sessionCookie, type OfficeUser } from '../../lib/office/auth';
+import { one } from '../../lib/office/db';
+import { logActivity } from '../../lib/office/activity';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    const current = String(fd.get('current') ?? '');
+    const pw = String(fd.get('password') ?? '');
+    const pw2 = String(fd.get('password2') ?? '');
+    const row = await one<{ password_hash: string }>('SELECT password_hash FROM office_users WHERE id = $1', [user.id]);
+    if (!row || !(await checkPassword(current, row.password_hash))) error = 'Your current password is not right.';
+    else if (pw !== pw2) error = 'The two new passwords are not the same.';
+    else if ((error = passwordProblem(pw))) {
+      /* error set */
+    } else {
+      const updated = await one<OfficeUser>(
+        `UPDATE office_users SET password_hash = $1, pw_changed_at = now() WHERE id = $2
+         RETURNING id, username, name, role, active, pw_changed_at`,
+        [await hashPassword(pw), user.id],
+      );
+      await logActivity(user.id, 'password_changed', 'user', user.id, null);
+      return new Response(null, {
+        status: 303,
+        headers: { Location: '/office/account?ok=' + encodeURIComponent('Password changed.'), 'Set-Cookie': sessionCookie(updated!) },
+      });
+    }
+  }
+}
+---
+
+<OfficeLayout title="My password" user={user}>
+  <PageHead title="My password" sub={`Signed in as ${user.username}.`} />
+  <Flash error={error} />
+  <form method="post" class="o-card o-form" style="max-width:480px">
+    <label class="o-field"><span>Current password</span><input type="password" name="current" autocomplete="current-password" required /></label>
+    <label class="o-field"><span>New password</span><input type="password" name="password" autocomplete="new-password" minlength="8" required /></label>
+    <label class="o-field"><span>New password again</span><input type="password" name="password2" autocomplete="new-password" minlength="8" required /></label>
+    <p class="o-help">Changing it signs you out on every other device.</p>
+    <div><button class="o-btn primary" type="submit">Change password</button></div>
+  </form>
+</OfficeLayout>

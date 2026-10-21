@@ -1,0 +1,13 @@
+---
+/** Shows ?ok=… or ?err=… from the URL (set by withMsg() after a save). */
+const ok = Astro.url.searchParams.get('ok');
+const err = Astro.url.searchParams.get('err');
+interface Props {
+  /** An error from this request (e.g. a form that failed validation). */
+  error?: string | null;
+}
+const { error } = Astro.props;
+---
+
+{ok && <div class="o-flash ok" role="status">{ok}</div>}
+{(error || err) && <div class="o-flash err" role="alert">{error || err}</div>}

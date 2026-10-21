@@ -1,0 +1,129 @@
+---
+/**
+ * Settings (admin only): the letterhead printed on invoices, payment terms,
+ * numbering prefixes, and today's exchange rates (used to pre-fill forms; each
+ * record keeps the rate it was entered with, so changing a rate never rewrites
+ * old figures).
+ */
+import OfficeLayout from '../../layouts/OfficeLayout.astro';
+import PageHead from '../../components/office/PageHead.astro';
+import Flash from '../../components/office/Flash.astro';
+import { guard, sameOrigin } from '../../lib/office/auth';
+import { q } from '../../lib/office/db';
+import { getSettings, saveSettings } from '../../lib/office/settings';
+import { listCurrencies } from '../../lib/office/money';
+import { logActivity } from '../../lib/office/activity';
+import { str, int, parseNum, withMsg } from '../../lib/office/form';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    if (fd.get('action') === 'company') {
+      const dueDays = int(fd, 'dueDays');
+      const prefix = (s: string | null, d: string) => (s ?? d).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || d;
+      await saveSettings({
+        companyName: str(fd, 'companyName', 120) ?? 'Amanat Logistics',
+        companyTagline: str(fd, 'companyTagline', 160) ?? '',
+        address: str(fd, 'address', 300) ?? '',
+        phone: str(fd, 'phone', 80) ?? '',
+        email: str(fd, 'email', 120) ?? '',
+        website: str(fd, 'website', 120) ?? '',
+        paymentInstructions: str(fd, 'paymentInstructions', 1000) ?? '',
+        invoiceFooter: str(fd, 'invoiceFooter', 500) ?? '',
+        invoicePrefix: prefix(str(fd, 'invoicePrefix', 8), 'INV'),
+        shipmentPrefix: prefix(str(fd, 'shipmentPrefix', 8), 'AML'),
+        dueDays: dueDays !== null && dueDays >= 0 && dueDays <= 365 ? dueDays : 15,
+      });
+      await logActivity(user.id, 'settings_updated', 'settings', null, 'Company & invoice settings');
+      return Astro.redirect(withMsg('/office/settings', 'Settings saved.'), 303);
+    }
+    if (fd.get('action') === 'rates') {
+      const changed: string[] = [];
+      for (const c of await listCurrencies()) {
+        if (c.code === 'USD') continue;
+        const v = parseNum(fd.get(`rate_${c.code}`));
+        if (v !== null && v > 0 && v !== c.per_usd) {
+          await q('UPDATE office_currencies SET per_usd = $1, updated_at = now() WHERE code = $2', [v, c.code]);
+          changed.push(`${c.code} ${v}`);
+        }
+      }
+      const newCode = (str(fd, 'new_code', 3) ?? '').toUpperCase();
+      const newName = str(fd, 'new_name', 40);
+      const newRate = parseNum(fd.get('new_rate'));
+      if (newCode) {
+        if (!/^[A-Z]{3}$/.test(newCode) || !newName || !newRate || newRate <= 0) {
+          error = 'To add a currency give a 3-letter code, a name and how many make one US dollar.';
+        } else {
+          await q('INSERT INTO office_currencies (code, name, per_usd) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING', [newCode, newName, newRate]);
+          changed.push(`added ${newCode}`);
+        }
+      }
+      if (!error) {
+        if (changed.length) await logActivity(user.id, 'rates_updated', 'settings', null, changed.join(', '));
+        return Astro.redirect(withMsg('/office/settings', changed.length ? 'Rates saved.' : 'No rates changed.'), 303);
+      }
+    }
+  }
+}
+
+const s = await getSettings();
+const currencies = await listCurrencies();
+---
+
+<OfficeLayout title="Settings" user={user} active="settings">
+  <PageHead title="Settings" sub="What prints on invoices, and today's exchange rates." />
+  <Flash error={error} />
+  <div class="o-grid-2">
+    <form method="post" class="o-card o-form">
+      <div class="o-card-head"><h2>Company & invoices</h2></div>
+      <input type="hidden" name="action" value="company" />
+      <label class="o-field"><span>Company name</span><input name="companyName" value={s.companyName} required /></label>
+      <label class="o-field"><span>Line under the name</span><input name="companyTagline" value={s.companyTagline} /></label>
+      <label class="o-field"><span>Address</span><textarea name="address" rows="2">{s.address}</textarea></label>
+      <div class="o-row">
+        <label class="o-field"><span>Phone</span><input name="phone" value={s.phone} /></label>
+        <label class="o-field"><span>Email</span><input name="email" value={s.email} /></label>
+      </div>
+      <label class="o-field"><span>Website</span><input name="website" value={s.website} /></label>
+      <label class="o-field"><span>Payment instructions (printed under the totals)</span><textarea name="paymentInstructions" rows="3">{s.paymentInstructions}</textarea></label>
+      <label class="o-field"><span>Invoice footer</span><input name="invoiceFooter" value={s.invoiceFooter} /></label>
+      <div class="o-row">
+        <label class="o-field"><span>Invoice prefix</span><input name="invoicePrefix" value={s.invoicePrefix} maxlength="8" /><span class="o-help">e.g. INV → INV-2026-0001</span></label>
+        <label class="o-field"><span>Shipment prefix</span><input name="shipmentPrefix" value={s.shipmentPrefix} maxlength="8" /><span class="o-help">e.g. AML → AML-2026-0001</span></label>
+        <label class="o-field"><span>Days to pay</span><input name="dueDays" type="number" min="0" max="365" value={s.dueDays} /></label>
+      </div>
+      <div><button class="o-btn primary" type="submit">Save settings</button></div>
+    </form>
+
+    <form method="post" class="o-card o-form">
+      <div class="o-card-head"><h2>Exchange rates</h2></div>
+      <input type="hidden" name="action" value="rates" />
+      <p class="o-help" style="margin:0">How many of each currency make <strong>one US dollar</strong>. New entries start with these rates; each one keeps the rate it was saved with, so changing a rate here never changes old records.</p>
+      <div class="o-table-wrap">
+        <table class="o-table">
+          <thead><tr><th>Currency</th><th class="num">Per 1 USD</th></tr></thead>
+          <tbody>
+            {currencies.map((c) => (
+              <tr>
+                <td><strong>{c.code}</strong> <span class="muted small">{c.name}</span></td>
+                <td class="num">{c.code === 'USD' ? '1' : <input class="o-input" style="max-width:150px;text-align:right" name={`rate_${c.code}`} value={String(c.per_usd)} inputmode="decimal" />}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div class="o-row">
+        <label class="o-field"><span>Add currency code</span><input name="new_code" maxlength="3" placeholder="e.g. EUR" /></label>
+        <label class="o-field"><span>Name</span><input name="new_name" placeholder="Euro" /></label>
+        <label class="o-field"><span>Per 1 USD</span><input name="new_rate" inputmode="decimal" placeholder="0.92" /></label>
+      </div>
+      <div><button class="o-btn primary" type="submit">Save rates</button></div>
+    </form>
+  </div>
+</OfficeLayout>

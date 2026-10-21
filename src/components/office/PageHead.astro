@@ -1,0 +1,35 @@
+---
+/**
+ * Page title row: optional breadcrumbs, a title, a line of explanation, and
+ * action buttons on the right (pass them as children).
+ *   <PageHead title="Shipments" sub="…" crumbs={[{ label: 'Office', href: '/office' }]}>
+ *     <a class="o-btn primary" href="/office/shipments/new">New shipment</a>
+ *   </PageHead>
+ */
+interface Props {
+  title: string;
+  sub?: string;
+  crumbs?: { label: string; href: string }[];
+}
+const { title, sub, crumbs = [] } = Astro.props;
+---
+
+<div class="o-page-head">
+  <div>
+    {
+      crumbs.length > 0 && (
+        <div class="o-crumbs">
+          {crumbs.map((c, i) => (
+            <>
+              {i > 0 && ' / '}
+              <a href={c.href}>{c.label}</a>
+            </>
+          ))}
+        </div>
+      )
+    }
+    <h1>{title}</h1>
+    {sub && <p>{sub}</p>}
+  </div>
+  <div class="o-actions no-print"><slot /></div>
+</div>

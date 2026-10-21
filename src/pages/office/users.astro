@@ -1,0 +1,132 @@
+---
+/**
+ * Users (admin only): add staff, change roles, disable, reset passwords.
+ * A disabled user cannot sign in and every session they had ends at once.
+ */
+import OfficeLayout from '../../layouts/OfficeLayout.astro';
+import PageHead from '../../components/office/PageHead.astro';
+import Flash from '../../components/office/Flash.astro';
+import { guard, sameOrigin, hashPassword, passwordProblem } from '../../lib/office/auth';
+import { q, one } from '../../lib/office/db';
+import { logActivity } from '../../lib/office/activity';
+import { str, oneOf, withMsg } from '../../lib/office/form';
+import { fmtDate } from '../../lib/office/money';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    const action = str(fd, 'action');
+    if (action === 'add') {
+      const username = (str(fd, 'username', 40) ?? '').toLowerCase();
+      const name = str(fd, 'name', 80);
+      const role = oneOf(fd, 'role', ['admin', 'staff'] as const);
+      const pw = String(fd.get('password') ?? '');
+      if (!username || !/^[a-z0-9._-]{3,40}$/.test(username)) error = 'Username: 3–40 letters, numbers, dots, dashes or underscores.';
+      else if (!name) error = 'Enter the person\'s name.';
+      else if (!role) error = 'Choose a role.';
+      else if ((error = passwordProblem(pw))) {
+        /* error set */
+      } else if (await one('SELECT 1 FROM office_users WHERE username = $1', [username])) error = 'That username is taken.';
+      else {
+        const row = await one<{ id: number }>(
+          'INSERT INTO office_users (username, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id',
+          [username, name, await hashPassword(pw), role],
+        );
+        await logActivity(user.id, 'user_created', 'user', row!.id, `${name} (${username}, ${role})`);
+        return Astro.redirect(withMsg('/office/users', `${name} can now sign in as ${username}.`), 303);
+      }
+    } else if (action === 'update') {
+      const id = Number(fd.get('id'));
+      const role = oneOf(fd, 'role', ['admin', 'staff'] as const);
+      const active = fd.get('active') === 'on';
+      const pw = String(fd.get('password') ?? '');
+      const target = await one<{ id: number; name: string; role: string; active: boolean }>('SELECT id, name, role, active FROM office_users WHERE id = $1', [id]);
+      if (!target || !role) error = 'User not found.';
+      else if (id === user.id && (role !== 'admin' || !active)) error = 'You cannot remove your own admin access or disable yourself.';
+      else if (pw && (error = passwordProblem(pw))) {
+        /* error set */
+      } else {
+        if (target.role === 'admin' && (role !== 'admin' || !active)) {
+          const admins = await one<{ n: number }>("SELECT COUNT(*) AS n FROM office_users WHERE role = 'admin' AND active AND id <> $1", [id]);
+          if ((admins?.n ?? 0) === 0) error = 'There must always be at least one active admin.';
+        }
+        if (!error) {
+          // Changing role, disabling, or setting a password all end that user's sessions.
+          await q(
+            `UPDATE office_users SET role = $1, active = $2,
+               password_hash = COALESCE($3, password_hash),
+               pw_changed_at = CASE WHEN $3::text IS NOT NULL OR role <> $1 OR active <> $2 THEN now() ELSE pw_changed_at END
+             WHERE id = $4`,
+            [role, active, pw ? await hashPassword(pw) : null, id],
+          );
+          await logActivity(user.id, 'user_updated', 'user', id, `${target.name}: ${role}${active ? '' : ', disabled'}${pw ? ', password reset' : ''}`);
+          return Astro.redirect(withMsg('/office/users', `${target.name} updated.`), 303);
+        }
+      }
+    }
+  }
+}
+
+const users = await q<{ id: number; username: string; name: string; role: string; active: boolean; last_login_at: string | null; created_at: string }>(
+  'SELECT id, username, name, role, active, last_login_at, created_at FROM office_users ORDER BY active DESC, name',
+);
+---
+
+<OfficeLayout title="Users" user={user} active="users">
+  <PageHead title="Users" sub="Everyone who can sign in to the office system. Admins see profit, reports and settings; staff enter the day's work." />
+  <Flash error={error} />
+  <div class="o-grid-2">
+    <div class="o-card">
+      <div class="o-card-head"><h2>People</h2></div>
+      <div class="o-table-wrap">
+        <table class="o-table">
+          <thead><tr><th>Name</th><th>Role</th><th>Last sign-in</th><th></th></tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr>
+                <td><strong>{u.name}</strong><div class="muted small">{u.username}{!u.active && ' · disabled'}</div></td>
+                <td><span class:list={['o-badge', u.role]}>{u.role}</span></td>
+                <td class="small">{u.last_login_at ? fmtDate(new Date(u.last_login_at)) : 'Never'}</td>
+                <td>
+                  <details>
+                    <summary class="small" style="cursor:pointer;color:var(--o-maroon)">Edit</summary>
+                    <form method="post" class="o-form" style="margin-top:10px;min-width:220px">
+                      <input type="hidden" name="action" value="update" />
+                      <input type="hidden" name="id" value={u.id} />
+                      <label class="o-field"><span>Role</span>
+                        <select name="role">
+                          <option value="staff" selected={u.role === 'staff'}>Staff</option>
+                          <option value="admin" selected={u.role === 'admin'}>Admin</option>
+                        </select>
+                      </label>
+                      <label class="small"><input type="checkbox" name="active" checked={u.active} /> Can sign in</label>
+                      <label class="o-field"><span>New password (leave blank to keep)</span><input type="password" name="password" autocomplete="new-password" /></label>
+                      <button class="o-btn sm primary" type="submit">Save</button>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <form method="post" class="o-card o-form">
+      <div class="o-card-head"><h2>Add a person</h2></div>
+      <input type="hidden" name="action" value="add" />
+      <label class="o-field"><span>Name</span><input name="name" required maxlength="80" /></label>
+      <label class="o-field"><span>Username</span><input name="username" required pattern="[a-zA-Z0-9._\-]{3,40}" autocapitalize="none" /><span class="o-help">What they type to sign in, e.g. "ahmad".</span></label>
+      <label class="o-field"><span>Role</span>
+        <select name="role"><option value="staff">Staff — enters shipments, payments, expenses</option><option value="admin">Admin — also profit, reports, users, settings</option></select>
+      </label>
+      <label class="o-field"><span>Password</span><input type="password" name="password" minlength="8" required autocomplete="new-password" /><span class="o-help">At least 8 characters. They can change it under "My password".</span></label>
+      <div><button class="o-btn primary" type="submit">Add person</button></div>
+    </form>
+  </div>
+</OfficeLayout>

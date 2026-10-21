@@ -1,0 +1,14 @@
+---
+/** PLACEHOLDER — replaced by the dashboard module. */
+import OfficeLayout from '../../layouts/OfficeLayout.astro';
+import PageHead from '../../components/office/PageHead.astro';
+import { guard } from '../../lib/office/auth';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+---
+
+<OfficeLayout title="Dashboard" user={user} active="dashboard">
+  <PageHead title="Dashboard" sub="Coming next." />
+</OfficeLayout>
