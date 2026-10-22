@@ -38,7 +38,7 @@
  */
 import { q, one } from './db';
 import { round2 } from './money';
-import type { ServiceKey } from './services';
+import { COST_CATEGORIES, type ServiceKey } from './services';
 
 /* ------------------------------------------------------------------ */
 /* Parties                                                             */
@@ -148,7 +148,7 @@ export async function partyStatement(partyId: number, from?: string, to?: string
         WHERE p.party_id = $1 AND p.direction = 'in'
        UNION ALL
        SELECT s.ship_date, 'cost', s.ref, s.id,
-              COALESCE(c.description, c.category), -c.usd, c.amount, c.currency, s.created_at, c.id
+              COALESCE(NULLIF(c.description, ''), c.category), -c.usd, c.amount, c.currency, s.created_at, c.id
          FROM office_costs c JOIN office_shipments s ON s.id = c.shipment_id
         WHERE c.payee_id = $1
        UNION ALL
@@ -171,7 +171,11 @@ export async function partyStatement(partyId: number, from?: string, to?: string
       continue;
     }
     if (to && r.date > to) continue;
-    lines.push({ date: r.date, kind: r.kind, ref: r.ref, shipment_id: r.shipment_id, description: r.description, delta: r.delta, balance: running, amount: r.amount, currency: r.currency });
+    // A cost line with no description shows its category's label, not the raw key.
+    const description = r.kind === 'cost' && r.description in COST_CATEGORIES
+      ? COST_CATEGORIES[r.description as keyof typeof COST_CATEGORIES]
+      : r.description;
+    lines.push({ date: r.date, kind: r.kind, ref: r.ref, shipment_id: r.shipment_id, description, delta: r.delta, balance: running, amount: r.amount, currency: r.currency });
   }
   const closing = lines.length ? lines[lines.length - 1].balance : opening;
   return { opening, lines, closing };
@@ -469,7 +473,12 @@ export function periodFromParams(params: URLSearchParams, todayStr: string): Per
     case 'all':
       return { key, label: 'All time', from: '2000-01-01', to: `${y + 1}-12-31` };
     case 'custom': {
-      const ok = (s: string | null) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
+      // A real calendar day only: '2026-02-30' or '2026-13-45' would reach Postgres and fail.
+      const ok = (s: string | null) => {
+        if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+        const d = new Date(`${s}T00:00:00Z`);
+        return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+      };
       const from = ok(params.get('from')) ? params.get('from')! : `${y}-${pad(m)}-01`;
       const to = ok(params.get('to')) ? params.get('to')! : todayStr;
       return { key, label: `${from} → ${to}`, from: from <= to ? from : to, to: from <= to ? to : from };

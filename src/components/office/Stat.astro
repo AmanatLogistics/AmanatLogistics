@@ -11,7 +11,11 @@ const { label, value, sub, tone = '', href } = Astro.props;
 const Tag = href ? 'a' : 'div';
 ---
 
-<Tag class:list={['o-stat', tone === 'brand' && 'brand']} href={href} style={href ? 'display:block;color:inherit;text-decoration:none' : undefined}>
+<Tag
+  class:list={['o-stat', tone === 'brand' && 'brand']}
+  href={href}
+  style={href ? `display:block;text-decoration:none${tone === 'brand' ? '' : ';color:inherit'}` : undefined}
+>
   <div class="label">{label}</div>
   <div class:list={['value', tone === 'pos' && 'pos', tone === 'neg' && 'neg']}>{value}</div>
   {sub && <div class="sub">{sub}</div>}

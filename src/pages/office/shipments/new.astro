@@ -46,7 +46,8 @@ if (Astro.request.method === 'POST') {
     if (isServiceKey(r.state.form.service)) service = r.state.form.service;
   }
 }
-if (service && !state) state = newForm(service, today(), parseId(Astro.url.searchParams.get('client')), rates);
+const clientParam = parseId(Astro.url.searchParams.get('client'));
+if (service && !state) state = newForm(service, today(), clientParam, rates);
 
 const clientIds = state && /^\d+$/.test(state.form.client_id) ? [Number(state.form.client_id)] : [];
 const payeeIds = (state?.costs ?? []).map((c) => Number(c.payee_id)).filter((n) => Number.isInteger(n) && n > 0);
@@ -69,7 +70,7 @@ const unitLabel = { kg: 'Billed per kg', cbm: 'Billed per CBM', fixed: 'Billed a
           {SERVICE_KEYS.map((k) => {
             const s = SERVICES[k];
             return (
-              <a class="o-card" href={`/office/shipments/new?service=${k}`} style="display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+              <a class="o-card" href={`/office/shipments/new?service=${k}${clientParam ? `&client=${clientParam}` : ''}`} style="display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
                 <h2 style="font-size:21px;color:var(--o-maroon)">{s.label}</h2>
                 <p class="muted" style="margin:0;flex:1">{s.route}</p>
                 <div class="o-actions" style="justify-content:space-between">

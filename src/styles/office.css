@@ -115,16 +115,24 @@ h1, h2, h3 { font-family: var(--o-font-head); margin: 0; line-height: 1.15; }
 .o-grid-2 > .o-card + .o-card, .o-grid-3 > .o-card + .o-card, .o-grid-4 > .o-card + .o-card { margin-top: 0; }
 .o-stack > * + * { margin-top: 16px; }
 @media (max-width: 1100px) { .o-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .o-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 720px) { .o-grid-2, .o-grid-3, .o-grid-4 { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .o-grid-2, .o-grid-3, .o-grid-4 { grid-template-columns: minmax(0, 1fr); } }
+/* Grid items default to min-width:auto, so a wide table inside a card would
+   widen the whole page on a phone; this keeps tables scrolling in their card. */
+.o-grid-2 > *, .o-grid-3 > *, .o-grid-4 > * { min-width: 0; }
 
 /* ---------- stat tiles ---------- */
-.o-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.o-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .o-stat { background: #fff; border: 1px solid var(--o-line); border-radius: var(--o-radius); padding: 14px 16px; }
 .o-stat .label { font-size: 12.5px; font-weight: 600; color: var(--o-muted); text-transform: uppercase; letter-spacing: .06em; }
 .o-stat .value { font-family: var(--o-font-head); font-size: 27px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .o-stat .sub { font-size: 13px; color: var(--o-muted); margin-top: 2px; }
 .o-stat.brand { background: var(--o-maroon); border-color: var(--o-maroon); color: #fff; }
 .o-stat.brand .label, .o-stat.brand .sub { color: #f2c6d3; }
+@media (max-width: 600px) {
+  .o-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .o-stat { padding: 10px 12px; }
+  .o-stat .value { font-size: 21px; }
+}
 
 /* ---------- tables ---------- */
 .o-table-wrap { overflow-x: auto; border: 1px solid var(--o-line); border-radius: var(--o-radius); background: #fff; }
@@ -174,7 +182,7 @@ h1, h2, h3 { font-family: var(--o-font-head); margin: 0; line-height: 1.15; }
 .o-field input:focus, .o-field select:focus, .o-field textarea:focus, .o-input:focus {
   outline: none; border-color: var(--o-maroon); box-shadow: 0 0 0 3px rgba(126,46,71,.14);
 }
-.o-help { font-size: 12.5px; color: var(--o-muted); }
+.o-help, .o-field > .o-help { font-size: 12.5px; font-weight: 400; color: var(--o-muted); }
 .o-error { color: var(--o-red); font-size: 13px; }
 :focus-visible { outline: 2px solid var(--o-maroon); outline-offset: 2px; }
 
