@@ -34,7 +34,8 @@
       // Reload (GET) when the party or direction changes, so the server can show balances.
       var reloadBtn = one('[data-reload-btn]');
       if (reloadBtn) {
-        reloadBtn.hidden = true;
+        // (.o-btn sets display, which beats the hidden attribute)
+        (reloadBtn.closest('[data-reload-wrap]') || reloadBtn).style.display = 'none';
         form.querySelectorAll('[data-reload]').forEach(function (el) {
           el.addEventListener('change', function () {
             var nn = form.querySelector('[name="new_name"]');

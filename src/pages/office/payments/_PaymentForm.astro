@@ -1,0 +1,283 @@
+---
+/**
+ * The payment form (record and edit), with the chosen party's balance and
+ * open shipments beside it. Choosing a party reloads the page with GET
+ * (automatically with JS, or with the "Show their balance" button without),
+ * keeping everything typed so far. Not a route (leading _).
+ */
+import Stat from '../../../components/office/Stat.astro';
+import MoneyScript from './_MoneyScript.astro';
+import { METHODS, fmtDate, usd } from '../../../lib/office/money';
+import { PARTY_KINDS } from '../../../lib/office/services';
+import {
+  groupParties,
+  accountLabel,
+  partyKindLabel,
+  type PartyOption,
+  type AccountOption,
+  type ShipmentOptionGroup,
+  type paymentPanel,
+} from '../../../lib/office/entries';
+
+interface Props {
+  mode: 'new' | 'edit';
+  /** where the GET reload goes (this page's path) */
+  reloadAction: string;
+  cancelHref: string;
+  values: Record<string, string>;
+  parties: PartyOption[];
+  accounts: AccountOption[];
+  shipments: ShipmentOptionGroup[];
+  rates: Record<string, number>;
+  panel: Awaited<ReturnType<typeof paymentPanel>>;
+}
+const { mode, reloadAction, cancelHref, values: v, parties, accounts, shipments, rates, panel } = Astro.props;
+const dir = v.dir === 'out' ? 'out' : 'in';
+const groups = groupParties(parties, dir);
+const acc = accounts.find((a) => String(a.id) === v.account) ?? null;
+const cur = acc?.currency ?? '';
+const party = panel?.party ?? null;
+const who = dir === 'in' ? 'who paid us' : 'who we paid';
+---
+
+<div class="o-grid-2">
+  <form method="post" class="o-card o-form" data-money-form data-rates={JSON.stringify(rates)} autocomplete="off">
+    <div class="o-card-head"><h2>{dir === 'in' ? 'Money received' : 'Money paid out'}</h2></div>
+    {/* Pressing Enter submits with the form's FIRST submit button; make that "save", not the GET reload below. */}
+    <button type="submit" tabindex="-1" aria-hidden="true" disabled={accounts.length === 0} style="position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden">Save</button>
+    <input type="hidden" name="from_shipment" value={v.from_shipment} />
+
+    <div class="o-row">
+      <label class="o-field">
+        <span>This is money…</span>
+        <select name="dir" data-reload>
+          <option value="in" selected={dir === 'in'}>we received (money in)</option>
+          <option value="out" selected={dir === 'out'}>we paid out (money out)</option>
+        </select>
+      </label>
+      <label class="o-field">
+        <span>Date</span>
+        <input type="date" name="pay_date" value={v.pay_date} required />
+      </label>
+    </div>
+
+    <label class="o-field">
+      <span>{dir === 'in' ? 'Received from' : 'Paid to'}</span>
+      <select name="party" data-reload>
+        <option value="">— choose {who} —</option>
+        {
+          groups.map((g) => (
+            <optgroup label={g.label}>
+              {g.parties.map((p) => (
+                <option value={p.id} selected={String(p.id) === v.party}>
+                  {p.name}
+                  {p.kind !== 'client' ? ` (${partyKindLabel(p.kind)})` : ''}
+                  {!p.active ? ' — inactive' : ''}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        }
+      </select>
+      {
+        panel && (
+          <span class="o-help">
+            <strong class={panel.words.tone}>{panel.words.text}</strong>
+            {panel.open.length > 0 && ` · ${panel.open.length} shipment${panel.open.length === 1 ? '' : 's'} with money due`}
+          </span>
+        )
+      }
+    </label>
+    <div data-reload-wrap>
+      <button type="submit" class="o-btn sm" formmethod="get" formaction={reloadAction} formnovalidate name="reload" value="1" data-reload-btn>
+        Show their balance &amp; shipments
+      </button>
+    </div>
+
+    <details open={!!v.new_name}>
+      <summary class="small" style="cursor:pointer;color:var(--o-maroon)">Not in the list? Add a new name</summary>
+      <div class="o-row" style="margin-top:10px">
+        <label class="o-field">
+          <span>New name</span>
+          <input name="new_name" value={v.new_name} maxlength="120" placeholder={dir === 'in' ? 'e.g. Haji Abdul Karim' : 'e.g. Truck owner Gul Agha'} />
+          <span class="o-help">They are added to the list when you save. Leave the list above on "choose".</span>
+        </label>
+        <label class="o-field">
+          <span>They are a…</span>
+          <select name="new_kind">
+            {Object.entries(PARTY_KINDS).map(([k, label]) => <option value={k} selected={k === v.new_kind}>{label}</option>)}
+          </select>
+        </label>
+      </div>
+    </details>
+
+    {
+      accounts.length === 0 ? (
+        <div class="o-flash err" role="alert">
+          There are no accounts yet, so there is nowhere to put the money. An admin must first add a cash box or bank account under{' '}
+          <a href="/office/accounts">Cash &amp; accounts</a>.
+        </div>
+      ) : (
+        <div class="o-row">
+          <label class="o-field">
+            <span>{dir === 'in' ? 'Into account' : 'Out of account'}</span>
+            <select name="account" data-account="main" required>
+              {!acc && <option value="">— choose account —</option>}
+              {accounts.map((a) => (
+                <option value={a.id} data-currency={a.currency} data-type={a.type} selected={String(a.id) === v.account}>
+                  {accountLabel(a)}
+                </option>
+              ))}
+            </select>
+            <span class="o-help">The account decides the currency.</span>
+          </label>
+          <label class="o-field">
+            <span>How</span>
+            <select name="method" data-method="main">
+              {Object.entries(METHODS).map(([k, label]) => <option value={k} selected={k === v.method}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+      )
+    }
+
+    <div class="o-row">
+      <label class="o-field">
+        <span>Amount (<b data-cur="main">{cur || '—'}</b>)</span>
+        <input name="amount" value={v.amount} inputmode="decimal" required data-amount="main" placeholder="0" />
+        <span class="o-help" data-usd="main" aria-live="polite"></span>
+      </label>
+      <label class="o-field">
+        <span>Rate: <b data-cur="main">{cur || '—'}</b> per 1 US dollar</span>
+        <input name="per_usd" value={v.per_usd} inputmode="decimal" required data-rate="main" readonly={cur === 'USD'} />
+        <span class="o-help">Today's usual rate is filled in. Change it to the rate actually used.</span>
+      </label>
+    </div>
+
+    <label class="o-field">
+      <span>Reference</span>
+      <input name="reference" value={v.reference} maxlength="120" placeholder="Hawala no., bank reference or AWB" />
+    </label>
+
+    <label class="o-field">
+      <span>Link to shipment (optional)</span>
+      <select name="shipment">
+        <option value="">— not for one particular shipment —</option>
+        {
+          shipments.map((g) => (
+            <optgroup label={g.label}>
+              {g.options.map((o) => (
+                <option value={o.id} selected={String(o.id) === v.shipment}>
+                  {o.label}
+                </option>
+              ))}
+            </optgroup>
+          ))
+        }
+      </select>
+      <span class="o-help">
+        {
+          dir === 'in'
+            ? party
+              ? 'Only this client’s shipments that still have money due are listed.'
+              : 'Choose who paid first, to see their shipments with money due.'
+            : party
+              ? 'Shipments where they have charges come first.'
+              : 'Which shipment this payment was for, if any.'
+        }
+      </span>
+    </label>
+
+    <label class="o-field">
+      <span>Notes</span>
+      <textarea name="notes" rows="2" maxlength="1000">{v.notes}</textarea>
+    </label>
+
+    <div class="o-actions">
+      <button type="submit" class="o-btn primary" disabled={accounts.length === 0}>{mode === 'new' ? 'Record payment' : 'Save changes'}</button>
+      <a class="o-btn ghost" href={cancelHref}>Cancel</a>
+    </div>
+  </form>
+
+  <div class="o-stack">
+    {
+      !party ? (
+        <div class="o-card">
+          <div class="o-card-head"><h2>Their balance</h2></div>
+          <p class="muted" style="margin:0">Choose {who} to see what they owe, what we owe them, and their shipments with money due.</p>
+        </div>
+      ) : (
+        <div class="o-card">
+          <div class="o-card-head">
+            <h2><a href={`/office/parties/${party.id}`}>{party.name}</a></h2>
+            <span class="o-badge">{partyKindLabel(party.kind)}</span>
+          </div>
+          <Stat label="Balance today" value={panel!.words.text} tone={panel!.words.tone} />
+          <dl class="o-kv" style="margin-top:12px">
+            {party.billed !== 0 && (<><dt>Billed for their shipments</dt><dd>{usd(party.billed)}</dd></>)}
+            {party.received !== 0 && (<><dt>They have paid us</dt><dd>{usd(party.received)}</dd></>)}
+            {party.owed_to_them !== 0 && (<><dt>Their charges to us</dt><dd>{usd(party.owed_to_them)}</dd></>)}
+            {party.paid_to_them !== 0 && (<><dt>We have paid them</dt><dd>{usd(party.paid_to_them)}</dd></>)}
+            {party.billed === 0 && party.received === 0 && party.owed_to_them === 0 && party.paid_to_them === 0 && (<><dt>So far</dt><dd>No shipments or payments yet.</dd></>)}
+          </dl>
+          <p class="small" style="margin:12px 0 0"><a href={`/office/parties/${party.id}`}>Full statement →</a></p>
+        </div>
+      )
+    }
+
+    {
+      panel && panel.open.length > 0 && (
+        <div class="o-card">
+          <div class="o-card-head"><h2>Shipments with money due</h2></div>
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Shipment</th><th class="num">Billed</th><th class="num">Received</th><th class="num">Due</th></tr></thead>
+              <tbody>
+                {panel.open.map((s) => (
+                  <tr>
+                    <td><a href={`/office/shipments/${s.id}`}>{s.ref}</a><div class="muted small">{fmtDate(s.ship_date)}</div></td>
+                    <td class="num">{usd(s.revenue)}</td>
+                    <td class="num">{usd(s.received)}</td>
+                    <td class="num"><strong>{usd(s.due)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr><td colspan="3">Total due</td><td class="num">{usd(panel.openDue)}</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      )
+    }
+
+    {
+      panel && panel.payee.length > 0 && (
+        <div class="o-card">
+          <div class="o-card-head"><h2>Their unpaid charges</h2></div>
+          <p class="o-help" style="margin:-4px 0 10px">Shipments where {panel.party.name} charged us and payments linked to that shipment don't cover it yet.</p>
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Shipment</th><th class="num">They charged</th><th class="num">Paid</th><th class="num">Unpaid</th></tr></thead>
+              <tbody>
+                {panel.payee.map((s) => (
+                  <tr>
+                    <td><a href={`/office/shipments/${s.id}`}>{s.ref}</a><div class="muted small">{fmtDate(s.ship_date)}</div></td>
+                    <td class="num">{usd(s.owed)}</td>
+                    <td class="num">{usd(s.paid)}</td>
+                    <td class="num"><strong>{usd(s.unpaid)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td colspan="3">Total unpaid on these shipments</td><td class="num">{usd(panel.payeeUnpaid)}</td></tr>
+                {panel.payeeOtherPaid > 0 && (
+                  <tr><td colspan="3" style="font-weight:500">Paid to them without a shipment link</td><td class="num" style="font-weight:500">−{usd(panel.payeeOtherPaid)}</td></tr>
+                )}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )
+    }
+  </div>
+</div>
+<MoneyScript />

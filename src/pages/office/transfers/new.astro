@@ -1,0 +1,160 @@
+---
+/**
+ * Move money between two of our own accounts (e.g. hawala from the Tashkent
+ * saraf to the Kandahar cash box). What arrives can be less than what left;
+ * the dollar difference is the transfer fee.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import MoneyScript from '../payments/_MoneyScript.astro';
+import { guard, sameOrigin } from '../../../lib/office/auth';
+import { tx } from '../../../lib/office/db';
+import { logActivity } from '../../../lib/office/activity';
+import { withMsg } from '../../../lib/office/form';
+import { rateMap, today } from '../../../lib/office/money';
+import { TRANSFER_FIELDS, formValues, readTransferForm, insertTransfer, transferSummary, moneyWithUsd, accountOptions, accountLabel, rateInput, idParam } from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    posted = formValues(fd, TRANSFER_FIELDS);
+    const r = await readTransferForm(fd);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      const id = await tx(async (t) => {
+        const tid = await insertTransfer(v, user.id, t);
+        await logActivity(user.id, 'transfer_created', 'transfer', tid, transferSummary(v), t);
+        return tid;
+      });
+      return Astro.redirect(
+        withMsg(`/office/transfers/${id}`, `Transfer of ${moneyWithUsd(v.amount_out, v.from_currency, v.usd_out)} from ${v.from_name} to ${v.to_name} recorded.`),
+        303,
+      );
+    }
+  }
+}
+
+const sp = Astro.url.searchParams;
+const [accounts, rates] = await Promise.all([accountOptions(), rateMap()]);
+const pick = (n: string | null) => {
+  const i = idParam(n);
+  return accounts.find((a) => a.id === i) ?? null;
+};
+let values: Record<string, string>;
+if (posted) values = posted;
+else {
+  const fa = pick(sp.get('from'));
+  const ta = pick(sp.get('to'));
+  values = {
+    tr_date: today(),
+    from_account: fa ? String(fa.id) : '',
+    to_account: ta ? String(ta.id) : '',
+    amount_out: '',
+    per_usd_out: fa ? rateInput(fa.currency === 'USD' ? 1 : fa.per_usd) : '',
+    amount_in: '',
+    per_usd_in: ta ? rateInput(ta.currency === 'USD' ? 1 : ta.per_usd) : '',
+    reference: '',
+    notes: '',
+  };
+}
+const fromAcc = pick(values.from_account);
+const toAcc = pick(values.to_account);
+const same = !!fromAcc && !!toAcc && fromAcc.currency === toAcc.currency;
+---
+
+<OfficeLayout title="Move money between accounts" user={user} active="transfers">
+  <PageHead
+    title="Move money between accounts"
+    sub="From one of our accounts to another — e.g. hawala from the Tashkent saraf to the Kandahar cash box."
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Transfers', href: '/office/transfers' }]}
+  />
+  <Flash error={error} />
+  {
+    accounts.length < 2 ? (
+      <div class="o-card o-empty">
+        A transfer needs at least two open accounts. {accounts.length === 0 ? 'There are none yet.' : 'There is only one.'}{' '}
+        <a href="/office/accounts">Cash &amp; accounts</a>
+      </div>
+    ) : (
+      <form method="post" class="o-card o-form" data-money-form data-rates={JSON.stringify(rates)} autocomplete="off" style="max-width:860px">
+        <div class="o-card-head"><h2>Transfer</h2></div>
+        <div class="o-row">
+          <label class="o-field">
+            <span>Date</span>
+            <input type="date" name="tr_date" value={values.tr_date} required />
+          </label>
+          <label class="o-field">
+            <span>Reference (hawala code)</span>
+            <input name="reference" value={values.reference} maxlength="120" placeholder="e.g. HW-48213" />
+          </label>
+        </div>
+
+        <fieldset class="o-form" style="border:1px solid var(--o-line);border-radius:8px;padding:12px 14px;margin:0">
+          <legend class="o-label" style="padding:0 6px">Money left</legend>
+          <label class="o-field">
+            <span>From account</span>
+            <select name="from_account" data-account="out" required>
+              <option value="">— choose account —</option>
+              {accounts.map((a) => <option value={a.id} data-currency={a.currency} data-type={a.type} selected={String(a.id) === values.from_account}>{accountLabel(a)}</option>)}
+            </select>
+          </label>
+          <div class="o-row">
+            <label class="o-field">
+              <span>Amount sent (<b data-cur="out">{fromAcc?.currency ?? '—'}</b>)</span>
+              <input name="amount_out" value={values.amount_out} inputmode="decimal" required data-amount="out" placeholder="0" />
+              <span class="o-help" data-usd="out" aria-live="polite"></span>
+            </label>
+            <label class="o-field">
+              <span>Rate: <b data-cur="out">{fromAcc?.currency ?? '—'}</b> per 1 US dollar</span>
+              <input name="per_usd_out" value={values.per_usd_out} inputmode="decimal" required data-rate="out" readonly={fromAcc?.currency === 'USD'} />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="o-form" style="border:1px solid var(--o-line);border-radius:8px;padding:12px 14px;margin:0">
+          <legend class="o-label" style="padding:0 6px">Money arrived</legend>
+          <label class="o-field">
+            <span>To account</span>
+            <select name="to_account" data-account="in" required>
+              <option value="">— choose account —</option>
+              {accounts.map((a) => <option value={a.id} data-currency={a.currency} data-type={a.type} selected={String(a.id) === values.to_account}>{accountLabel(a)}</option>)}
+            </select>
+          </label>
+          <div class="o-row">
+            <label class="o-field">
+              <span>Amount that arrived (<b data-cur="in">{toAcc?.currency ?? '—'}</b>)</span>
+              <input name="amount_in" value={values.amount_in} inputmode="decimal" required data-amount="in" placeholder="0" />
+              <span class="o-help">Filled in for you — change it to what actually arrived after the hawala's cut.</span>
+              <span class="o-help" data-usd="in" aria-live="polite"></span>
+            </label>
+            <label class="o-field">
+              <span>Rate: <b data-cur="in">{toAcc?.currency ?? '—'}</b> per 1 US dollar</span>
+              <input name="per_usd_in" value={values.per_usd_in} inputmode="decimal" required data-rate="in" readonly={toAcc?.currency === 'USD' || same} />
+              <span class="o-help" data-same-note hidden={!same}>Same currency on both sides, so the same rate is used.</span>
+            </label>
+          </div>
+        </fieldset>
+        <p class="o-help" data-fee aria-live="polite" style="margin:0;font-weight:600"></p>
+
+        <label class="o-field">
+          <span>Notes</span>
+          <textarea name="notes" rows="2" maxlength="1000" placeholder="Who carried it, which saraf…">{values.notes}</textarea>
+        </label>
+        <div class="o-actions">
+          <button type="submit" class="o-btn primary">Record transfer</button>
+          <a class="o-btn ghost" href="/office/transfers">Cancel</a>
+        </div>
+      </form>
+    )
+  }
+  <MoneyScript />
+</OfficeLayout>

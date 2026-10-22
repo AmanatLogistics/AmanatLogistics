@@ -31,7 +31,9 @@ export async function rateMap(): Promise<Record<string, number>> {
   return Object.fromEntries(rows.map((c) => [c.code, c.per_usd]));
 }
 
-const SYMBOL: Record<string, string> = { USD: '$', AED: 'AED ', AFN: '؋', CNY: '¥', UZS: 'UZS ', PKR: 'Rs ' };
+// ؋ is a right-to-left character: the left-to-right mark after it keeps
+// "؋70,000" from being displayed as "70,000؋" next to other text.
+const SYMBOL: Record<string, string> = { USD: '$', AED: 'AED ', AFN: '؋\u200E', CNY: '¥', UZS: 'UZS ', PKR: 'Rs ' };
 
 /** "$1,250.00", "؋87,500", "UZS 1,270,000" — what a person would write. */
 export function fmtMoney(amount: number | null | undefined, currency = 'USD'): string {

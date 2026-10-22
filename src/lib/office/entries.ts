@@ -20,10 +20,10 @@
  *  - list totals are plain sums of the `usd` column of the rows listed.
  */
 import { q, one, type Runner } from './db';
-import { round2, toUsd, today, fmtMoney, usd as fmtUsd, fmtDate, METHODS, type Method } from './money';
-import { shipmentFigures, partyBalance, type PartyBalance } from './ledger';
+import { round2, toUsd, today, fmtMoney as fmtMoneyRaw, usd as fmtUsd, fmtDate, METHODS, type Method } from './money';
+import { shipmentFigures, partyBalance, type PartyBalance, type AccountBalance } from './ledger';
 import { PARTY_KINDS, ACCOUNT_TYPES, EXPENSE_CATEGORIES } from './services';
-import { str, parseNum, date as fdDate, oneOf } from './form';
+import { str, parseNum, oneOf } from './form';
 
 export const PAGE_SIZE = 50;
 /** Largest amount accepted (NUMERIC(14,2) holds up to 10^12). */
@@ -56,6 +56,14 @@ export function dateParam(v: string | null | undefined): string | null {
   if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null;
+}
+
+/**
+ * A posted date field, strictly: form.ts date() lets "2026-02-30" through
+ * (Date.parse rolls it over to March), which Postgres then rejects.
+ */
+function fdDate(fd: FormData, name: string): string | null {
+  return dateParam(str(fd, name, 10));
 }
 
 export function pageParam(params: URLSearchParams): number {
@@ -96,6 +104,17 @@ export function balanceWords(balance: number, kind?: string | null): { text: str
   }
   return { text: 'All settled — nobody owes anything', tone: 'pos' };
 }
+
+/**
+ * fmtMoney(), safe to show on a page. "؋" is a right-to-left character, so
+ * without a left-to-right mark after it a browser shows "؋70,000 ($1,000.00)"
+ * as "(1,000.00$) 70,000؋". Adds the mark (U+200E) after any right-to-left
+ * symbol that lacks one — a no-op once money.ts adds it itself.
+ */
+export function fmtAmount(amount: number | null | undefined, currency = 'USD'): string {
+  return fmtMoneyRaw(amount, currency).replace(/([\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF])(?!\u200E)/g, '$1\u200E');
+}
+const fmtMoney = fmtAmount;
 
 /** "؋70,000 ($1,000.00)" — or just "$1,000.00" for dollars. */
 export function moneyWithUsd(amount: number, currency: string, usdValue: number): string {
@@ -150,6 +169,15 @@ export function entryDateProblem(d: string | null): string | null {
   if (d < '2000-01-01') return 'That date is too far in the past — check the year.';
   if (d > addDays(today(), 1)) return 'That date is in the future — enter the day the money actually moved.';
   return null;
+}
+
+/** Read the entry date of a payment / expense / transfer. */
+function readEntryDate(fd: FormData, name: string): { value: string } | { error: string } {
+  const raw = str(fd, name, 20);
+  const d = fdDate(fd, name);
+  if (raw && !d) return { error: `"${raw}" is not a real date — check the day and month.` };
+  const p = entryDateProblem(d);
+  return p ? { error: p } : { value: d! };
 }
 
 /** Read an amount: > 0, rounded to cents. */
@@ -383,12 +411,22 @@ export async function paymentPanel(partyId: number | null): Promise<{
   openDue: number;
   payee: PayeeShipment[];
   payeeUnpaid: number;
+  /** payments out to them not linked to a shipment where they have charges */
+  payeeOtherPaid: number;
 } | null> {
   if (!partyId) return null;
   const party = await partyBalance(partyId);
   if (!party) return null;
   const open = await clientOpenShipments(partyId);
   const payee = await payeeShipments(partyId, { unpaidOnly: true, limit: 50 });
+  const other = payee.length
+    ? await one<{ v: number }>(
+        `SELECT COALESCE(SUM(p.usd), 0) AS v FROM office_payments p
+          WHERE p.direction = 'out' AND p.party_id = $1
+            AND (p.shipment_id IS NULL OR NOT EXISTS (SELECT 1 FROM office_costs c WHERE c.shipment_id = p.shipment_id AND c.payee_id = $1))`,
+        [partyId],
+      )
+    : null;
   return {
     party,
     words: balanceWords(party.balance, party.kind),
@@ -396,6 +434,7 @@ export async function paymentPanel(partyId: number | null): Promise<{
     openDue: round2(open.reduce((a, s) => a + s.due, 0)),
     payee,
     payeeUnpaid: round2(payee.reduce((a, s) => a + s.unpaid, 0)),
+    payeeOtherPaid: round2(other?.v ?? 0),
   };
 }
 
@@ -638,9 +677,9 @@ export async function readPaymentForm(fd: FormData, existing?: PaymentRow | null
   const direction = oneOf(fd, 'dir', ['in', 'out'] as const);
   if (!direction) return { ok: false, error: 'Choose whether the money was received or paid out.' };
 
-  const pay_date = fdDate(fd, 'pay_date');
-  const dp = entryDateProblem(pay_date);
-  if (dp) return { ok: false, error: dp };
+  const dt = readEntryDate(fd, 'pay_date');
+  if ('error' in dt) return { ok: false, error: dt.error };
+  const pay_date = dt.value;
 
   // Who: an existing name, or a new one added in the same save.
   const partyId = idParam(fd.get('party'));
@@ -707,7 +746,7 @@ export async function readPaymentForm(fd: FormData, existing?: PaymentRow | null
     ok: true,
     value: {
       direction,
-      pay_date: pay_date!,
+      pay_date,
       party_id,
       new_party,
       party_name,
@@ -922,9 +961,9 @@ export interface ExpenseInput {
 }
 
 export async function readExpenseForm(fd: FormData, existing?: ExpenseRow | null): Promise<FormResult<ExpenseInput>> {
-  const exp_date = fdDate(fd, 'exp_date');
-  const dp = entryDateProblem(exp_date);
-  if (dp) return { ok: false, error: dp };
+  const dt = readEntryDate(fd, 'exp_date');
+  if ('error' in dt) return { ok: false, error: dt.error };
+  const exp_date = dt.value;
   const category = oneOf(fd, 'category', EXPENSE_CATEGORIES);
   if (!category) return { ok: false, error: 'Choose what the expense was for (rent, salaries…).' };
   const description = str(fd, 'description', 300);
@@ -957,7 +996,7 @@ export async function readExpenseForm(fd: FormData, existing?: ExpenseRow | null
   return {
     ok: true,
     value: {
-      exp_date: exp_date!,
+      exp_date,
       category,
       description,
       payee_id,
@@ -1071,6 +1110,23 @@ export async function accountUsage(id: number, runner?: Runner): Promise<{ payme
   return { ...v, total: v.payments + v.expenses + v.transfers };
 }
 
+/**
+ * Totals of ledger.ts accountBalances() rows: per currency (in that currency)
+ * and ≈ US dollars at today's rates across all of them.
+ */
+export function accountTotals(rows: AccountBalance[]): { totalUsd: number; byCurrency: { currency: string; balance: number; usd: number; accounts: number }[] } {
+  const map = new Map<string, { currency: string; balance: number; usd: number; accounts: number }>();
+  for (const r of rows) {
+    const m = map.get(r.currency) ?? { currency: r.currency, balance: 0, usd: 0, accounts: 0 };
+    m.balance = round2(m.balance + r.balance);
+    m.usd = round2(m.usd + r.balance_usd);
+    m.accounts += 1;
+    map.set(r.currency, m);
+  }
+  const byCurrency = [...map.values()].sort((a, b) => (a.currency === 'USD' ? -1 : b.currency === 'USD' ? 1 : a.currency.localeCompare(b.currency)));
+  return { totalUsd: round2(rows.reduce((a, r) => a + r.balance_usd, 0)), byCurrency };
+}
+
 export type AccountLineKind = 'payment_in' | 'payment_out' | 'expense' | 'transfer_in' | 'transfer_out';
 
 export interface AccountLine {
@@ -1084,6 +1140,7 @@ export interface AccountLine {
   detail: string | null;
   reference: string | null;
   party_id: number | null;
+  party_name: string | null;
   shipment_id: number | null;
   shipment_ref: string | null;
   money_in: number;
@@ -1206,6 +1263,7 @@ export async function accountLedger(
       detail,
       reference: r.reference,
       party_id: r.party_id,
+      party_name: r.party_name,
       shipment_id: r.shipment_id,
       shipment_ref: r.shipment_ref,
       money_in: r.money_in,
@@ -1338,9 +1396,9 @@ export interface TransferInput {
 }
 
 export async function readTransferForm(fd: FormData): Promise<FormResult<TransferInput>> {
-  const tr_date = fdDate(fd, 'tr_date');
-  const dp = entryDateProblem(tr_date);
-  if (dp) return { ok: false, error: dp };
+  const dt = readEntryDate(fd, 'tr_date');
+  if ('error' in dt) return { ok: false, error: dt.error };
+  const tr_date = dt.value;
   const fromId = idParam(fd.get('from_account'));
   const toId = idParam(fd.get('to_account'));
   const fromAcc = fromId ? await getAccount(fromId) : null;
@@ -1376,7 +1434,7 @@ export async function readTransferForm(fd: FormData): Promise<FormResult<Transfe
   return {
     ok: true,
     value: {
-      tr_date: tr_date!,
+      tr_date,
       from_account: fromAcc.id,
       from_name: fromAcc.name,
       from_currency: fromAcc.currency,

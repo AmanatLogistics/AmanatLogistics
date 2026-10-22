@@ -1,0 +1,202 @@
+---
+/**
+ * Office expenses: a month (default this month), all dates, or a date range;
+ * filter by category / account / search; 50 a page, newest first.
+ *
+ * Staff can see and add expenses. Totals (by category and overall) and the
+ * CSV are admin-only — office expenses are a line of the profit & loss.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import Pager from '../payments/_Pager.astro';
+import { guard, isAdmin } from '../../../lib/office/auth';
+import { METHODS, fmtDate, usd, today } from '../../../lib/office/money';
+import { EXPENSE_CATEGORIES } from '../../../lib/office/services';
+import {
+  expenseFilters,
+  listExpenses,
+  expenseCategoryTotals,
+  exportExpenses,
+  expenseCategoryLabel,
+  listAccounts,
+  accountLabel,
+  monthOptions,
+  pageParam,
+  withParams,
+  csvResponse,
+  fmtAmount,
+} from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const sp = Astro.url.searchParams;
+const todayStr = today();
+const f = expenseFilters(sp, todayStr);
+
+if (sp.get('format') === 'csv') {
+  if (!admin) return new Response('Only an admin can download expenses.', { status: 403, headers: { 'content-type': 'text/plain' } });
+  const all = await exportExpenses(f);
+  return csvResponse(
+    `office-expenses-${f.month || 'range'}-${todayStr}.csv`,
+    ['Date', 'Category', 'Description', 'Paid to', 'Account', 'Method', 'Amount', 'Currency', 'Rate per USD', 'USD', 'Reference', 'Entered by', 'Expense no.'],
+    all.map((r) => [r.exp_date, expenseCategoryLabel(r.category), r.description, r.payee_name, r.account_name, METHODS[r.method] ?? r.method, r.amount, r.currency, r.per_usd, r.usd, r.reference, r.created_by_name, r.id]),
+  );
+}
+
+const [list, totals, accounts] = await Promise.all([listExpenses(f, pageParam(sp)), admin ? expenseCategoryTotals(f) : Promise.resolve([]), listAccounts()]);
+const months = monthOptions(todayStr, 24);
+const thisMonth = todayStr.slice(0, 7);
+const lastMonth = months[1].value;
+const year = todayStr.slice(0, 4);
+const extra = !!(f.category || f.account || f.q);
+const keep = { category: f.category, account: f.account, q: f.q };
+/** A period link that keeps the category / account / search filters. */
+const quick = (set: Record<string, string>) => {
+  const u = new URLSearchParams();
+  for (const [k, val] of Object.entries({ ...keep, ...set })) if (val !== null && val !== undefined && val !== '') u.set(k, String(val));
+  return `/office/expenses?${u.toString()}`;
+};
+---
+
+<OfficeLayout title="Office expenses" user={user} active="expenses">
+  <PageHead title="Office expenses" sub={`Running costs of the office — ${f.label}.`} crumbs={[{ label: 'Office', href: '/office' }]}>
+    <a class="o-btn primary" href="/office/expenses/new">Record expense</a>
+    {admin && <a class="o-btn" href={withParams(Astro.url, { format: 'csv', page: null })} data-astro-prefetch="false" download>Download CSV</a>}
+  </PageHead>
+  <Flash />
+
+  <nav class="o-tabs" aria-label="Period">
+    <a href={quick({ month: thisMonth })} class:list={[f.month === thisMonth && 'active']}>This month</a>
+    <a href={quick({ month: lastMonth })} class:list={[f.month === lastMonth && 'active']}>Last month</a>
+    <a href={quick({ from: `${year}-01-01`, to: `${year}-12-31` })} class:list={[f.custom && sp.get('from') === `${year}-01-01` && sp.get('to') === `${year}-12-31` && 'active']}>This year</a>
+    <a href={quick({ month: 'all' })} class:list={[f.month === 'all' && 'active']}>All dates</a>
+  </nav>
+
+  <form method="get" class="o-filters" role="search">
+    <label class="o-field">
+      <span>Month</span>
+      <select name="month">
+        {f.custom && <option value="" selected>Date range →</option>}
+        {months.map((m) => <option value={m.value} selected={!f.custom && m.value === f.month}>{m.label}</option>)}
+        <option value="all" selected={f.month === 'all'}>All dates</option>
+      </select>
+    </label>
+    <label class="o-field"><span>or from date</span><input type="date" name="from" value={sp.get('from') && f.custom ? f.from : ''} /></label>
+    <label class="o-field"><span>to date</span><input type="date" name="to" value={sp.get('to') && f.custom ? f.to : ''} /></label>
+    <label class="o-field">
+      <span>What for</span>
+      <select name="category">
+        <option value="">Everything</option>
+        {Object.entries(EXPENSE_CATEGORIES).map(([k, label]) => <option value={k} selected={k === f.category}>{label}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Account</span>
+      <select name="account">
+        <option value="">All accounts</option>
+        {accounts.map((a) => <option value={a.id} selected={a.id === f.account}>{accountLabel(a)}</option>)}
+      </select>
+    </label>
+    <label class="o-field" style="min-width:230px"><span>Search</span><input type="search" name="q" value={f.q ?? ''} placeholder="Description, reference, payee" maxlength="80" /></label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {(extra || f.custom || f.month !== thisMonth) && <a class="o-btn ghost" href="/office/expenses">Reset</a>}
+    </div>
+  </form>
+  <p class="o-help" style="margin:-6px 0 14px">A date range (from / to) is used instead of the month when you fill it in.</p>
+
+  {
+    admin && list.count > 0 && (
+      <div class="o-grid-2" style="margin-bottom:16px">
+        <div class="o-stack">
+          <Stat label={`Office expenses · ${f.label}`} value={usd(list.totalUsd)} sub={`${list.count} expense${list.count === 1 ? '' : 's'}${extra ? ' matching the filters' : ''}`} tone="brand" />
+        </div>
+        <div class="o-card">
+          <div class="o-card-head"><h2>By category</h2></div>
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>What for</th><th class="num">Entries</th><th class="num">US dollars</th></tr></thead>
+              <tbody>
+                {totals.map((t) => (
+                  <tr>
+                    <td><a href={withParams(Astro.url, { category: t.category, page: null })}>{expenseCategoryLabel(t.category)}</a></td>
+                    <td class="num">{t.n}</td>
+                    <td class="num">{usd(t.usd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot><tr><td>Total</td><td class="num">{list.count}</td><td class="num">{usd(list.totalUsd)}</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  <div class="o-table-wrap">
+    <table class="o-table" style="min-width:980px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>What for</th>
+          <th class="num">Amount</th>
+          <th class="num">US dollars</th>
+          <th>Description</th>
+          <th>Paid to</th>
+          <th>Account</th>
+          <th>How</th>
+          <th>Reference</th>
+          <th>Entered by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          list.rows.length === 0 && (
+            <tr>
+              <td colspan="10" class="o-empty">
+                {extra ? 'No expenses match these filters.' : `No office expenses recorded for ${f.label.toLowerCase() === 'all dates' ? 'any date' : f.label}.`}
+                <div style="margin-top:10px"><a class="o-btn sm" href="/office/expenses/new">Record expense</a></div>
+              </td>
+            </tr>
+          )
+        }
+        {
+          list.rows.map((r) => (
+            <tr>
+              <td style="white-space:nowrap"><a href={`/office/expenses/${r.id}`} title="Open this expense">{fmtDate(r.exp_date)}</a></td>
+              <td style="min-width:120px">{expenseCategoryLabel(r.category)}</td>
+              <td class="num">{fmtAmount(r.amount, r.currency)}</td>
+              <td class="num">{usd(r.usd)}</td>
+              <td style="min-width:160px">{r.description ?? <span class="muted">—</span>}</td>
+              <td>{r.payee_id ? <a href={`/office/parties/${r.payee_id}`}>{r.payee_name}</a> : <span class="muted">—</span>}</td>
+              <td><a href={`/office/accounts/${r.account_id}`} style="color:inherit">{r.account_name}</a></td>
+              <td>{METHODS[r.method] ?? r.method}</td>
+              <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
+              <td class="small muted">{r.created_by_name ?? '—'}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        list.count > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="3">
+                {list.count} expense{list.count === 1 ? '' : 's'}
+                {list.pages > 1 ? ' (all pages)' : ''}
+              </td>
+              <td class="num">{admin ? usd(list.totalUsd) : ''}</td>
+              <td colspan="6"></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  <Pager page={list.page} pages={list.pages} count={list.count} noun="expenses" />
+</OfficeLayout>

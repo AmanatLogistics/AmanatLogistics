@@ -1,0 +1,87 @@
+---
+/** Record an office expense (rent, salaries, internet…). Staff and admins. */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import ExpenseForm from './_ExpenseForm.astro';
+import { guard, sameOrigin } from '../../../lib/office/auth';
+import { tx } from '../../../lib/office/db';
+import { logActivity } from '../../../lib/office/activity';
+import { withMsg } from '../../../lib/office/form';
+import { rateMap, today } from '../../../lib/office/money';
+import { EXPENSE_CATEGORIES } from '../../../lib/office/services';
+import {
+  EXPENSE_FIELDS,
+  formValues,
+  readExpenseForm,
+  insertExpense,
+  expenseSummary,
+  expenseCategoryLabel,
+  moneyWithUsd,
+  accountOptions,
+  partyOptions,
+  lastUsedAccount,
+  methodForAccountType,
+  rateInput,
+  idParam,
+} from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    posted = formValues(fd, EXPENSE_FIELDS);
+    const r = await readExpenseForm(fd);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      const id = await tx(async (t) => {
+        const eid = await insertExpense(v, user.id, t);
+        await logActivity(user.id, 'expense_created', 'expense', eid, expenseSummary(v), t);
+        return eid;
+      });
+      const msg = `Expense of ${moneyWithUsd(v.amount, v.currency, v.usd)} for ${expenseCategoryLabel(v.category).toLowerCase()} recorded.`;
+      return Astro.redirect(withMsg(`/office/expenses/${id}`, msg), 303);
+    }
+  }
+}
+
+const sp = Astro.url.searchParams;
+const accounts = await accountOptions();
+let values: Record<string, string>;
+if (posted) values = posted;
+else {
+  let accountId = idParam(sp.get('account')) ?? (await lastUsedAccount(user.id, 'expense'));
+  if (!accounts.some((a) => a.id === accountId)) accountId = accounts.length === 1 ? accounts[0].id : null;
+  const acc = accounts.find((a) => a.id === accountId) ?? null;
+  const cat = sp.get('category');
+  values = {
+    exp_date: today(),
+    category: cat && cat in EXPENSE_CATEGORIES ? cat : '',
+    description: '',
+    payee: '',
+    account: acc ? String(acc.id) : '',
+    amount: '',
+    per_usd: acc ? rateInput(acc.currency === 'USD' ? 1 : acc.per_usd) : '',
+    method: methodForAccountType(acc?.type),
+    reference: '',
+  };
+}
+const [parties, rates] = await Promise.all([partyOptions({ includeId: idParam(values.payee) }), rateMap()]);
+---
+
+<OfficeLayout title="Record an office expense" user={user} active="expenses">
+  <PageHead
+    title="Record an office expense"
+    sub="Running costs of the office: rent, salaries, internet, electricity, fuel… Shipment costs go on the shipment instead."
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Office expenses', href: '/office/expenses' }]}
+  />
+  <Flash error={error} />
+  <ExpenseForm mode="new" cancelHref="/office/expenses" values={values} parties={parties} accounts={accounts} rates={rates} />
+</OfficeLayout>

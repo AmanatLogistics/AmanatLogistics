@@ -104,7 +104,8 @@ export const SERVICES: Record<ServiceKey, ServiceDef> = {
 export const SERVICE_KEYS = Object.keys(SERVICES) as ServiceKey[];
 
 export function isService(s: string | null | undefined): s is ServiceKey {
-  return !!s && s in SERVICES;
+  // hasOwnProperty, not `in`: 'toString' or '__proto__' must not count as a section.
+  return !!s && Object.prototype.hasOwnProperty.call(SERVICES, s);
 }
 
 export const SHIPMENT_STATUS = {

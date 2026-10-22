@@ -49,9 +49,17 @@ function getPool(): pg.Pool {
       // Neon requires TLS; a local Postgres usually has none.
       ssl: local ? undefined : { rejectUnauthorized: false },
       // Serverless: each function instance keeps only a couple of connections.
-      max: 3,
+      max: 5,
       idleTimeoutMillis: 10_000,
+      // A request that cannot get a connection fails with an error after 10 s
+      // instead of waiting forever.
+      connectionTimeoutMillis: 10_000,
+      // A transaction left open by a crashed request releases its locks after
+      // a minute rather than blocking everyone behind it.
+      options: '-c idle_in_transaction_session_timeout=60000',
     });
+    // An idle connection the server drops (Neon restart) must not crash the process.
+    pool.on('error', (e) => console.error('Office DB pool error:', e.message));
   }
   return pool;
 }
@@ -82,6 +90,10 @@ export async function one<T = any>(text: string, params: unknown[] = [], runner?
 export async function tx<T>(fn: (tx: Runner) => Promise<T>): Promise<T> {
   await ensureSchema();
   const client = await getPool().connect();
+  // Without a listener, a connection dropped mid-transaction would throw an
+  // unhandled 'error' event and take the whole server down.
+  const onErr = (e: Error) => console.error('Office DB connection error:', e.message);
+  client.on('error', onErr);
   try {
     await client.query('BEGIN');
     const result = await fn(client);
@@ -91,6 +103,7 @@ export async function tx<T>(fn: (tx: Runner) => Promise<T>): Promise<T> {
     await client.query('ROLLBACK').catch(() => {});
     throw e;
   } finally {
+    client.off('error', onErr);
     client.release();
   }
 }

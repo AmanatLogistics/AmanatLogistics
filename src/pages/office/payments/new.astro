@@ -1,0 +1,144 @@
+---
+/**
+ * Record a payment: money received from a client (dir=in) or paid to an
+ * agent, carrier, airline… (dir=out).
+ *
+ *   /office/payments/new?dir=in&party=<id>&shipment=<id>
+ *
+ * Opened from a shipment (?shipment=…) it returns there after saving. The
+ * party's balance and open shipments are shown beside the form (GET reload
+ * when the party changes). Currency always comes from the account.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import PaymentForm from './_PaymentForm.astro';
+import { guard, sameOrigin } from '../../../lib/office/auth';
+import { tx } from '../../../lib/office/db';
+import { logActivity } from '../../../lib/office/activity';
+import { withMsg } from '../../../lib/office/form';
+import { rateMap, today } from '../../../lib/office/money';
+import {
+  PAYMENT_FIELDS,
+  formValues,
+  readPaymentForm,
+  insertParty,
+  insertPayment,
+  paymentSummary,
+  moneyWithUsd,
+  partyKindLabel,
+  accountOptions,
+  partyOptions,
+  paymentShipmentOptions,
+  paymentPanel,
+  getShipmentBasic,
+  lastUsedAccount,
+  methodForAccountType,
+  rateInput,
+  dirFrom,
+  idParam,
+  dateParam,
+} from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    posted = formValues(fd, PAYMENT_FIELDS);
+    const r = await readPaymentForm(fd);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      const id = await tx(async (t) => {
+        let partyId = v.party_id;
+        if (v.new_party) {
+          partyId = await insertParty(v.new_party.name, v.new_party.kind, user.id, t);
+          await logActivity(user.id, 'party_created', 'party', partyId, `${v.new_party.name} (${partyKindLabel(v.new_party.kind)}) — added while recording a payment`, t);
+        }
+        const pid = await insertPayment({ ...v, party_id: partyId! }, user.id, t);
+        await logActivity(user.id, 'payment_created', 'payment', pid, paymentSummary(v), t);
+        return pid;
+      });
+      const back = idParam(fd.get('from_shipment'));
+      const msg = `Payment of ${moneyWithUsd(v.amount, v.currency, v.usd)} ${v.direction === 'in' ? 'from' : 'to'} ${v.party_name} recorded.`;
+      return Astro.redirect(withMsg(back ? `/office/shipments/${back}` : `/office/payments/${id}`, msg), 303);
+    }
+  }
+}
+
+const sp = Astro.url.searchParams;
+const accounts = await accountOptions();
+let values: Record<string, string>;
+if (posted) values = posted;
+else {
+  // First visit (?dir=&party=&shipment=) or a GET reload after choosing a party (?reload=1&…every field…).
+  const reload = sp.has('reload');
+  const dir = dirFrom(sp.get('dir'));
+  let party = idParam(sp.get('party'));
+  const shipment = idParam(sp.get('shipment'));
+  if (!reload && !party && shipment && dir === 'in') {
+    const s = await getShipmentBasic(shipment);
+    if (s?.client_id) party = s.client_id;
+  }
+  let accountId = idParam(sp.get('account')) ?? (await lastUsedAccount(user.id, 'payment', dir));
+  if (!accounts.some((a) => a.id === accountId)) accountId = accounts.length === 1 ? accounts[0].id : null;
+  const acc = accounts.find((a) => a.id === accountId) ?? null;
+  const newName = sp.get('new_name') ?? '';
+  values = {
+    dir,
+    pay_date: dateParam(sp.get('pay_date')) ?? today(),
+    party: party ? String(party) : '',
+    new_name: newName,
+    new_kind: (newName && sp.get('new_kind')) || (dir === 'in' ? 'client' : 'agent'),
+    account: acc ? String(acc.id) : '',
+    amount: sp.get('amount') ?? '',
+    per_usd: sp.get('per_usd') || (acc ? rateInput(acc.currency === 'USD' ? 1 : acc.per_usd) : ''),
+    method: sp.get('method') || methodForAccountType(acc?.type),
+    reference: sp.get('reference') ?? '',
+    shipment: shipment ? String(shipment) : '',
+    notes: sp.get('notes') ?? '',
+    from_shipment: reload ? (sp.get('from_shipment') ?? '') : shipment ? String(shipment) : '',
+  };
+}
+
+const dir = dirFrom(values.dir);
+const partyId = idParam(values.party);
+const [parties, shipments, panel, rates] = await Promise.all([
+  partyOptions({ includeId: partyId }),
+  paymentShipmentOptions(dir, partyId, idParam(values.shipment)),
+  paymentPanel(partyId),
+  rateMap(),
+]);
+const fromShipment = idParam(values.from_shipment);
+const backShip = fromShipment ? await getShipmentBasic(fromShipment) : null;
+const listHref = `/office/payments?dir=${dir}`;
+---
+
+<OfficeLayout title={dir === 'in' ? 'Record money received' : 'Record a payment made'} user={user} active={dir === 'out' ? 'payments-out' : 'payments-in'}>
+  <PageHead
+    title={dir === 'in' ? 'Record money received' : 'Record a payment made'}
+    sub={dir === 'in' ? 'Money a client (or anyone) paid us — cash, hawala, bank or through a sarafi.' : 'Money we paid to an agent, truck owner, airline or anyone else.'}
+    crumbs={[
+      { label: 'Office', href: '/office' },
+      backShip ? { label: backShip.ref, href: `/office/shipments/${backShip.id}` } : { label: dir === 'in' ? 'Payments received' : 'Payments made', href: listHref },
+    ]}
+  />
+  <Flash error={error} />
+  <PaymentForm
+    mode="new"
+    reloadAction="/office/payments/new"
+    cancelHref={backShip ? `/office/shipments/${backShip.id}` : listHref}
+    values={values}
+    parties={parties}
+    accounts={accounts}
+    shipments={shipments}
+    rates={rates}
+    panel={panel}
+  />
+</OfficeLayout>

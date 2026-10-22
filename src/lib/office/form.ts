@@ -31,7 +31,11 @@ export function int(fd: FormData, name: string): number | null {
 
 export function date(fd: FormData, name: string): string | null {
   const v = str(fd, name, 10);
-  return v && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null;
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  // Date.parse('2026-02-30') is valid in V8 (it rolls into March); a real
+  // calendar day survives the round trip unchanged.
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v ? v : null;
 }
 
 export function oneOf<T extends string>(fd: FormData, name: string, allowed: readonly T[] | Record<T, unknown>): T | null {

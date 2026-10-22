@@ -28,7 +28,7 @@ export async function ensureInvoice(shipmentId: number, userId: number | null, r
     runner,
   );
   if (!s || s.charges === 0) return null;
-  const settings = await getSettings();
+  const settings = await getSettings(runner);
   const year = Number(s.ship_date.slice(0, 4));
   const number = await nextInvoiceNumber(year, runner);
   const inv = await one<InvoiceRow>(

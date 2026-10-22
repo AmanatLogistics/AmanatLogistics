@@ -111,7 +111,7 @@ Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
               <div class="o-nav-group">
                 <span>{g.group}</span>
                 {g.items.map((i) => (
-                  <a href={i.href} class:list={[active === i.id && 'active']} aria-current={active === i.id ? 'page' : undefined}>
+                  <a href={i.href} data-astro-prefetch="false" class:list={[active === i.id && 'active']} aria-current={active === i.id ? 'page' : undefined}>
                     <i class="dot" />
                     {i.label}
                   </a>

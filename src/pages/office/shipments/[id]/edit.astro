@@ -1,0 +1,99 @@
+---
+/**
+ * Edit a shipment: the same form as "new", filled in. Saving updates the
+ * shipment and REPLACES its charges and costs in one transaction; the invoice
+ * keeps its number (its lines are the charges). If someone else saved the
+ * shipment while this form was open, the save is refused rather than
+ * overwriting their work.
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import ShipmentForm from '../_ShipmentForm.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { one } from '../../../../lib/office/db';
+import { withMsg } from '../../../../lib/office/form';
+import { listCurrencies } from '../../../../lib/office/money';
+import {
+  getShipment,
+  formFromShipment,
+  submitShipment,
+  clientOptions,
+  payeeGroups,
+  parseId,
+  type FormState,
+} from '../../../../lib/office/shipments';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = parseId(Astro.params.id);
+const data = id ? await getShipment(id) : null;
+if (!data) Astro.response.status = 404;
+
+const currencies = await listCurrencies();
+const rates = Object.fromEntries(currencies.map((c) => [c.code, c.per_usd]));
+let errors: string[] = [];
+let state: FormState | null = data ? formFromShipment(data.shipment, data.charges, data.costs) : null;
+
+if (data && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) errors = ['That request looked unsafe, so it was blocked. Reload the page and try again.'];
+  else {
+    const fd = await Astro.request.formData();
+    const r = await submitShipment(fd, user.id, { id: data.shipment.id, client_id: data.shipment.client_id });
+    if (r.ok) return Astro.redirect(withMsg(`/office/shipments/${r.id}`, r.message), 303);
+    errors = r.errors;
+    state = r.state;
+  }
+}
+
+let clients: Awaited<ReturnType<typeof clientOptions>> = [];
+let payees: Awaited<ReturnType<typeof payeeGroups>> = [];
+let paymentsLinked = 0;
+if (data && state) {
+  const clientIds = [data.shipment.client_id, Number(state.form.client_id)].filter((n): n is number => Number.isInteger(n) && (n as number) > 0);
+  const payeeIds = [...data.costs.map((c) => c.payee_id ?? 0), ...state.costs.map((c) => Number(c.payee_id))].filter((n) => Number.isInteger(n) && n > 0);
+  clients = await clientOptions(clientIds);
+  payees = await payeeGroups(payeeIds);
+  paymentsLinked = (await one<{ n: number }>('SELECT COUNT(*) AS n FROM office_payments WHERE shipment_id = $1', [data.shipment.id]))?.n ?? 0;
+}
+---
+
+<OfficeLayout title={data ? `Edit ${data.shipment.ref}` : 'Shipment not found'} user={user} active="shipments">
+  {
+    !data || !state ? (
+      <>
+        <PageHead title="Shipment not found" crumbs={[{ label: 'Office', href: '/office' }, { label: 'Shipments', href: '/office/shipments' }]} />
+        <div class="o-card o-empty">
+          <p>There is no shipment with this number — it may have been deleted.</p>
+          <a class="o-btn" href="/office/shipments">Back to shipments</a>
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={`Edit ${data.shipment.ref}`}
+          sub={`${data.shipment.client_name ?? 'No client'} · invoice ${data.shipment.invoice_number ?? 'not created yet'}`}
+          crumbs={[
+            { label: 'Office', href: '/office' },
+            { label: 'Shipments', href: '/office/shipments' },
+            { label: data.shipment.ref, href: `/office/shipments/${data.shipment.id}` },
+          ]}
+        />
+        <ShipmentForm
+          mode="edit"
+          state={state}
+          errors={errors}
+          clients={clients}
+          payees={payees}
+          currencies={currencies}
+          rates={rates}
+          admin={admin}
+          cancelHref={`/office/shipments/${data.shipment.id}`}
+          paymentsLinked={paymentsLinked}
+        />
+      </>
+    )
+  }
+</OfficeLayout>

@@ -1,0 +1,101 @@
+---
+/** One office expense. Everyone can view; an admin can edit or delete it. */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { q, tx } from '../../../../lib/office/db';
+import { logActivity, recentActivity } from '../../../../lib/office/activity';
+import { str, withMsg } from '../../../../lib/office/form';
+import { METHODS, fmtDate, usd } from '../../../../lib/office/money';
+import { getExpense, expenseSummary, expenseCategoryLabel, idParam, fmtRate, moneyWithUsd, fmtAmount } from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+const e = id ? await getExpense(id) : null;
+
+let error: string | null = null;
+if (e && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    if (str(fd, 'action') === 'delete') {
+      if (!admin) error = 'Only an admin can delete an expense.';
+      else {
+        await tx(async (t) => {
+          await q('DELETE FROM office_expenses WHERE id = $1', [e.id], t);
+          await logActivity(user.id, 'expense_deleted', 'expense', e.id, `Deleted expense #${e.id}: ${expenseSummary(e)}`, t);
+        });
+        return Astro.redirect(withMsg('/office/expenses?month=all', `Expense of ${moneyWithUsd(e.amount, e.currency, e.usd)} (${expenseCategoryLabel(e.category)}) deleted.`), 303);
+      }
+    }
+  }
+}
+
+if (!e) Astro.response.status = 404;
+const history = e ? await recentActivity({ entity: 'expense', entityId: e.id, limit: 20 }) : [];
+const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+---
+
+<OfficeLayout title={e ? `Expense #${e.id}` : 'Expense not found'} user={user} active="expenses">
+  {
+    !e ? (
+      <>
+        <PageHead title="Expense not found" sub="It may have been deleted." crumbs={[{ label: 'Office', href: '/office' }, { label: 'Office expenses', href: '/office/expenses' }]} />
+        <div class="o-card o-empty"><a class="o-btn" href="/office/expenses">Back to office expenses</a></div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={`${expenseCategoryLabel(e.category)}${e.description ? ' — ' + e.description : ''}`}
+          sub={`${fmtDate(e.exp_date)} · ${moneyWithUsd(e.amount, e.currency, e.usd)} · from ${e.account_name}`}
+          crumbs={[{ label: 'Office', href: '/office' }, { label: 'Office expenses', href: `/office/expenses?month=${e.exp_date.slice(0, 7)}` }]}
+        >
+          <a class="o-btn" href="/office/expenses/new">Record another</a>
+          {admin && <a class="o-btn primary" href={`/office/expenses/${e.id}/edit`}>Edit</a>}
+        </PageHead>
+        <Flash error={error} />
+        <div class="o-grid-2">
+          <div class="o-card">
+            <div class="o-card-head"><h2>Expense #{e.id}</h2></div>
+            <dl class="o-kv">
+              <dt>Date</dt><dd>{fmtDate(e.exp_date)}</dd>
+              <dt>What for</dt><dd>{expenseCategoryLabel(e.category)}</dd>
+              <dt>Description</dt><dd>{e.description ?? <span class="muted">—</span>}</dd>
+              <dt>Paid to</dt><dd>{e.payee_id ? <a href={`/office/parties/${e.payee_id}`}>{e.payee_name}</a> : <span class="muted">—</span>}</dd>
+              <dt>Paid from</dt><dd><a href={`/office/accounts/${e.account_id}`}>{e.account_name}</a>{!e.account_active && <span class="muted small"> (closed)</span>}</dd>
+              <dt>Amount</dt><dd><strong>{fmtAmount(e.amount, e.currency)}</strong></dd>
+              {e.currency !== 'USD' && (<><dt>Rate</dt><dd>{fmtRate(e.per_usd)} {e.currency} per US dollar</dd></>)}
+              <dt>In US dollars</dt><dd>{usd(e.usd)}</dd>
+              <dt>How</dt><dd>{METHODS[e.method] ?? e.method}</dd>
+              <dt>Reference</dt><dd>{e.reference ?? <span class="muted">—</span>}</dd>
+              <dt>Entered by</dt><dd>{e.created_by_name ?? '—'} <span class="muted small">· {when(e.created_at)}</span></dd>
+            </dl>
+          </div>
+          <div class="o-stack">
+            {history.length > 0 && (
+              <div class="o-card">
+                <div class="o-card-head"><h2>History</h2></div>
+                <ul style="margin:0;padding-left:18px" class="small">
+                  {history.map((h) => <li><span class="muted">{when(h.at)} · {h.user_name ?? '—'}:</span> {h.summary ?? h.action}</li>)}
+                </ul>
+              </div>
+            )}
+            {admin && (
+              <form method="post" class="o-card" onsubmit="return confirm('Delete this expense for good? This cannot be undone.')">
+                <div class="o-card-head"><h2>Delete</h2></div>
+                <p class="o-help" style="margin:0 0 10px">Only if it was entered by mistake. The deletion is kept in the activity log.</p>
+                <input type="hidden" name="action" value="delete" />
+                <button type="submit" class="o-btn danger">Delete this expense</button>
+              </form>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+</OfficeLayout>

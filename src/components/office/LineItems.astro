@@ -1,0 +1,403 @@
+---
+/**
+ * Line-item editor for a shipment's CHARGES (what we bill the client — these
+ * lines are the invoice) or COSTS (what the shipment costs us, each with the
+ * partner we owe it to).
+ *
+ *   <LineItems name="charge" kind="charge" lines={charges} currencies={currencies} rates={rates} />
+ *   <LineItems name="cost" kind="cost" lines={costs} currencies={currencies} rates={rates} payees={payees} showProfit={admin} />
+ *
+ * Fields are named charge[0][amount], charge[1][amount]… so form.ts rows()
+ * reads them back in order. One empty line is always added at the end.
+ *
+ * The inline script (runs once per page, however many editors there are):
+ *   - amount = qty × rate while the amount is empty or still worked out
+ *   - changing the currency fills "per 1 USD" with that currency's rate
+ *   - lines counted per kg / CBM / piece follow the shipment's fields
+ *     ([data-src="weight|chargeable|cbm|pcs"] anywhere on the page)
+ *   - live dollar totals, here and in [data-sum="charge|cost|profit"]
+ *   - add / remove lines; "+ New payee" shows the name and type boxes
+ * Without JavaScript everything still works: the server does the same sums.
+ */
+import type { Currency } from '../../lib/office/money';
+import { round2, toUsd, usd } from '../../lib/office/money';
+import { parseNum } from '../../lib/office/form';
+import { COST_CATEGORIES, PARTY_KINDS } from '../../lib/office/services';
+import { CHARGE_UNITS, PAYEE_KINDS, CATEGORY_KIND_JSON, blankLine, type LineForm, type PayeeGroup } from '../../lib/office/shipments';
+
+interface Props {
+  name: 'charge' | 'cost';
+  kind: 'charge' | 'cost';
+  lines: LineForm[];
+  currencies: Currency[];
+  rates: Record<string, number>;
+  /** cost lines: who can be paid, grouped by kind */
+  payees?: PayeeGroup[];
+  /** show the cost total under the cost lines (admins only — staff never see cost totals) */
+  showProfit?: boolean;
+}
+const { name, kind, lines, currencies, rates, payees = [], showProfit = false } = Astro.props;
+
+const rows = [...lines, blankLine(kind, rates)];
+const blankIndex = rows.length - 1;
+const known = new Set(payees.flatMap((g) => g.parties.map((p) => String(p.id))));
+
+/** What a line comes to in dollars, the same way the server will save it. */
+function lineUsd(l: LineForm): number | null {
+  let a = parseNum(l.amount);
+  if (a === null) {
+    const qn = parseNum(l.qty);
+    const r = parseNum(l.rate);
+    if (qn !== null && r !== null) a = round2(qn * r);
+  }
+  const cur = (l.currency || 'USD').toUpperCase();
+  const per = cur === 'USD' ? 1 : (parseNum(l.per_usd) ?? rates[cur] ?? null);
+  return a === null || !per || per <= 0 ? null : toUsd(a, per);
+}
+const total = round2(rows.reduce((s, l) => s + (lineUsd(l) ?? 0), 0));
+const showTotal = kind === 'charge' || showProfit;
+const cols = kind === 'charge' ? 9 : 9;
+const field = (i: number, f: string) => `${name}[${i}][${f}]`;
+---
+
+<div data-lines={name} data-kind={kind} data-rates={JSON.stringify(rates)} data-cat-kinds={CATEGORY_KIND_JSON} data-next={rows.length}>
+  <div style="overflow-x:auto">
+    <table class="o-lines">
+      <thead>
+        <tr>
+          {kind === 'charge' ? <th style="width:32%">Description</th> : <><th style="width:21%">What for</th><th style="width:23%">Paid to</th></>}
+          <th>Qty</th>
+          {kind === 'charge' && <th>Unit</th>}
+          <th>Rate</th>
+          <th>Amount</th>
+          <th>Currency</th>
+          <th title="How many of this currency make one US dollar">Per 1 USD</th>
+          <th class="num">In US $</th>
+          <th aria-label="Remove"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rows.map((l, i) => {
+            const u = lineUsd(l);
+            const newSelected = l.payee_id === '__new' || (!!l.new_payee && !known.has(l.payee_id));
+            return (
+              <tr data-row data-per={l.per} data-blank={i === blankIndex ? '' : undefined}>
+                {kind === 'charge' ? (
+                  <td data-label="Description" data-wide>
+                    <input name={field(i, 'description')} data-f="description" value={l.description} maxlength="300" placeholder="e.g. Air freight, Discount" aria-label="Description" />
+                  </td>
+                ) : (
+                  <>
+                    <td data-label="What for" data-wide>
+                      <select name={field(i, 'category')} data-f="category" aria-label="What the cost is for">
+                        {Object.entries(COST_CATEGORIES).map(([k, v]) => (
+                          <option value={k} selected={l.category === k}>{v}</option>
+                        ))}
+                      </select>
+                      <input name={field(i, 'description')} data-f="description" value={l.description} maxlength="300" placeholder="Details (optional)" aria-label="Details" style="margin-top:6px" />
+                      <input type="hidden" name={field(i, 'per')} data-f="per" value={l.per} />
+                    </td>
+                    <td data-label="Paid to" data-wide>
+                      <select name={field(i, 'payee_id')} data-f="payee_id" aria-label="Paid to">
+                        <option value="">— not chosen yet —</option>
+                        {payees.map((g) => (
+                          <optgroup label={g.label}>
+                            {g.parties.map((p) => (
+                              <option value={String(p.id)} selected={l.payee_id === String(p.id)}>
+                                {p.name}{p.city ? ` — ${p.city}` : ''}{p.active ? '' : ' (inactive)'}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                        <option value="__new" selected={newSelected}>+ New payee…</option>
+                      </select>
+                      <div data-newpayee style="display:grid;gap:6px;margin-top:6px">
+                        <input name={field(i, 'new_payee')} data-f="new_payee" value={l.new_payee} maxlength="120" placeholder="…or a new payee's name" aria-label="New payee's name" />
+                        <select name={field(i, 'new_payee_kind')} data-f="new_payee_kind" aria-label="New payee is a">
+                          {PAYEE_KINDS.map((k) => (
+                            <option value={k} selected={l.new_payee_kind === k}>{PARTY_KINDS[k]}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </td>
+                  </>
+                )}
+                <td data-label="Qty">
+                  <input class="w-xs" name={field(i, 'qty')} data-f="qty" value={l.qty} inputmode="decimal" autocomplete="off" aria-label="Quantity" />
+                </td>
+                {kind === 'charge' && (
+                  <td data-label="Unit">
+                    <select class="w-sm" name={field(i, 'unit')} data-f="unit" aria-label="Unit">
+                      {Object.entries(CHARGE_UNITS).map(([k, v]) => (
+                        <option value={k} selected={(l.unit || 'fixed') === k}>{v}</option>
+                      ))}
+                    </select>
+                  </td>
+                )}
+                <td data-label="Rate">
+                  <input class="w-sm" name={field(i, 'rate')} data-f="rate" value={l.rate} inputmode="decimal" autocomplete="off" aria-label="Rate" />
+                </td>
+                <td data-label="Amount">
+                  <input class="w-sm" name={field(i, 'amount')} data-f="amount" value={l.amount} inputmode="decimal" autocomplete="off" placeholder="qty × rate" aria-label="Amount" />
+                </td>
+                <td data-label="Currency">
+                  <select class="w-xs" name={field(i, 'currency')} data-f="currency" aria-label="Currency">
+                    {currencies.map((c) => (
+                      <option value={c.code} selected={(l.currency || 'USD') === c.code}>{c.code}</option>
+                    ))}
+                  </select>
+                </td>
+                <td data-label="Per 1 USD">
+                  <input class="w-xs" name={field(i, 'per_usd')} data-f="per_usd" value={l.per_usd} inputmode="decimal" autocomplete="off" aria-label="How many make one US dollar" />
+                </td>
+                <td data-label="In US $" class="num">
+                  <span data-usd>{u === null ? '—' : usd(u)}</span>
+                </td>
+                <td data-x>
+                  <button type="button" class="remove" data-remove hidden aria-label="Remove this line" title="Remove this line">×</button>
+                </td>
+              </tr>
+            );
+          })
+        }
+      </tbody>
+      {
+        showTotal && (
+          <tfoot>
+            <tr>
+              <td colspan={cols - 2} class="num">{kind === 'charge' ? 'Total billed' : 'Total cost'} (US $)</td>
+              <td class="num"><strong data-total>{usd(total)}</strong></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  <div class="o-actions" style="margin-top:10px;justify-content:space-between">
+    <button type="button" class="o-btn sm" data-add style="display:none">+ Add a line</button>
+    <span class="o-help">
+      Leave <strong>Amount</strong> empty to use qty × rate. <strong>Per 1 USD</strong> is how many of that currency make one dollar — it starts at today's rate; change it if you got a different one.
+    </span>
+  </div>
+</div>
+
+<style>
+  .o-lines td { white-space: normal; }
+  .o-lines td.num { white-space: nowrap; min-width: 84px; }
+  .o-lines tfoot td { padding-top: 10px; border-top: 1px solid var(--o-line); font-weight: 600; }
+  td[data-wide] { min-width: 190px; }
+  /* Phones: each line becomes a small block of labelled fields instead of a wide row. */
+  @media (max-width: 760px) {
+    .o-lines, .o-lines tbody, .o-lines tfoot { display: block; width: 100%; }
+    .o-lines thead { display: none; }
+    .o-lines tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 12px 0 14px; border-top: 1px solid var(--o-line); position: relative; }
+    .o-lines tbody td { display: block; padding: 0; min-width: 0; }
+    .o-lines tbody td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 600; color: var(--o-muted); margin-bottom: 3px; }
+    .o-lines tbody td[data-wide] { grid-column: 1 / -1; min-width: 0; }
+    .o-lines tbody td.num { text-align: left; align-self: end; padding-bottom: 8px; }
+    .o-lines tbody td[data-x] { position: absolute; top: 4px; right: -8px; }
+    .o-lines .w-xs, .o-lines .w-sm, .o-lines .w-md { width: 100%; }
+    .o-lines tfoot tr { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--o-line); }
+    .o-lines tfoot td { padding: 10px 0 0; border-top: none; }
+    .o-lines tfoot td:empty { display: none; }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    if (window.__oLineItems) return;
+    window.__oLineItems = true;
+
+    function start() {
+      var editors = Array.prototype.slice.call(document.querySelectorAll('[data-lines]'));
+      if (!editors.length) return;
+
+      function num(v) {
+        v = String(v == null ? '' : v).replace(/[,\s]/g, '');
+        if (v === '') return null;
+        var n = Number(v);
+        return isFinite(n) ? n : null;
+      }
+      function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+      function money(n) {
+        var s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return (n < 0 ? '−$' : '$') + s;
+      }
+      function src(per) {
+        function get(k) { var el = document.querySelector('[data-src="' + k + '"]'); return el ? num(el.value) : null; }
+        if (per === 'kg') { var c = get('chargeable'); return c !== null ? c : get('weight'); }
+        if (per === 'cbm') return get('cbm');
+        if (per === 'pcs') return get('pcs');
+        return null;
+      }
+      function f(row, n) { return row.querySelector('[data-f="' + n + '"]'); }
+      function each(list, fn) { Array.prototype.forEach.call(list, fn); }
+
+      var totals = {};
+      function setText(sel, t) { var el = document.querySelector(sel); if (el) el.textContent = t; }
+      function summary() {
+        var c = totals.charge || 0, k = totals.cost || 0, p = r2(c - k);
+        setText('[data-sum="charge"]', money(c));
+        setText('[data-sum="cost"]', money(k));
+        var pe = document.querySelector('[data-sum="profit"]');
+        if (pe) {
+          pe.textContent = money(p);
+          pe.classList.toggle('pos', p > 0);
+          pe.classList.toggle('neg', p < 0);
+        }
+      }
+
+      var apis = [];
+      editors.forEach(function (ed) {
+        var rates = JSON.parse(ed.getAttribute('data-rates') || '{}');
+        var catKinds = JSON.parse(ed.getAttribute('data-cat-kinds') || '{}');
+        var kind = ed.getAttribute('data-kind');
+        var tbody = ed.querySelector('tbody');
+        var next = Number(ed.getAttribute('data-next')) || tbody.rows.length;
+        var blank = tbody.querySelector('[data-blank]');
+        var pristine = blank ? blank.cloneNode(true) : null;
+
+        function lineUsd(row) {
+          var a = num(f(row, 'amount').value);
+          var cur = f(row, 'currency').value;
+          var per = cur === 'USD' ? 1 : num(f(row, 'per_usd').value);
+          if (a === null || !per || per <= 0) return null;
+          return r2(a / per);
+        }
+        function recalc() {
+          var t = 0;
+          each(tbody.rows, function (row) {
+            var u = lineUsd(row);
+            var cell = row.querySelector('[data-usd]');
+            if (cell) cell.textContent = u === null ? '—' : money(u);
+            if (u !== null) t += u;
+          });
+          t = r2(t);
+          var tot = ed.querySelector('[data-total]');
+          if (tot) tot.textContent = money(t);
+          totals[kind] = t;
+          summary();
+        }
+        function autoAmount(row) {
+          if (row._amountManual) return;
+          var qi = f(row, 'qty'), q = num(qi.value), r = num(f(row, 'rate').value);
+          // A fixed-sum line with only a rate is 1 of it (the server does the same).
+          if (q === null && r !== null && !row.getAttribute('data-per')) { q = 1; qi.value = '1'; }
+          f(row, 'amount').value = q !== null && r !== null ? r2(q * r).toFixed(2) : '';
+        }
+        function follow(row) {
+          var per = row.getAttribute('data-per');
+          if (!per || row._qtyManual) return;
+          var v = src(per);
+          f(row, 'qty').value = v === null ? '' : String(v);
+          autoAmount(row);
+        }
+        function payeeBox(row, focus) {
+          var sel = f(row, 'payee_id');
+          var box = row.querySelector('[data-newpayee]');
+          if (!sel || !box) return;
+          var name = f(row, 'new_payee');
+          var show = sel.value === '__new' || (name && name.value.trim() !== '' && !/^\d+$/.test(sel.value));
+          box.style.display = show ? 'grid' : 'none';
+          if (!show && name && /^\d+$/.test(sel.value)) name.value = '';
+          if (show && focus && name) name.focus();
+        }
+        function init(row) {
+          var q = num(f(row, 'qty').value), r = num(f(row, 'rate').value), a = num(f(row, 'amount').value);
+          row._amountManual = a !== null && !(q !== null && r !== null && r2(q * r) === r2(a));
+          var per = row.getAttribute('data-per');
+          row._qtyManual = !!per && q !== null && q !== src(per);
+          row._kindManual = false;
+          var rm = row.querySelector('[data-remove]');
+          if (rm) rm.hidden = false;
+          var pu0 = f(row, 'per_usd');
+          if (pu0) pu0.readOnly = f(row, 'currency').value === 'USD'; // a dollar is always 1
+          if (!row._amountManual && a === null) autoAmount(row);
+          payeeBox(row, false);
+        }
+        function addRow(focus) {
+          if (!pristine) return;
+          var row = pristine.cloneNode(true);
+          row.removeAttribute('data-blank');
+          var i = next++;
+          each(row.querySelectorAll('[name]'), function (el) {
+            el.name = el.name.replace(/^(\w+)\[\d+\]/, '$1[' + i + ']');
+          });
+          tbody.appendChild(row);
+          init(row);
+          if (focus) {
+            var first = row.querySelector('input:not([type="hidden"]), select');
+            if (first) first.focus();
+          }
+          recalc();
+        }
+
+        each(tbody.rows, init);
+        var add = ed.querySelector('[data-add]');
+        if (add) {
+          add.style.display = '';
+          add.addEventListener('click', function () { addRow(true); });
+        }
+
+        ed.addEventListener('input', function (e) {
+          var el = e.target, row = el.closest('[data-row]');
+          if (!row) return;
+          var n = el.getAttribute('data-f');
+          if (n === 'qty') { row._qtyManual = el.value.trim() !== ''; autoAmount(row); }
+          else if (n === 'rate') autoAmount(row);
+          else if (n === 'amount') row._amountManual = el.value.trim() !== '';
+          else if (n === 'new_payee') {
+            var sel = f(row, 'payee_id');
+            if (sel && el.value.trim() !== '' && !/^\d+$/.test(sel.value)) sel.value = '__new';
+          }
+          recalc();
+        });
+        ed.addEventListener('change', function (e) {
+          var el = e.target, row = el.closest('[data-row]');
+          if (!row) return;
+          var n = el.getAttribute('data-f');
+          if (n === 'amount' && el.value.trim() === '') { row._amountManual = false; autoAmount(row); }
+          else if (n === 'currency') {
+            var pu = f(row, 'per_usd');
+            if (pu && rates[el.value] != null) pu.value = String(el.value === 'USD' ? 1 : rates[el.value]);
+            if (pu) pu.readOnly = el.value === 'USD';
+          } else if (n === 'unit') {
+            var per = el.value === 'kg' || el.value === 'cbm' || el.value === 'pcs' ? el.value : '';
+            row.setAttribute('data-per', per);
+            if (per) { row._qtyManual = false; follow(row); }
+            else if (f(row, 'qty').value.trim() === '') { f(row, 'qty').value = '1'; autoAmount(row); }
+          } else if (n === 'category') {
+            var k = f(row, 'new_payee_kind');
+            if (k && !row._kindManual && catKinds[el.value]) k.value = catKinds[el.value];
+          } else if (n === 'new_payee_kind') row._kindManual = true;
+          else if (n === 'payee_id') payeeBox(row, true);
+          recalc();
+        });
+        ed.addEventListener('click', function (e) {
+          var b = e.target.closest('[data-remove]');
+          if (!b) return;
+          var row = b.closest('[data-row]');
+          if (row) row.remove();
+          if (!tbody.rows.length) addRow(false);
+          recalc();
+        });
+        // Enter in a line should not submit the whole shipment half-typed.
+        ed.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+        });
+
+        apis.push({ followAll: function () { each(tbody.rows, follow); recalc(); }, recalc: recalc });
+      });
+
+      document.addEventListener('input', function (e) {
+        if (e.target && e.target.hasAttribute && e.target.hasAttribute('data-src')) apis.forEach(function (a) { a.followAll(); });
+      });
+      apis.forEach(function (a) { a.recalc(); });
+    }
+
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+  })();
+</script>

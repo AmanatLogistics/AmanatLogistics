@@ -37,8 +37,13 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   dueDays: 15,
 };
 
-export async function getSettings(): Promise<OfficeSettings> {
-  const row = await one<{ value: Partial<OfficeSettings> }>("SELECT value FROM office_settings WHERE key = 'office'");
+/**
+ * Pass the transaction's runner when calling from inside tx(): reading on a
+ * second pool connection while the transaction holds one is how concurrent
+ * saves used to deadlock the pool.
+ */
+export async function getSettings(runner?: Runner): Promise<OfficeSettings> {
+  const row = await one<{ value: Partial<OfficeSettings> }>("SELECT value FROM office_settings WHERE key = 'office'", [], runner);
   return { ...DEFAULT_SETTINGS, ...(row?.value ?? {}) };
 }
 
@@ -56,7 +61,7 @@ export async function saveSettings(patch: Partial<OfficeSettings>): Promise<void
  * taken (e.g. by imported old records that kept their own references).
  */
 export async function nextShipmentRef(year: number, runner?: Runner): Promise<string> {
-  const s = await getSettings();
+  const s = await getSettings(runner);
   for (let i = 0; i < 1000; i++) {
     const n = await nextNumber(`shipment-${year}`, runner);
     const ref = `${s.shipmentPrefix}-${year}-${String(n).padStart(4, '0')}`;
@@ -67,7 +72,7 @@ export async function nextShipmentRef(year: number, runner?: Runner): Promise<st
 
 /** INV-2026-0001 — per-year sequence, never reused; skips numbers already taken. */
 export async function nextInvoiceNumber(year: number, runner?: Runner): Promise<string> {
-  const s = await getSettings();
+  const s = await getSettings(runner);
   for (let i = 0; i < 1000; i++) {
     const n = await nextNumber(`invoice-${year}`, runner);
     const number = `${s.invoicePrefix}-${year}-${String(n).padStart(4, '0')}`;

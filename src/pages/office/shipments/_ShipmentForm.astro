@@ -1,0 +1,271 @@
+---
+/**
+ * The shipment form, shared by /office/shipments/new and /office/shipments/[id]/edit.
+ * (The leading underscore keeps Astro from treating this file as a page.)
+ *
+ * Shipment details, then two line editors (charges = what we bill the client,
+ * costs = what it costs us), then live totals. Posts to the page it is on.
+ */
+import LineItems from '../../../components/office/LineItems.astro';
+import type { Currency } from '../../../lib/office/money';
+import { round2, toUsd, usd } from '../../../lib/office/money';
+import { parseNum } from '../../../lib/office/form';
+import { SERVICES, SERVICE_KEYS, SHIPMENT_STATUS } from '../../../lib/office/services';
+import { isServiceKey, type FormState, type LineForm, type PartyOption, type PayeeGroup } from '../../../lib/office/shipments';
+
+interface Props {
+  mode: 'new' | 'edit';
+  state: FormState;
+  errors: string[];
+  clients: PartyOption[];
+  payees: PayeeGroup[];
+  currencies: Currency[];
+  rates: Record<string, number>;
+  admin: boolean;
+  cancelHref: string;
+  /** edit: payments already linked to this shipment */
+  paymentsLinked?: number;
+}
+const { mode, state, errors, clients, payees, currencies, rates, admin, cancelHref, paymentsLinked = 0 } = Astro.props;
+const { form, charges, costs } = state;
+const service = isServiceKey(form.service) ? form.service : 'other';
+const def = SERVICES[service];
+
+const lineUsd = (l: LineForm): number => {
+  let a = parseNum(l.amount);
+  if (a === null) {
+    const qn = parseNum(l.qty);
+    const r = parseNum(l.rate);
+    if (qn !== null && r !== null) a = round2(qn * r);
+  }
+  const cur = (l.currency || 'USD').toUpperCase();
+  const per = cur === 'USD' ? 1 : (parseNum(l.per_usd) ?? rates[cur] ?? 0);
+  return a === null || !(per > 0) ? 0 : toUsd(a, per);
+};
+const billed = round2(charges.reduce((s, l) => s + lineUsd(l), 0));
+const cost = round2(costs.reduce((s, l) => s + lineUsd(l), 0));
+const profit = round2(billed - cost);
+const newClientOpen = form.client_id === '__new' || form.new_client !== '' || (clients.length === 0 && !form.client_id);
+const isUps = service === 'ups';
+---
+
+{
+  errors.length > 0 && (
+    <div class="o-flash err" role="alert">
+      <strong>{errors.length === 1 ? 'One thing needs fixing before this can be saved:' : `${errors.length} things need fixing before this can be saved:`}</strong>
+      <ul style="margin:6px 0 0;padding-left:20px">
+        {errors.map((e) => <li>{e}</li>)}
+      </ul>
+    </div>
+  )
+}
+
+<form method="post" class="o-form" data-shipment-form>
+  <input type="hidden" name="version" value={form.version} />
+  {mode === 'new' && <input type="hidden" name="service" value={service} />}
+
+  <div class="o-card">
+    <div class="o-card-head">
+      <h2>Shipment details</h2>
+      {mode === 'new' && <a class="small" href="/office/shipments/new">Change section</a>}
+    </div>
+    <div class="o-form">
+      <div class="o-row">
+        {
+          mode === 'edit' ? (
+            <label class="o-field">
+              <span>Section</span>
+              <select name="service">
+                {SERVICE_KEYS.map((k) => (
+                  <option value={k} selected={service === k}>{SERVICES[k].label}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div class="o-field">
+              <span>Section</span>
+              <strong style="padding:9px 0">{def.label}</strong>
+            </div>
+          )
+        }
+        <label class="o-field">
+          <span>Ship date</span>
+          <input type="date" name="ship_date" value={form.ship_date} required />
+        </label>
+        <label class="o-field">
+          <span>Status</span>
+          <select name="status">
+            {Object.entries(SHIPMENT_STATUS).map(([k, v]) => (
+              <option value={k} selected={form.status === k}>{v}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div class="o-row">
+        <label class="o-field">
+          <span>Client</span>
+          <select name="client_id" data-client-select>
+            <option value="">— choose a client —</option>
+            {clients.map((c) => (
+              <option value={String(c.id)} selected={form.client_id === String(c.id)}>
+                {c.name}{c.city ? ` — ${c.city}` : ''}{c.active ? '' : ' (inactive)'}
+              </option>
+            ))}
+            <option value="__new" selected={newClientOpen && !/^\d+$/.test(form.client_id)}>+ New client…</option>
+          </select>
+          {clients.length === 0 && <span class="o-help">No clients yet — type the new client's name in the next box.</span>}
+        </label>
+        <label class="o-field" data-new-client>
+          <span>…or a new client's name</span>
+          <input name="new_client" value={form.new_client} maxlength="120" placeholder="Only if they are not in the list" autocomplete="off" />
+        </label>
+        <label class="o-field" data-new-client>
+          <span>New client's phone (optional)</span>
+          <input name="new_client_phone" value={form.new_client_phone} maxlength="40" inputmode="tel" autocomplete="off" />
+        </label>
+      </div>
+      {
+        mode === 'edit' && paymentsLinked > 0 && (
+          <p class="o-help" style="margin:-6px 0 0">
+            {paymentsLinked} payment{paymentsLinked === 1 ? ' is' : 's are'} linked to this shipment. Changing the client does not change who those payments came from.
+          </p>
+        )
+      }
+
+      <div class="o-row">
+        <label class="o-field"><span>From</span><input name="origin" value={form.origin} maxlength="100" /></label>
+        <label class="o-field"><span>To</span><input name="destination" value={form.destination} maxlength="100" /></label>
+      </div>
+
+      <div class="o-row">
+        <label class="o-field">
+          <span>Goods</span>
+          <input name="goods" value={form.goods} maxlength="500" placeholder="e.g. Dry fruit — raisins, 40 cartons" />
+        </label>
+        <label class="o-field">
+          <span>Pieces / cartons</span>
+          <input name="pieces" value={form.pieces} inputmode="numeric" autocomplete="off" data-src="pcs" />
+        </label>
+      </div>
+
+      <div class="o-row">
+        <label class="o-field">
+          <span>Weight (kg)</span>
+          <input name="weight_kg" value={form.weight_kg} inputmode="decimal" autocomplete="off" data-src="weight" />
+          <span class="o-help">The real weight on the scale.</span>
+        </label>
+        <label class="o-field">
+          <span>Chargeable weight (kg)</span>
+          <input name="chargeable_kg" value={form.chargeable_kg} inputmode="decimal" autocomplete="off" data-src="chargeable" />
+          <span class="o-help">The weight you bill by, if different (e.g. volume weight). Empty = use the real weight.</span>
+        </label>
+        <label class="o-field">
+          <span>CBM</span>
+          <input name="cbm" value={form.cbm} inputmode="decimal" autocomplete="off" data-src="cbm" />
+          <span class="o-help">{def.unit === 'cbm' ? 'Cubic metres — this section is billed by CBM.' : 'Cubic metres, if known.'}</span>
+        </label>
+      </div>
+
+      <div class="o-row">
+        <label class="o-field">
+          <span>Airway bill (AWB) no.</span>
+          <input name="awb_no" value={form.awb_no} maxlength="60" autocomplete="off" />
+        </label>
+        <label class="o-field">
+          <span>{isUps ? 'UPS tracking no.' : 'Tracking no.'}</span>
+          <input name="tracking_no" value={form.tracking_no} maxlength="60" autocomplete="off" />
+          {!isUps && <span class="o-help">Only if there is one.</span>}
+        </label>
+      </div>
+
+      <label class="o-field">
+        <span>Notes</span>
+        <textarea name="notes" maxlength="2000" rows="2">{form.notes}</textarea>
+      </label>
+    </div>
+  </div>
+
+  <div class="o-card">
+    <div class="o-card-head"><h2>Charges — what we bill the client</h2></div>
+    <p class="o-help" style="margin:-6px 0 12px">
+      These lines are the client's invoice. Lines counted per kg or per CBM take their quantity from the weight or CBM above.
+      A discount is a line with a minus amount and the word "Discount" in it.
+    </p>
+    <LineItems name="charge" kind="charge" lines={charges} currencies={currencies} rates={rates} />
+  </div>
+
+  <div class="o-card">
+    <div class="o-card-head"><h2>Costs — what this shipment costs us</h2></div>
+    <p class="o-help" style="margin:-6px 0 12px">
+      One line for each partner we owe for this shipment — truck owner, documents agent, airline, Kabul or China agent.
+      Choosing who it is <strong>paid to</strong> puts it on their balance, so you can see what we owe them. Lines with no amount are left out when you save.
+    </p>
+    <LineItems name="cost" kind="cost" lines={costs} currencies={currencies} rates={rates} payees={payees} showProfit={admin} />
+  </div>
+
+  <div class="o-card">
+    <div class="o-stats" style="margin-bottom:12px">
+      <div class="o-stat">
+        <div class="label">Billed to the client</div>
+        <div class="value" data-sum="charge">{usd(billed)}</div>
+        <div class="sub">All charge lines, in US dollars</div>
+      </div>
+      {
+        admin && (
+          <div class="o-stat">
+            <div class="label">Cost to us</div>
+            <div class="value" data-sum="cost">{usd(cost)}</div>
+            <div class="sub">All cost lines, in US dollars</div>
+          </div>
+        )
+      }
+      {
+        admin && (
+          <div class="o-stat">
+            <div class="label">Profit</div>
+            <div class:list={['value', profit > 0 && 'pos', profit < 0 && 'neg']} data-sum="profit">{usd(profit)}</div>
+            <div class="sub">Billed minus cost</div>
+          </div>
+        )
+      }
+    </div>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">{mode === 'new' ? 'Save shipment' : 'Save changes'}</button>
+      <a class="o-btn" href={cancelHref}>Cancel</a>
+      <span class="o-help">
+        {mode === 'new' ? 'Saving gives the shipment its number and, if it has charges, its invoice.' : 'The invoice keeps its number; its lines are these charges.'}
+      </span>
+    </div>
+  </div>
+</form>
+
+<script is:inline>
+  (function () {
+    var form = document.querySelector('[data-shipment-form]');
+    if (!form) return;
+    var sel = form.querySelector('[data-client-select]');
+    var boxes = form.querySelectorAll('[data-new-client]');
+    var name = form.querySelector('input[name="new_client"]');
+    function sync(focus) {
+      var show = sel.value === '__new' || (name.value.trim() !== '' && !/^\d+$/.test(sel.value));
+      Array.prototype.forEach.call(boxes, function (b) { b.style.display = show ? '' : 'none'; });
+      if (!show && /^\d+$/.test(sel.value)) {
+        name.value = '';
+        var ph = form.querySelector('input[name="new_client_phone"]');
+        if (ph) ph.value = '';
+      }
+      if (show && focus) name.focus();
+    }
+    sel.addEventListener('change', function () { sync(true); });
+    name.addEventListener('input', function () {
+      if (name.value.trim() !== '' && !/^\d+$/.test(sel.value)) sel.value = '__new';
+    });
+    sync(false);
+    // Stop a double click on Save from creating the same shipment twice.
+    form.addEventListener('submit', function () {
+      var b = form.querySelector('button[type="submit"]');
+      if (b) setTimeout(function () { b.disabled = true; b.textContent = 'Saving…'; }, 0);
+    });
+  })();
+</script>

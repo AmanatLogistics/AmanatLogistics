@@ -1,0 +1,188 @@
+---
+/**
+ * Cash & accounts: every cash box, bank account and saraf holding money for
+ * us, with its balance in its own currency (ledger.ts accountBalances) and a
+ * rough dollar total. An admin can add an account here; closing and editing
+ * are on the account's own page.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import { guard, sameOrigin, isAdmin } from '../../../lib/office/auth';
+import { one, tx } from '../../../lib/office/db';
+import { logActivity } from '../../../lib/office/activity';
+import { str, withMsg } from '../../../lib/office/form';
+import { usd, listCurrencies, today } from '../../../lib/office/money';
+import { ACCOUNT_TYPES } from '../../../lib/office/services';
+import { accountBalances } from '../../../lib/office/ledger';
+import { ACCOUNT_FIELDS, formValues, readAccountForm, accountTotals, accountTypeLabel, fmtRate, fmtAmount } from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else if (!admin) error = 'Only an admin can add an account.';
+  else {
+    const fd = await Astro.request.formData();
+    if (str(fd, 'action') === 'add') {
+      posted = formValues(fd, ACCOUNT_FIELDS);
+      const r = await readAccountForm(fd);
+      if (!r.ok) error = r.error;
+      else {
+        const v = r.value;
+        const id = await tx(async (t) => {
+          const row = await one<{ id: number }>(
+            `INSERT INTO office_accounts (name, type, currency, opening_balance, opening_date, notes)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [v.name, v.type, v.currency, v.opening_balance, v.opening_date ?? today(), v.notes],
+            t,
+          );
+          await logActivity(user.id, 'account_created', 'account', row!.id, `${v.name} (${accountTypeLabel(v.type)}, ${v.currency}) opening ${fmtAmount(v.opening_balance, v.currency)}`, t);
+          return row!.id;
+        });
+        return Astro.redirect(withMsg(`/office/accounts/${id}`, `Account "${v.name}" added.`), 303);
+      }
+    }
+  }
+}
+
+const [balances, currencies] = await Promise.all([accountBalances(), listCurrencies()]);
+const totals = accountTotals(balances);
+const active = balances.filter((a) => a.active);
+const closed = balances.filter((a) => !a.active);
+const values = posted ?? { name: '', type: 'cash', currency: 'AFN', opening_balance: '', opening_date: today(), notes: '' };
+const rateOf = Object.fromEntries(currencies.map((c) => [c.code, c.per_usd]));
+---
+
+<OfficeLayout title="Cash & accounts" user={user} active="accounts">
+  <PageHead
+    title="Cash & accounts"
+    sub="Where our money is: cash boxes, bank accounts and sarafs holding money for us. Each account keeps one currency."
+    crumbs={[{ label: 'Office', href: '/office' }]}
+  >
+    <a class="o-btn" href="/office/transfers/new">Move money between accounts</a>
+    {admin && <a class="o-btn primary" href="#add-account">Add account</a>}
+  </PageHead>
+  <Flash error={error} />
+
+  {
+    balances.length > 0 && (
+      <div class="o-stats">
+        <Stat label="All accounts together" value={`≈ ${usd(totals.totalUsd)}`} sub="in US dollars at today's rates" tone="brand" />
+        {totals.byCurrency.map((c) => (
+          <Stat
+            label={`${c.currency} accounts`}
+            value={fmtAmount(c.balance, c.currency)}
+            sub={`${c.currency !== 'USD' ? `≈ ${usd(c.usd)} · ` : ''}${c.accounts} account${c.accounts === 1 ? '' : 's'}`}
+            tone={c.balance < 0 ? 'neg' : ''}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  <div class="o-table-wrap">
+    <table class="o-table" style="min-width:640px">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th class="num">Balance</th>
+          <th class="num">≈ US dollars</th>
+          <th>Type</th>
+          <th>Currency</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          balances.length === 0 && (
+            <tr>
+              <td colspan="5" class="o-empty">
+                No accounts yet. {admin ? 'Add your cash box first (below), then bank accounts and sarafs.' : 'An admin needs to add the cash box and bank accounts.'}
+              </td>
+            </tr>
+          )
+        }
+        {
+          [...active, ...closed].map((a) => (
+            <tr>
+              <td style="min-width:170px">
+                <a href={`/office/accounts/${a.id}`}><strong>{a.name}</strong></a>
+                {!a.active && <span class="o-badge cancelled" style="margin-left:6px">Closed</span>}
+              </td>
+              <td class:list={['num', a.balance < 0 && 'neg']}><strong>{fmtAmount(a.balance, a.currency)}</strong></td>
+              <td class:list={['num', 'muted', a.balance_usd < 0 && 'neg']}>{a.currency === 'USD' ? usd(a.balance_usd) : `≈ ${usd(a.balance_usd)}`}</td>
+              <td>{accountTypeLabel(a.type)}</td>
+              <td>{a.currency}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        balances.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="2">Total, all accounts (≈ at today's rates)</td>
+              <td class:list={['num', totals.totalUsd < 0 && 'neg']}>≈ {usd(totals.totalUsd)}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  <p class="o-help">
+    A balance is the opening balance plus money in, minus money out, expenses and transfers — in the account's own currency. The dollar column uses today's rates from
+    Settings ({Object.entries(rateOf).filter(([c]) => c !== 'USD').map(([c, r]) => `${c} ${fmtRate(r)}`).join(', ')} per US dollar), so it is an estimate.
+  </p>
+
+  {
+    admin && (
+      <form method="post" class="o-card o-form" id="add-account" style="margin-top:20px;max-width:760px">
+        <div class="o-card-head"><h2>Add an account</h2></div>
+        <input type="hidden" name="action" value="add" />
+        <div class="o-row">
+          <label class="o-field">
+            <span>Name</span>
+            <input name="name" value={values.name} required maxlength="80" placeholder="e.g. Kandahar cash box (AFN)" />
+          </label>
+          <label class="o-field">
+            <span>Type</span>
+            <select name="type">
+              {Object.entries(ACCOUNT_TYPES).map(([k, label]) => <option value={k} selected={k === values.type}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+        <div class="o-row">
+          <label class="o-field">
+            <span>Currency</span>
+            <select name="currency">
+              {currencies.map((c) => <option value={c.code} selected={c.code === values.currency}>{c.code} — {c.name}</option>)}
+            </select>
+            <span class="o-help">One currency per account. Keep afghanis and dollars in separate accounts, even in the same safe.</span>
+          </label>
+          <label class="o-field">
+            <span>Opening balance</span>
+            <input name="opening_balance" value={values.opening_balance} inputmode="decimal" placeholder="0" />
+            <span class="o-help">What is in it on the opening date, in its own currency.</span>
+          </label>
+          <label class="o-field">
+            <span>Opening date</span>
+            <input type="date" name="opening_date" value={values.opening_date} />
+          </label>
+        </div>
+        <label class="o-field">
+          <span>Notes</span>
+          <textarea name="notes" rows="2" maxlength="1000" placeholder="Bank name and account number, who holds the cash box…">{values.notes}</textarea>
+        </label>
+        <div><button class="o-btn primary" type="submit">Add account</button></div>
+      </form>
+    )
+  }
+  {closed.length > 0 && <p class="o-help">Closed accounts can't take new payments; their history stays. Open one to re-open it.</p>}
+</OfficeLayout>

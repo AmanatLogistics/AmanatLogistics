@@ -1,0 +1,201 @@
+---
+/**
+ * Payments received (?dir=in) and payments made (?dir=out): filters, 50 a
+ * page, newest first, totals for everything matching, CSV download.
+ *
+ * Payments are cash movements (no profit or cost totals), so staff see the
+ * same list, totals and CSV as an admin.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Pager from './_Pager.astro';
+import { guard } from '../../../lib/office/auth';
+import { METHODS, fmtDate, usd, today } from '../../../lib/office/money';
+import {
+  paymentFilters,
+  listPayments,
+  exportPayments,
+  partyOptions,
+  groupParties,
+  listAccounts,
+  accountLabel,
+  getShipmentBasic,
+  pageParam,
+  withParams,
+  csvResponse,
+  partyKindLabel,
+  fmtAmount,
+} from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+const sp = Astro.url.searchParams;
+const f = paymentFilters(sp);
+const dir = f.dir;
+
+if (sp.get('format') === 'csv') {
+  const all = await exportPayments(f);
+  return csvResponse(
+    `payments-${dir === 'in' ? 'received' : 'made'}-${today()}.csv`,
+    ['Date', 'Direction', dir === 'in' ? 'Received from' : 'Paid to', 'Kind', 'Account', 'Method', 'Amount', 'Currency', 'Rate per USD', 'USD', 'Shipment', 'Reference', 'Notes', 'Entered by', 'Payment no.'],
+    all.map((r) => [
+      r.pay_date,
+      r.direction === 'in' ? 'Received' : 'Paid out',
+      r.party_name,
+      partyKindLabel(r.party_kind),
+      r.account_name,
+      METHODS[r.method] ?? r.method,
+      r.amount,
+      r.currency,
+      r.per_usd,
+      r.usd,
+      r.shipment_ref,
+      r.reference,
+      r.notes,
+      r.created_by_name,
+      r.id,
+    ]),
+  );
+}
+
+const [list, parties, accounts, ship] = await Promise.all([
+  listPayments(f, pageParam(sp)),
+  partyOptions({ all: true }),
+  listAccounts(),
+  f.shipment ? getShipmentBasic(f.shipment) : Promise.resolve(null),
+]);
+const groups = groupParties(parties, dir);
+const filtered = !!(f.from || f.to || f.party || f.account || f.method || f.q || f.shipment);
+const title = dir === 'in' ? 'Payments received' : 'Payments made';
+---
+
+<OfficeLayout title={title} user={user} active={dir === 'out' ? 'payments-out' : 'payments-in'}>
+  <PageHead
+    title={title}
+    sub={dir === 'in' ? 'Money that came in — from clients and anyone else.' : 'Money that went out — to agents, truck owners, airlines and others.'}
+    crumbs={[{ label: 'Office', href: '/office' }]}
+  >
+    <a class="o-btn primary" href={`/office/payments/new?dir=${dir}`}>Record payment</a>
+    <a class="o-btn" href={withParams(Astro.url, { format: "csv", page: null })} data-astro-prefetch="false" download>Download CSV</a>
+  </PageHead>
+  <Flash />
+
+  <nav class="o-tabs" aria-label="Direction">
+    <a href="/office/payments?dir=in" class:list={[dir === 'in' && 'active']} aria-current={dir === 'in' ? 'page' : undefined}>Received (money in)</a>
+    <a href="/office/payments?dir=out" class:list={[dir === 'out' && 'active']} aria-current={dir === 'out' ? 'page' : undefined}>Paid out (money out)</a>
+  </nav>
+
+  <form method="get" class="o-filters" role="search">
+    <input type="hidden" name="dir" value={dir} />
+    {f.shipment && <input type="hidden" name="shipment" value={f.shipment} />}
+    <label class="o-field"><span>From date</span><input type="date" name="from" value={f.from ?? ''} /></label>
+    <label class="o-field"><span>To date</span><input type="date" name="to" value={f.to ?? ''} /></label>
+    <label class="o-field">
+      <span>{dir === 'in' ? 'Received from' : 'Paid to'}</span>
+      <select name="party">
+        <option value="">Everyone</option>
+        {groups.map((g) => (
+          <optgroup label={g.label}>
+            {g.parties.map((p) => <option value={p.id} selected={p.id === f.party}>{p.name}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Account</span>
+      <select name="account">
+        <option value="">All accounts</option>
+        {accounts.map((a) => <option value={a.id} selected={a.id === f.account}>{accountLabel(a)}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>How</span>
+      <select name="method">
+        <option value="">Any way</option>
+        {Object.entries(METHODS).map(([k, label]) => <option value={k} selected={k === f.method}>{label}</option>)}
+      </select>
+    </label>
+    <label class="o-field" style="min-width:230px">
+      <span>Search reference</span>
+      <input type="search" name="q" value={f.q ?? ''} placeholder="Hawala no., bank ref, AWB" maxlength="80" />
+    </label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {filtered && <a class="o-btn ghost" href={`/office/payments?dir=${dir}`}>Clear filters</a>}
+    </div>
+  </form>
+
+  {
+    f.shipment && (
+      <p class="small" style="margin:-4px 0 12px">
+        Only payments linked to shipment {ship ? <a href={`/office/shipments/${ship.id}`}>{ship.ref}</a> : `#${f.shipment}`} ·{' '}
+        <a href={withParams(Astro.url, { shipment: null, page: null })}>show all</a>
+      </p>
+    )
+  }
+
+  <div class="o-table-wrap">
+    <table class="o-table" style="min-width:900px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>{dir === 'in' ? 'Received from' : 'Paid to'}</th>
+          <th class="num">Amount</th>
+          <th class="num">US dollars</th>
+          <th>Account</th>
+          <th>How</th>
+          <th>Shipment</th>
+          <th>Reference</th>
+          <th>Entered by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          list.rows.length === 0 && (
+            <tr>
+              <td colspan="9" class="o-empty">
+                {filtered ? 'No payments match these filters.' : dir === 'in' ? 'No money received has been recorded yet.' : 'No payments made have been recorded yet.'}
+                <div style="margin-top:10px"><a class="o-btn sm" href={`/office/payments/new?dir=${dir}`}>Record payment</a></div>
+              </td>
+            </tr>
+          )
+        }
+        {
+          list.rows.map((r) => (
+            <tr>
+              <td style="white-space:nowrap"><a href={`/office/payments/${r.id}`} title="Open this payment">{fmtDate(r.pay_date)}</a></td>
+              <td style="min-width:140px"><a href={`/office/parties/${r.party_id}`}>{r.party_name}</a></td>
+              <td class="num">{fmtAmount(r.amount, r.currency)}</td>
+              <td class="num">{usd(r.usd)}</td>
+              <td><a href={`/office/accounts/${r.account_id}`} style="color:inherit">{r.account_name}</a></td>
+              <td>{METHODS[r.method] ?? r.method}</td>
+              <td>{r.shipment_id ? <a href={`/office/shipments/${r.shipment_id}`}>{r.shipment_ref}</a> : <span class="muted">—</span>}</td>
+              <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
+              <td class="small muted">{r.created_by_name ?? '—'}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        list.count > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="2">
+                {list.count} payment{list.count === 1 ? '' : 's'}
+                {list.pages > 1 ? ' (all pages)' : ''}
+                {filtered ? ' matching the filters' : ''}
+              </td>
+              <td class="num">{list.byCurrency.map((c, i) => <>{i > 0 && <br />}{fmtAmount(c.amount, c.currency)}</>)}</td>
+              <td class="num">{usd(list.totalUsd)}</td>
+              <td colspan="5"></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  <Pager page={list.page} pages={list.pages} count={list.count} noun="payments" />
+</OfficeLayout>

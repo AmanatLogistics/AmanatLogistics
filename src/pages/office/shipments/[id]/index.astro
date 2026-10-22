@@ -1,0 +1,474 @@
+---
+/**
+ * One shipment: what it is, what the client was billed and has paid, what it
+ * cost us (profit for admins only), the payments linked to it, and its history.
+ * POST actions: quick status change (everyone), delete (admin only, refused
+ * while payments are linked).
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import Stat from '../../../../components/office/Stat.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { recentActivity } from '../../../../lib/office/activity';
+import { str, oneOf, withMsg } from '../../../../lib/office/form';
+import { shipmentFigure, partyBalance } from '../../../../lib/office/ledger';
+import { usd, fmtMoney, fmtDate, fmtNum, today, METHODS } from '../../../../lib/office/money';
+import { invoiceStatus, INVOICE_STATUS_LABEL } from '../../../../lib/office/invoices';
+import { SERVICES, SHIPMENT_STATUS, COST_CATEGORIES, PARTY_KINDS, type PartyKind } from '../../../../lib/office/services';
+import {
+  getShipment,
+  linkedPayments,
+  setShipmentStatus,
+  deleteShipment,
+  parseId,
+  routeText,
+  ShipmentError,
+  CHARGE_UNITS,
+} from '../../../../lib/office/shipments';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = parseId(Astro.params.id);
+let error: string | null = null;
+
+if (id && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked. Reload the page and try again.';
+  else {
+    const fd = await Astro.request.formData();
+    const action = str(fd, 'action');
+    try {
+      if (action === 'status') {
+        const status = oneOf(fd, 'status', SHIPMENT_STATUS);
+        if (!status) error = 'Choose a status.';
+        else return Astro.redirect(withMsg(`/office/shipments/${id}`, await setShipmentStatus(id, status, user.id)), 303);
+      } else if (action === 'delete') {
+        if (!admin) error = 'Only an admin can delete a shipment.';
+        else return Astro.redirect(withMsg('/office/shipments', await deleteShipment(id, user.id)), 303);
+      } else error = 'Nothing to do — unknown action.';
+    } catch (e) {
+      if (e instanceof ShipmentError) error = e.message;
+      else throw e;
+    }
+  }
+}
+
+const data = id ? await getShipment(id) : null;
+if (!data) Astro.response.status = 404;
+
+const s = data?.shipment;
+const fig = s ? await shipmentFigure(s.id) : null;
+const payments = s ? await linkedPayments(s.id) : [];
+const activity = s ? await recentActivity({ entity: 'shipment', entityId: s.id, limit: 30 }) : [];
+const clientBal = s?.client_id ? await partyBalance(s.client_id) : null;
+const todayStr = today();
+const invStatus = s && fig && s.invoice_id ? invoiceStatus(fig.revenue, fig.received, s.invoice_due_date, todayStr) : null;
+const paysIn = payments.filter((p) => p.direction === 'in');
+const paysOut = payments.filter((p) => p.direction === 'out');
+const sumUsd = (rows: { usd: number }[]) => Math.round(rows.reduce((a, r) => a + r.usd, 0) * 100) / 100;
+const when = (v: string) =>
+  new Date(v).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/** The client's whole balance, in words. */
+function balanceWords(b: number): string {
+  if (b > 0) return `Owes us ${usd(b)} in total`;
+  if (b < 0) return `We owe them ${usd(-b)} (paid in advance / overpaid)`;
+  return 'Owes nothing — all settled';
+}
+const dueTile = (() => {
+  if (!fig) return { label: 'Due', value: usd(0), sub: '', tone: '' as const };
+  if (fig.due < 0) return { label: 'Overpaid', value: usd(-fig.due), sub: 'The client paid more than billed — we owe them this', tone: '' as const };
+  if (fig.due === 0) return { label: 'Due', value: usd(0), sub: fig.revenue > 0 ? 'Paid in full' : 'Nothing billed yet', tone: 'pos' as const };
+  return { label: 'Still to collect', value: usd(fig.due), sub: `${s?.client_name ?? 'The client'} owes us this for this shipment`, tone: '' as const };
+})();
+const margin = fig && fig.revenue > 0 ? Math.round((fig.profit / fig.revenue) * 1000) / 10 : null;
+const deleteMsg = s
+  ? `Delete shipment ${s.ref}?${s.invoice_number ? ` Its invoice ${s.invoice_number},` : ''} its charges and its costs will be deleted too. This cannot be undone.`
+  : '';
+const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
+---
+
+<OfficeLayout title={s ? `${s.ref}` : 'Shipment not found'} user={user} active="shipments">
+  {
+    !s || !fig || !data ? (
+      <>
+        <PageHead title="Shipment not found" crumbs={[{ label: 'Office', href: '/office' }, { label: 'Shipments', href: '/office/shipments' }]} />
+        <Flash error={error} />
+        <div class="o-card o-empty">
+          <p>There is no shipment with this number — it may have been deleted.</p>
+          <a class="o-btn" href="/office/shipments">Back to shipments</a>
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={s.ref}
+          sub={`${SERVICES[s.service]?.label ?? s.service} · ${s.client_name ?? 'No client'} · ${fmtDate(s.ship_date)}`}
+          crumbs={[{ label: 'Office', href: '/office' }, { label: 'Shipments', href: '/office/shipments' }]}
+        >
+          <a class="o-btn primary" href={`/office/shipments/${s.id}/edit`}>Edit</a>
+          {s.invoice_id && (
+            <a class="o-btn" href={`/office/invoices/${s.invoice_id}/print`} target="_blank" rel="noopener" data-astro-prefetch="false">
+              Print invoice
+            </a>
+          )}
+        </PageHead>
+        <Flash error={error} />
+
+        <div class="o-actions" style="margin:-8px 0 16px">
+          <span class:list={['o-badge', s.status]}>{SHIPMENT_STATUS[s.status]}</span>
+          <span class="o-badge">{SERVICES[s.service]?.short ?? s.service}</span>
+          {s.invoice_id ? (
+            <span class="small">
+              Invoice <a href={`/office/invoices/${s.invoice_id}`}><strong>{s.invoice_number}</strong></a>
+              {invStatus && <span class:list={['o-badge', invStatus]} style="margin-left:6px">{INVOICE_STATUS_LABEL[invStatus]}</span>}
+              {s.invoice_due_date && <span class="muted"> · due {fmtDate(s.invoice_due_date)}</span>}
+            </span>
+          ) : (
+            <span class="small muted">No invoice yet — it is created when the shipment has a charge.</span>
+          )}
+        </div>
+
+        <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+          <Stat label="Billed" value={usd(fig.revenue)} sub={`${data.charges.length} charge line${data.charges.length === 1 ? '' : 's'}`} />
+          <Stat label="Received" value={usd(fig.received)} sub={paysIn.length ? `${paysIn.length} payment${paysIn.length === 1 ? '' : 's'} from the client` : 'Nothing received yet'} />
+          <Stat label={dueTile.label} value={dueTile.value} sub={dueTile.sub} tone={dueTile.tone} />
+          {admin && <Stat label="Cost" value={usd(fig.cost)} sub={`${data.costs.length} cost line${data.costs.length === 1 ? '' : 's'}`} />}
+          {admin && (
+            <Stat
+              label="Profit"
+              value={usd(fig.profit)}
+              sub={margin === null ? 'Billed minus cost' : `${margin}% of what was billed`}
+              tone={fig.profit > 0 ? 'pos' : fig.profit < 0 ? 'neg' : ''}
+            />
+          )}
+        </div>
+
+        <div class="o-grid-2">
+          <div class="o-card">
+            <div class="o-card-head"><h2>Shipment</h2></div>
+            <dl class="o-kv">
+              <dt>Section</dt>
+              <dd>{SERVICES[s.service]?.label ?? s.service}</dd>
+              <dt>Client</dt>
+              <dd>
+                {s.client_id ? <a href={`/office/parties/${s.client_id}`}>{s.client_name}</a> : '—'}
+                {clientBal && <div class="small muted">{balanceWords(clientBal.balance)}</div>}
+              </dd>
+              <dt>Ship date</dt>
+              <dd>{fmtDate(s.ship_date)}</dd>
+              <dt>Route</dt>
+              <dd>{routeText(s)}</dd>
+              <dt>Goods</dt>
+              <dd>{s.goods ?? '—'}</dd>
+              <dt>Pieces / cartons</dt>
+              <dd>{s.pieces === null ? '—' : fmtNum(s.pieces, 0)}</dd>
+              <dt>Weight</dt>
+              <dd>
+                {s.weight_kg === null ? '—' : `${fmtNum(s.weight_kg)} kg`}
+                {s.chargeable_kg !== null && s.chargeable_kg !== s.weight_kg && (
+                  <span class="muted"> · billed as {fmtNum(s.chargeable_kg)} kg</span>
+                )}
+              </dd>
+              <dt>CBM</dt>
+              <dd>{s.cbm === null ? '—' : fmtNum(s.cbm, 3)}</dd>
+              <dt>Airway bill</dt>
+              <dd>{s.awb_no ?? '—'}</dd>
+              <dt>Tracking no.</dt>
+              <dd>
+                {s.tracking_no ? (
+                  s.service === 'ups' ? (
+                    <a href={`https://www.ups.com/track?tracknum=${encodeURIComponent(s.tracking_no)}`} target="_blank" rel="noopener noreferrer">
+                      {s.tracking_no} ↗
+                    </a>
+                  ) : (
+                    s.tracking_no
+                  )
+                ) : (
+                  '—'
+                )}
+              </dd>
+              {s.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd style="white-space:pre-line">{s.notes}</dd>
+                </>
+              )}
+              <dt>Entered</dt>
+              <dd class="small">
+                {when(s.created_at)}{s.created_by_name ? ` by ${s.created_by_name}` : ''}
+                {new Date(s.updated_at).getTime() - new Date(s.created_at).getTime() > 1000 && <span class="muted"> · last changed {when(s.updated_at)}</span>}
+              </dd>
+            </dl>
+          </div>
+
+          <div class="o-stack">
+            <div class="o-card">
+              <div class="o-card-head"><h2>Money for this shipment</h2></div>
+              <div class="o-actions">
+                <a
+                  class="o-btn primary"
+                  href={`/office/payments/new?dir=in${s.client_id ? `&party=${s.client_id}` : ''}&shipment=${s.id}`}
+                >
+                  Record payment received
+                </a>
+                <a class="o-btn" href={`/office/payments/new?dir=out&shipment=${s.id}`}>Pay a partner for this shipment</a>
+              </div>
+              <p class="o-help" style="margin:10px 0 0">
+                Money the client pays for this shipment, or money we pay a truck owner, agent or airline for it.
+              </p>
+            </div>
+
+            <form method="post" class="o-card o-form">
+              <div class="o-card-head"><h2>Status</h2></div>
+              <input type="hidden" name="action" value="status" />
+              <div class="o-row" style="align-items:end">
+                <label class="o-field">
+                  <span>Where is it now?</span>
+                  <select name="status">
+                    {Object.entries(SHIPMENT_STATUS).map(([k, v]) => (
+                      <option value={k} selected={s.status === k}>{v}</option>
+                    ))}
+                  </select>
+                </label>
+                <div><button class="o-btn" type="submit">Change status</button></div>
+              </div>
+              {s.status === 'cancelled' && (
+                <p class="o-help" style="margin:0">
+                  A cancelled shipment still counts its charges and costs. If nothing will be billed or paid, edit it and remove those lines.
+                </p>
+              )}
+            </form>
+          </div>
+        </div>
+
+        <div class="o-card" style="margin-top:16px">
+          <div class="o-card-head">
+            <h2>Charges — billed to the client</h2>
+            <span class="o-actions">
+              {data.charges.length > 0 && <strong>{usd(fig.revenue)}</strong>}
+              <a class="small" href={`/office/shipments/${s.id}/edit`}>Change</a>
+            </span>
+          </div>
+          {data.charges.length === 0 ? (
+            <p class="o-empty">No charges yet. <a href={`/office/shipments/${s.id}/edit`}>Add what the client is billed</a> to create the invoice.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Rate</th>
+                    <th class="num">Amount</th>
+                    <th class="num">In US $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.charges.map((c) => (
+                    <tr>
+                      <td>{c.description}</td>
+                      <td class="num">
+                        {c.qty === null ? '—' : fmtNum(c.qty, 3)}
+                        {c.unit && c.unit !== 'fixed' && <span class="muted small"> {c.unit === 'pcs' ? 'pcs' : c.unit === 'cbm' ? 'CBM' : 'kg'}</span>}
+                      </td>
+                      <td class="num">{c.rate === null ? '—' : fmtMoney(c.rate, c.currency)}{c.unit && c.unit !== 'fixed' && <span class="muted small"> {CHARGE_UNITS[c.unit as keyof typeof CHARGE_UNITS] ?? ''}</span>}</td>
+                      <td class:list={['num', c.amount < 0 && 'neg']}>
+                        {fmtMoney(c.amount, c.currency)}
+                        {c.currency !== 'USD' && <div class="small muted">{fmtNum(c.per_usd, 6)} {c.currency} = $1</div>}
+                      </td>
+                      <td class:list={['num', c.usd < 0 && 'neg']}>{usd(c.usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="4">Total billed</td>
+                    <td class="num">{usd(fig.revenue)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div class="o-card">
+          <div class="o-card-head">
+            <h2>Costs — what it costs us</h2>
+            <span class="o-actions">
+              {admin && data.costs.length > 0 && <strong>{usd(fig.cost)}</strong>}
+              <a class="small" href={`/office/shipments/${s.id}/edit`}>Change</a>
+            </span>
+          </div>
+          {data.costs.length === 0 ? (
+            <p class="o-empty">No costs entered yet.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead>
+                  <tr>
+                    <th>For</th>
+                    <th>Paid to</th>
+                    <th class="num">Qty</th>
+                    <th class="num">Rate</th>
+                    <th class="num">Amount</th>
+                    <th class="num">In US $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.costs.map((c) => (
+                    <tr>
+                      <td>
+                        {COST_CATEGORIES[c.category as keyof typeof COST_CATEGORIES] ?? c.category}
+                        {c.description && <div class="small muted">{c.description}</div>}
+                      </td>
+                      <td>
+                        {c.payee_id ? (
+                          <>
+                            <a href={`/office/parties/${c.payee_id}`}>{c.payee_name}</a>
+                            <div class="small muted">{kindLabel(c.payee_kind ?? '')}</div>
+                          </>
+                        ) : (
+                          <span class="muted">Not chosen yet</span>
+                        )}
+                      </td>
+                      <td class="num">{c.qty === null ? '—' : fmtNum(c.qty, 3)}</td>
+                      <td class="num">{c.rate === null ? '—' : fmtMoney(c.rate, c.currency)}</td>
+                      <td class="num">
+                        {fmtMoney(c.amount, c.currency)}
+                        {c.currency !== 'USD' && <div class="small muted">{fmtNum(c.per_usd, 6)} {c.currency} = $1</div>}
+                      </td>
+                      <td class="num">{usd(c.usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {admin && (
+                  <tfoot>
+                    <tr>
+                      <td colspan="5">Total cost</td>
+                      <td class="num">{usd(fig.cost)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+          {data.costs.some((c) => !c.payee_id) && (
+            <p class="o-help" style="margin:10px 0 0">A cost with no "paid to" is not on anyone's balance — edit the shipment and choose who it is owed to.</p>
+          )}
+        </div>
+
+        <div class="o-card">
+          <div class="o-card-head">
+            <h2>Payments for this shipment</h2>
+            {paysIn.length > 0 && <span class="small">Received <strong>{usd(fig.received)}</strong></span>}
+          </div>
+          {payments.length === 0 ? (
+            <p class="o-empty">No payments linked to this shipment yet.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>What</th>
+                    <th>Who</th>
+                    <th class="num">Amount</th>
+                    <th class="num">In US $</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((p) => (
+                    <tr>
+                      <td style="white-space:nowrap"><a href={`/office/payments/${p.id}`}>{fmtDate(p.pay_date)}</a></td>
+                      <td>
+                        {p.direction === 'in' ? <span class="pos">Received</span> : <span>Paid out</span>}
+                        <div class="small muted">
+                          {METHODS[p.method as keyof typeof METHODS] ?? p.method} · {p.account_name}{p.reference ? ` · ${p.reference}` : ''}
+                        </div>
+                      </td>
+                      <td>
+                        <a href={`/office/parties/${p.party_id}`}>{p.party_name}</a>
+                        <div class="small muted">{kindLabel(p.party_kind)}</div>
+                      </td>
+                      <td class="num">{fmtMoney(p.amount, p.currency)}</td>
+                      <td class="num">{usd(p.usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="4">Received for this shipment</td>
+                    <td class="num">{usd(fig.received)}</td>
+                  </tr>
+                  {admin && paysOut.length > 0 && (
+                    <tr>
+                      <td colspan="4">Paid out to partners</td>
+                      <td class="num">{usd(sumUsd(paysOut))}</td>
+                    </tr>
+                  )}
+                </tfoot>
+              </table>
+            </div>
+          )}
+          {paysIn.some((p) => p.party_id !== s.client_id) && (
+            <p class="o-help" style="margin:10px 0 0">
+              Some money received for this shipment came from someone other than its client ({s.client_name ?? 'none'}); it counts on that payer's balance, not the client's.
+            </p>
+          )}
+        </div>
+
+        <div class="o-card">
+          <div class="o-card-head"><h2>History</h2></div>
+          {activity.length === 0 ? (
+            <p class="o-empty">Nothing recorded yet.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead>
+                  <tr>
+                    <th>When (Kabul time)</th>
+                    <th>Who</th>
+                    <th>What happened</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.map((a) => (
+                    <tr>
+                      <td class="small" style="white-space:nowrap">{when(a.at)}</td>
+                      <td>{a.user_name ?? '—'}</td>
+                      <td class="small">{a.summary ?? a.action}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {admin && (
+          <div class="o-card">
+            <div class="o-card-head"><h2>Delete this shipment</h2></div>
+            {payments.length > 0 ? (
+              <p class="muted" style="margin:0">
+                This shipment cannot be deleted while {payments.length} payment{payments.length === 1 ? ' is' : 's are'} linked to it — they are real money
+                records. Delete those payments or link them to another shipment first. To stop a shipment, set its status to Cancelled instead.
+              </p>
+            ) : (
+              <form method="post" onsubmit={`return confirm(${JSON.stringify(deleteMsg)})`} class="o-actions" style="justify-content:space-between">
+                <input type="hidden" name="action" value="delete" />
+                <span class="o-help">
+                  Only for a shipment entered by mistake. Its charges, costs{s.invoice_number ? ` and invoice ${s.invoice_number}` : ''} are deleted with it. Otherwise set it to Cancelled.
+                </span>
+                <button class="o-btn danger" type="submit">Delete shipment</button>
+              </form>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+</OfficeLayout>

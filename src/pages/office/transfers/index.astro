@@ -1,0 +1,119 @@
+---
+/**
+ * Transfers between our own accounts: what left, what arrived, and the fee
+ * (US dollars out − US dollars in). Filters, 50 a page, newest first.
+ * Staff see each transfer; the total of fees (a cost) is admin-only.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Pager from '../payments/_Pager.astro';
+import { guard, isAdmin } from '../../../lib/office/auth';
+import { fmtDate, usd, today } from '../../../lib/office/money';
+import { transferFilters, listTransfers, exportTransfers, listAccounts, accountLabel, pageParam, withParams, csvResponse, fmtAmount } from '../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const sp = Astro.url.searchParams;
+const f = transferFilters(sp);
+
+if (sp.get('format') === 'csv') {
+  const all = await exportTransfers(f);
+  return csvResponse(
+    `transfers-${today()}.csv`,
+    ['Date', 'From account', 'Amount out', 'Currency out', 'Rate out', 'USD out', 'To account', 'Amount in', 'Currency in', 'Rate in', 'USD in', 'Fee USD', 'Reference', 'Notes', 'Entered by', 'Transfer no.'],
+    all.map((r) => [r.tr_date, r.from_name, r.amount_out, r.from_currency, r.per_usd_out, r.usd_out, r.to_name, r.amount_in, r.to_currency, r.per_usd_in, r.usd_in, r.fee, r.reference, r.notes, r.created_by_name, r.id]),
+  );
+}
+
+const [list, accounts] = await Promise.all([listTransfers(f, pageParam(sp)), listAccounts()]);
+const filtered = !!(f.from || f.to || f.account || f.q);
+---
+
+<OfficeLayout title="Transfers" user={user} active="transfers">
+  <PageHead title="Transfers" sub="Money moved between our own accounts. What is lost on the way (in US dollars) is the transfer fee." crumbs={[{ label: 'Office', href: '/office' }]}>
+    <a class="o-btn primary" href="/office/transfers/new">New transfer</a>
+    <a class="o-btn" href={withParams(Astro.url, { format: 'csv', page: null })} data-astro-prefetch="false" download>Download CSV</a>
+  </PageHead>
+  <Flash />
+
+  <form method="get" class="o-filters" role="search">
+    <label class="o-field"><span>From date</span><input type="date" name="from" value={f.from ?? ''} /></label>
+    <label class="o-field"><span>To date</span><input type="date" name="to" value={f.to ?? ''} /></label>
+    <label class="o-field">
+      <span>Account (either side)</span>
+      <select name="account">
+        <option value="">All accounts</option>
+        {accounts.map((a) => <option value={a.id} selected={a.id === f.account}>{accountLabel(a)}</option>)}
+      </select>
+    </label>
+    <label class="o-field" style="min-width:230px"><span>Search reference</span><input type="search" name="q" value={f.q ?? ''} placeholder="Hawala code, notes" maxlength="80" /></label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {filtered && <a class="o-btn ghost" href="/office/transfers">Clear filters</a>}
+    </div>
+  </form>
+
+  <div class="o-table-wrap">
+    <table class="o-table" style="min-width:860px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>From</th>
+          <th>To</th>
+          <th class="num">Amount out</th>
+          <th class="num">Amount in</th>
+          <th class="num">Fee (US$)</th>
+          <th>Reference</th>
+          <th>Entered by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          list.rows.length === 0 && (
+            <tr>
+              <td colspan="8" class="o-empty">
+                {filtered ? 'No transfers match these filters.' : 'No transfers recorded yet.'}
+                <div style="margin-top:10px"><a class="o-btn sm" href="/office/transfers/new">New transfer</a></div>
+              </td>
+            </tr>
+          )
+        }
+        {
+          list.rows.map((r) => (
+            <tr>
+              <td style="white-space:nowrap"><a href={`/office/transfers/${r.id}`} title="Open this transfer">{fmtDate(r.tr_date)}</a></td>
+              <td><a href={`/office/accounts/${r.from_account}`} style="color:inherit">{r.from_name}</a></td>
+              <td><a href={`/office/accounts/${r.to_account}`} style="color:inherit">{r.to_name}</a></td>
+              <td class="num">{fmtAmount(r.amount_out, r.from_currency)}</td>
+              <td class="num">{fmtAmount(r.amount_in, r.to_currency)}</td>
+              <td class:list={['num', r.fee < 0 && 'pos']}>{usd(r.fee)}</td>
+              <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
+              <td class="small muted">{r.created_by_name ?? '—'}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        list.count > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="5">
+                {list.count} transfer{list.count === 1 ? '' : 's'}
+                {list.pages > 1 ? ' (all pages)' : ''}
+                {admin ? ' · total fees' : ''}
+              </td>
+              <td class="num">{admin ? usd(list.totalFee) : ''}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  <Pager page={list.page} pages={list.pages} count={list.count} noun="transfers" />
+  <p class="o-help">Fee = US dollars that left minus US dollars that arrived, using the rate entered on each side. A negative fee (green) means more arrived than left at those rates.</p>
+</OfficeLayout>

@@ -17,7 +17,7 @@
 import { q, one, tx, type Runner } from './db';
 import { logActivity } from './activity';
 import { nextShipmentRef } from './settings';
-import { ensureInvoice, invoiceStatus, type InvoiceStatus } from './invoices';
+import { ensureInvoice, invoiceStatus, INVOICE_STATUS_LABEL, type InvoiceStatus } from './invoices';
 import { shipmentFigures, type ShipmentFigures } from './ledger';
 import { round2, toUsd, usd, fmtNum, rateMap } from './money';
 import { parseNum, rows as formRows } from './form';
@@ -26,12 +26,23 @@ import {
   SHIPMENT_STATUS,
   COST_CATEGORIES,
   PARTY_KINDS,
-  isService,
   type ServiceKey,
   type ShipmentStatus,
   type CostCategory,
   type PartyKind,
 } from './services';
+
+/**
+ * Is `k` one of this object's OWN keys? (`'toString' in SHIPMENT_STATUS` is
+ * true for every object, so a plain `in` lets ?status=toString through.)
+ */
+export function isKey<T extends object>(obj: T, k: unknown): k is keyof T {
+  return typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k);
+}
+/** Like services.ts isService(), but safe against inherited names (?service=toString). */
+export function isServiceKey(s: unknown): s is ServiceKey {
+  return isKey(SERVICES, s);
+}
 
 /** A problem the person can fix (shown on the form), as opposed to a crash. */
 export class ShipmentError extends Error {}
@@ -76,7 +87,7 @@ const CATEGORY_KIND: Record<CostCategory, PartyKind> = {
   other: 'other',
 };
 export function defaultPayeeKind(category: string): PartyKind {
-  return CATEGORY_KIND[category as CostCategory] ?? 'other';
+  return isKey(CATEGORY_KIND, category) ? CATEGORY_KIND[category] : 'other';
 }
 
 /** JSON for the form's script: category → default payee kind. */
@@ -269,7 +280,12 @@ export interface ShipmentFilters {
   q: string | null;
 }
 
-const isDate = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s));
+/** A real calendar day as YYYY-MM-DD. (Date.parse alone accepts 2026-02-30 and rolls it into March.) */
+const isDate = (s: string | null): s is string => {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
 
 export function filtersFromParams(p: URLSearchParams): ShipmentFilters {
   const service = p.get('service');
@@ -278,8 +294,8 @@ export function filtersFromParams(p: URLSearchParams): ShipmentFilters {
   const to = p.get('to');
   const text = (p.get('q') ?? '').trim().slice(0, 100);
   return {
-    service: isService(service) ? service : null,
-    status: status && status in SHIPMENT_STATUS ? (status as ShipmentStatus) : null,
+    service: isServiceKey(service) ? service : null,
+    status: isKey(SHIPMENT_STATUS, status) ? status : null,
     client: parseId(p.get('client')),
     from: isDate(from) ? from : null,
     to: isDate(to) ? to : null,
@@ -459,14 +475,14 @@ export function shipmentsCsv(list: ShipmentList): string {
         csvCell(r.fig.cost.toFixed(2), false),
         csvCell(r.fig.profit.toFixed(2), false),
         csvCell(r.invoice_number),
-        csvCell(r.invoice_status),
+        csvCell(r.invoice_status ? INVOICE_STATUS_LABEL[r.invoice_status] : ''),
       ].join(','),
     );
   }
   const t = list.totals;
   lines.push(
     [
-      csvCell(`Total (${t.count} shipments)`), '', '', '', '', '', '', '', '', csvCell(t.kg, false), csvCell(t.cbm, false), '', '', '',
+      csvCell(`Total (${t.count} shipment${t.count === 1 ? '' : 's'})`), '', '', '', '', '', '', '', '', csvCell(t.kg || '', false), csvCell(t.cbm || '', false), '', '', '',
       t.revenue.toFixed(2), t.received.toFixed(2), t.due.toFixed(2), t.cost.toFixed(2), t.profit.toFixed(2), '', '',
     ].join(','),
   );
@@ -593,12 +609,14 @@ const numStr = (n: number | null | undefined) => (n === null || n === undefined 
 
 /** The edit form, filled from a saved shipment. */
 export function formFromShipment(s: Shipment, charges: ChargeLine[], costs: CostLine[]): FormState {
+  // Cost lines have no unit, so a cost line "follows" the kg / CBM fields on
+  // the form only when its quantity is exactly that figure (e.g. the airport
+  // partner's per-kg line). A fixed line (qty 1) never follows anything.
   const kgSrc = s.chargeable_kg ?? s.weight_kg;
   const follows = (qty: number | null): string => {
-    if (qty === null) return '';
+    if (qty === null || qty === 1) return '';
     if (kgSrc !== null && qty === kgSrc) return 'kg';
     if (s.cbm !== null && qty === s.cbm) return 'cbm';
-    if (s.pieces !== null && qty === s.pieces) return 'pcs';
     return '';
   };
   return {
@@ -735,7 +753,7 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
   const warnings: string[] = [];
   const skipped: string[] = [];
 
-  const service = isService(form.service) ? form.service : null;
+  const service = isServiceKey(form.service) ? form.service : null;
   if (!service) errors.push('Choose which section this shipment belongs to.');
 
   let ship_date: string | null = null;
@@ -744,7 +762,7 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
     errors.push(`"${form.ship_date}" is not a valid ship date.`);
   else ship_date = form.ship_date;
 
-  const status = form.status in SHIPMENT_STATUS ? (form.status as ShipmentStatus) : null;
+  const status = isKey(SHIPMENT_STATUS, form.status) ? form.status : null;
   if (!status) errors.push('Choose a status.');
 
   // Client: one from the list, or a new name — not both, not neither.
@@ -817,7 +835,7 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
           payeeIds.add(pid);
         } else if (newName) {
           if (newName.length < 2) errors.push(`${named}: the new payee's name is too short.`);
-          const k = PAYEE_KINDS.includes(l.new_payee_kind as PartyKind) ? (l.new_payee_kind as PartyKind) : defaultPayeeKind(l.category);
+          const k = (PAYEE_KINDS as string[]).includes(l.new_payee_kind) ? (l.new_payee_kind as PartyKind) : defaultPayeeKind(l.category);
           payee = { name: newName, kind: k, phone: null };
         } else if (l.payee_id === '__new') errors.push(`${named}: type the new payee's name.`);
       }
@@ -828,8 +846,14 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
         return;
       }
 
+      // Amount left empty → qty × rate. A fixed-sum line with only a rate counts as 1 of it.
+      const per = kind === 'charge' ? (isKey(CHARGE_UNITS, l.unit) ? l.unit : 'fixed') : l.per === 'kg' || l.per === 'cbm' ? l.per : 'fixed';
+      let qtyUsed = qty;
       if (amount === null && errors.length === before) {
-        if (qty !== null && rate !== null) amount = round2(qty * rate);
+        if (qtyUsed === null && rate !== null && per === 'fixed') qtyUsed = 1;
+        if (qtyUsed !== null && rate !== null) amount = round2(qtyUsed * rate);
+        else if (rate !== null)
+          errors.push(`${named}: enter the quantity (${per === 'cbm' ? 'CBM' : per === 'pcs' ? 'pieces' : 'kg'}) or the amount.`);
         else errors.push(`${named}: enter the amount, or both the quantity and the rate.`);
       }
       if (qty !== null && qty < 0) errors.push(`${named}: the quantity cannot be negative.`);
@@ -842,14 +866,14 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
         if (amount !== null && amount < 0 && !/discount/i.test(description ?? ''))
           errors.push(`${named}: a charge can only be negative if it is a discount — put the word "Discount" in its description.`);
       } else {
-        if (!(l.category in COST_CATEGORIES)) errors.push(`${named}: choose what the cost is for.`);
+        if (!isKey(COST_CATEGORIES, l.category)) errors.push(`${named}: choose what the cost is for.`);
         if ((amount !== null && amount < 0) || (rate !== null && rate < 0))
           errors.push(`${named}: a cost cannot be negative. If a partner gave money back, record it as a payment received from them.`);
       }
 
       const currency = l.currency.toUpperCase();
       let per_usd: number | null = null;
-      if (!(currency in rates)) errors.push(`${named}: the currency "${l.currency}" is not set up. Add it under Settings first.`);
+      if (!isKey(rates, currency)) errors.push(`${named}: the currency "${l.currency}" is not set up. An admin can add it under Settings.`);
       else if (currency === 'USD') per_usd = 1; // a dollar is always a dollar
       else {
         per_usd = l.per_usd === '' ? rates[currency] : parseNum(l.per_usd);
@@ -867,8 +891,8 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
       amount = round2(amount);
       out.push({
         description,
-        qty,
-        unit: kind === 'charge' ? (l.unit in CHARGE_UNITS ? l.unit : 'fixed') : null,
+        qty: qtyUsed,
+        unit: kind === 'charge' ? (isKey(CHARGE_UNITS, l.unit) ? l.unit : 'fixed') : null,
         rate,
         amount,
         currency,
@@ -919,6 +943,39 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
 /* ------------------------------------------------------------------ */
 /* Writing                                                             */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Every shipment write goes through here, for two reasons found in testing:
+ *
+ *  1. One at a time per server process. The foundation's nextShipmentRef()
+ *     and ensureInvoice() read the settings on a SECOND pool connection while
+ *     this transaction holds the first. The pool has only 3, so three saves at
+ *     once could each hold one and wait for another forever — and freeze the
+ *     whole office. Queued here, a save needs at most 2 connections.
+ *  2. lock_timeout: if the shipment-number counter stays locked (another save
+ *     stuck elsewhere), give up after 15 s with a clear message, not a hang.
+ */
+let writeQueue: Promise<unknown> = Promise.resolve();
+const BUSY = 'Saving took too long because another save was still holding the shipment numbers. Nothing was saved — please press Save again in a minute. If it keeps happening, tell the admin.';
+
+async function shipmentTx<T>(fn: (t: Runner) => Promise<T>): Promise<T> {
+  const run = writeQueue.then(() =>
+    tx(async (t) => {
+      await q("SET LOCAL lock_timeout = '15s'", [], t);
+      return fn(t);
+    }),
+  );
+  writeQueue = run.catch(() => undefined);
+  try {
+    return await run;
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code === '55P03' || code === '57014') throw new ShipmentError(BUSY); // lock_not_available, query_canceled
+    if (code === '23503')
+      throw new ShipmentError('A client, payee or currency on this form was removed by someone else a moment ago, so nothing was saved. Check the form and save again.');
+    throw e;
+  }
+}
 
 async function createParty(p: { name: string; kind: PartyKind; phone: string | null }, userId: number, t: Runner): Promise<number> {
   const dup = await one<{ id: number; kind: string }>(
@@ -991,7 +1048,7 @@ const sumUsd = (lines: { usd: number }[]) => round2(lines.reduce((a, l) => a + l
  * activity log, so nothing is ever half saved.
  */
 export async function saveShipment(d: ParsedShipment, userId: number, existingId?: number): Promise<SaveResult> {
-  return tx(async (t) => {
+  return shipmentTx(async (t) => {
     const notes: string[] = [];
     let prev: { id: number; ref: string; client_id: number | null; client_name: string | null; status: string; version: string; billed: number } | null = null;
     if (existingId) {
@@ -1086,8 +1143,9 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
           t,
         );
         if (paid && paid.n > 0) {
+          const old = prev.client_name ?? 'the old client';
           notes.push(
-            `Note: ${paid.n} payment${paid.n === 1 ? '' : 's'} received for this shipment (${usd(paid.usd)}) ${paid.n === 1 ? 'is' : 'are'} still recorded as paid by ${prev.client_name ?? 'the old client'}, so ${prev.client_name ?? 'they'} now show${paid.n === 1 ? 's' : ''} that much in credit. If ${clientName} made ${paid.n === 1 ? 'that payment' : 'those payments'}, change the payer on the payment${paid.n === 1 ? '' : 's'} too.`,
+            `Please check: ${usd(paid.usd)} already received for this shipment (${paid.n} payment${paid.n === 1 ? '' : 's'}) is still recorded as paid by ${old}, so ${old}'s balance now shows it as money we owe them. If ${clientName} paid it, open ${paid.n === 1 ? 'that payment' : 'those payments'} and change who paid.`,
           );
         }
       }
@@ -1130,7 +1188,7 @@ export async function submitShipment(
 
 /** Quick status change from the shipment page. */
 export async function setShipmentStatus(id: number, status: ShipmentStatus, userId: number): Promise<string> {
-  return tx(async (t) => {
+  return shipmentTx(async (t) => {
     const s = await one<{ ref: string; status: ShipmentStatus }>('SELECT ref, status FROM office_shipments WHERE id = $1 FOR UPDATE', [id], t);
     if (!s) throw new ShipmentError('This shipment no longer exists.');
     if (s.status === status) return `${s.ref} is already "${SHIPMENT_STATUS[status]}".`;
@@ -1146,7 +1204,7 @@ export async function setShipmentStatus(id: number, status: ShipmentStatus, user
  * movements and must be dealt with first.
  */
 export async function deleteShipment(id: number, userId: number): Promise<string> {
-  return tx(async (t) => {
+  return shipmentTx(async (t) => {
     const s = await one<{ ref: string; client_name: string | null; invoice: string | null }>(
       `SELECT s.ref, p.name AS client_name, i.number AS invoice
          FROM office_shipments s
