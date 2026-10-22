@@ -1,0 +1,236 @@
+---
+/**
+ * Every invoice, newest first, 50 a page. An invoice is made automatically
+ * for each shipment once it has a charge; its amount is the shipment's
+ * charges and its payment status comes from the ledger (billed − received,
+ * and the due date). Filter by status, client, section, invoice date, or
+ * search the invoice number, shipment ref or client name. Totals cover every
+ * invoice the filters match. CSV of the same list (no cost or profit in it,
+ * so staff may download it too).
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import { guard } from '../../../lib/office/auth';
+import { usd, fmtDate, fmtNum, today } from '../../../lib/office/money';
+import { SERVICES, SERVICE_KEYS } from '../../../lib/office/services';
+import { INVOICE_STATUS_LABEL } from '../../../lib/office/invoices';
+import {
+  INVOICE_FILTER_STATUS,
+  invoiceFilters,
+  invoiceFiltersQuery,
+  hasInvoiceFilters,
+  listInvoices,
+  invoiceClients,
+  pageParam,
+  serviceShort,
+  csvResponse,
+  csvUsd,
+} from '../../../lib/office/insights';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+const todayStr = today();
+const f = invoiceFilters(Astro.url.searchParams);
+
+if (Astro.url.searchParams.get('format') === 'csv') {
+  const all = await listInvoices(f, null, todayStr);
+  const rows: unknown[][] = [
+    ['Invoice', 'Issue date', 'Due date', 'Client', 'Shipment', 'Section', 'Billed USD', 'Received USD', 'Due USD', 'Status', 'Days overdue'],
+    ...all.rows.map((r) => [
+      r.number,
+      r.issue_date,
+      r.due_date ?? '',
+      r.client_name ?? '',
+      r.ref,
+      serviceShort(r.service),
+      csvUsd(r.fig.revenue),
+      csvUsd(r.fig.received),
+      csvUsd(r.fig.due),
+      INVOICE_STATUS_LABEL[r.status],
+      r.days_overdue ?? '',
+    ]),
+    [`Total (${all.totals.count} invoices)`, '', '', '', '', '', csvUsd(all.totals.revenue), csvUsd(all.totals.received), csvUsd(all.totals.due), '', ''],
+  ];
+  return csvResponse(`invoices-${todayStr}.csv`, rows);
+}
+
+const [list, clients, openAll] = await Promise.all([
+  listInvoices(f, pageParam(Astro.url.searchParams), todayStr),
+  invoiceClients(),
+  listInvoices({ status: 'open', client: null, service: null, from: null, to: null, q: null }, null, todayStr),
+]);
+const overdueAll = openAll.rows.filter((r) => r.status === 'overdue');
+const overdueDue = Math.round(overdueAll.reduce((a, r) => a + r.fig.due, 0) * 100) / 100;
+const filtered = hasInvoiceFilters(f);
+const t = list.totals;
+const firstRow = (list.page - 1) * list.perPage + 1;
+const lastRow = firstRow + list.rows.length - 1;
+const pageLink = (n: number) => `/office/invoices${invoiceFiltersQuery(f, n > 1 ? { page: n } : {})}`;
+const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
+---
+
+<OfficeLayout title="Invoices" user={user} active="invoices" wide>
+  <PageHead
+    title="Invoices"
+    sub="One invoice per shipment, made automatically once the shipment has a charge. Paid, part paid or overdue comes from the money actually received."
+    crumbs={[{ label: 'Office', href: '/office' }]}
+  >
+    <a class="o-btn" href={`/office/invoices${invoiceFiltersQuery(f, { format: 'csv' })}`} data-astro-prefetch="false">Download CSV</a>
+    <a class="o-btn primary" href="/office/payments/new?dir=in">Record payment</a>
+  </PageHead>
+  <Flash />
+
+  <div class="o-stats" style={TILES}>
+    <Stat label="Not fully paid" value={fmtNum(openAll.totals.count, 0)} sub="Invoices, all dates" href="/office/invoices?status=open" />
+    <Stat label="Still to collect" value={usd(openAll.totals.due)} sub="On those invoices" href="/office/invoices?status=open" />
+    <Stat
+      label="Overdue"
+      value={usd(overdueDue)}
+      sub={`${overdueAll.length} invoice${overdueAll.length === 1 ? '' : 's'} past the due date`}
+      tone={overdueDue > 0 ? 'neg' : ''}
+      href="/office/invoices?status=overdue"
+    />
+  </div>
+
+  <form method="get" class="o-filters" action="/office/invoices">
+    <label class="o-field" style="flex:2;min-width:200px">
+      <span>Search</span>
+      <input type="search" name="q" value={f.q ?? ''} placeholder="Invoice no., shipment ref, client…" />
+    </label>
+    <label class="o-field">
+      <span>Status</span>
+      <select name="status">
+        <option value="">Any status</option>
+        {Object.entries(INVOICE_FILTER_STATUS).map(([k, v]) => <option value={k} selected={f.status === k}>{v}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Client</span>
+      <select name="client">
+        <option value="">All clients</option>
+        {clients.map((c) => <option value={String(c.id)} selected={f.client === c.id}>{c.name}{c.city ? ` — ${c.city}` : ''}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Section</span>
+      <select name="service">
+        <option value="">All sections</option>
+        {SERVICE_KEYS.map((k) => <option value={k} selected={f.service === k}>{SERVICES[k].short}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Invoice date from</span>
+      <input type="date" name="from" value={f.from ?? ''} />
+    </label>
+    <label class="o-field">
+      <span>to</span>
+      <input type="date" name="to" value={f.to ?? ''} />
+    </label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {filtered && <a class="o-btn ghost" href="/office/invoices">Clear filters</a>}
+    </div>
+  </form>
+
+  <div class="o-table-wrap">
+    <table class="o-table">
+      <thead>
+        <tr>
+          <th>Invoice</th>
+          <th>Issued</th>
+          <th>Due date</th>
+          <th>Client</th>
+          <th>Shipment</th>
+          <th class="num">Billed</th>
+          <th class="num">Received</th>
+          <th class="num">Still due</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          list.rows.length === 0 && (
+            <tr>
+              <td colspan="9" class="o-empty">
+                {filtered ? (
+                  <>No invoices match these filters. <a href="/office/invoices">Show all invoices</a></>
+                ) : (
+                  <>No invoices yet. An invoice appears here as soon as a shipment has a charge.</>
+                )}
+              </td>
+            </tr>
+          )
+        }
+        {
+          list.rows.map((r) => (
+            <tr>
+              <td style="white-space:nowrap">
+                <a href={`/office/invoices/${r.id}`} data-astro-prefetch="false"><strong>{r.number}</strong></a>
+              </td>
+              <td style="white-space:nowrap">{fmtDate(r.issue_date)}</td>
+              <td style="white-space:nowrap">
+                {r.due_date ? fmtDate(r.due_date) : <span class="muted">—</span>}
+                {r.days_overdue !== null && <div class="small neg">{r.days_overdue} day{r.days_overdue === 1 ? '' : 's'} late</div>}
+              </td>
+              <td style="min-width:130px">
+                {r.client_id ? <a href={`/office/parties/${r.client_id}`} data-astro-prefetch="false">{r.client_name}</a> : <span class="muted">No client</span>}
+              </td>
+              <td style="white-space:nowrap">
+                <a href={`/office/shipments/${r.shipment_id}`} data-astro-prefetch="false">{r.ref}</a>
+                <div class="small muted">{serviceShort(r.service)}</div>
+              </td>
+              <td class="num">{usd(r.fig.revenue)}</td>
+              <td class="num">{r.fig.received ? usd(r.fig.received) : <span class="muted">{usd(0)}</span>}</td>
+              <td class="num">
+                {r.fig.due > 0 ? <strong>{usd(r.fig.due)}</strong> : r.fig.due < 0 ? <span class="small">Overpaid {usd(-r.fig.due)}</span> : <span class="muted">{usd(0)}</span>}
+              </td>
+              <td><span class:list={['o-badge', r.status]}>{INVOICE_STATUS_LABEL[r.status]}</span></td>
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        t.count > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="5">
+                {list.pages > 1 ? `Total of all ${fmtNum(t.count, 0)} invoices` : `Total (${fmtNum(t.count, 0)} invoice${t.count === 1 ? '' : 's'})`}
+              </td>
+              <td class="num">{usd(t.revenue)}</td>
+              <td class="num">{usd(t.received)}</td>
+              <td class="num">{usd(t.due)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+  {
+    list.pages > 1 && (
+      <div class="o-actions" style="margin-top:12px;justify-content:space-between">
+        <span class="small muted">
+          Showing {fmtNum(firstRow, 0)}–{fmtNum(lastRow, 0)} of {fmtNum(t.count, 0)} · page {list.page} of {list.pages}
+        </span>
+        <span class="o-actions">
+          {list.page > 1 && <a class="o-btn sm" href={pageLink(list.page - 1)} data-astro-prefetch="false">← Newer</a>}
+          {list.page < list.pages && <a class="o-btn sm" href={pageLink(list.page + 1)} data-astro-prefetch="false">Older →</a>}
+        </span>
+      </div>
+    )
+  }
+  {t.due < 0 && <p class="small muted">The “still due” total is less than zero because some clients paid more than they were billed.</p>}
+</OfficeLayout>
+
+<style>
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>

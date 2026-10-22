@@ -1,0 +1,685 @@
+---
+/**
+ * One client or partner: who they are, their balance in words (ledger.ts
+ * partyBalance), and tabs —
+ *   ?tab=statement  every bill and payment with a running balance
+ *                   (ledger.ts partyStatement), ?from=&to=, CSV with ?format=csv
+ *   ?tab=shipments  shipments where they are the client (ledger.ts shipmentFigures)
+ *   ?tab=payments   money received from / paid to them
+ *   ?tab=costs      cost lines where they are the payee (their bills to us)
+ *   ?tab=history    who changed their details
+ *
+ * POST actions: set_active (mark inactive / active again — anyone, as on the
+ * edit form), delete (admin only, refused while any record points at them).
+ * Staff never see profit or the delete panel.
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import Stat from '../../../../components/office/Stat.astro';
+import Pager from '../_Pager.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { recentActivity } from '../../../../lib/office/activity';
+import { str, withMsg } from '../../../../lib/office/form';
+import { partyBalance } from '../../../../lib/office/ledger';
+import { usd, fmtMoney, fmtDate, fmtNum, today, METHODS } from '../../../../lib/office/money';
+import { SERVICES, SERVICE_KEYS, SHIPMENT_STATUS, type ShipmentStatus } from '../../../../lib/office/services';
+import {
+  PAGE_SIZE,
+  idParam,
+  pageParam,
+  withParams,
+  csvResponse,
+  getParty,
+  modeOf,
+  kindLabel,
+  listHref,
+  navId,
+  phoneLinks,
+  balanceWords,
+  balanceHeadline,
+  balanceExplained,
+  statementView,
+  statementHeads,
+  statementRange,
+  quickRanges,
+  clientShipments,
+  payeeCostLines,
+  costCategoryLabel,
+  partyPayments,
+  partyCounts,
+  partyExpenseTotal,
+  partyReferences,
+  joinWords,
+  deleteParty,
+  setPartyActive,
+} from '../../../../lib/office/parties';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+let error: string | null = null;
+
+if (id && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked. Reload the page and try again.';
+  else {
+    const fd = await Astro.request.formData();
+    const action = str(fd, 'action');
+    if (action === 'delete') {
+      if (!admin) error = 'Only an admin can delete a client or partner.';
+      else {
+        const r = await deleteParty(id, user.id);
+        if (r.ok) return Astro.redirect(withMsg(listHref(r.kind), `${r.name} deleted.`), 303);
+        error = r.error;
+      }
+    } else if (action === 'set_active') {
+      const active = fd.get('active') === '1';
+      const name = await setPartyActive(id, active, user.id);
+      if (name === null) error = 'That client or partner was not found — it may have been deleted.';
+      else
+        return Astro.redirect(
+          withMsg(`/office/parties/${id}`, active ? `${name} is active again.` : `${name} marked inactive. Their records and balance are kept.`),
+          303,
+        );
+    } else error = 'Nothing to do — unknown action.';
+  }
+}
+
+const party = id ? await getParty(id) : null;
+const bal = party ? await partyBalance(party.id) : null;
+if (!party || !bal) Astro.response.status = 404;
+
+const sp = Astro.url.searchParams;
+const mode = party ? modeOf(party.kind) : 'client';
+const isClient = mode === 'client';
+const counts = party ? await partyCounts(party.id) : { shipments: 0, costs: 0, payments: 0 };
+const expenses = party ? await partyExpenseTotal(party.id) : { n: 0, usd: 0 };
+
+type Tab = 'statement' | 'shipments' | 'payments' | 'costs' | 'history';
+const tabs: { key: Tab; label: string }[] = [
+  { key: 'statement', label: 'Statement' },
+  ...(isClient || counts.shipments ? [{ key: 'shipments' as Tab, label: `Shipments (${counts.shipments})` }] : []),
+  { key: 'payments', label: `Payments (${counts.payments})` },
+  ...(!isClient || counts.costs ? [{ key: 'costs' as Tab, label: `Their bills to us (${counts.costs})` }] : []),
+  { key: 'history', label: 'History' },
+];
+const tabParam = sp.get('tab');
+const tab: Tab = tabs.find((t) => t.key === tabParam)?.key ?? 'statement';
+const tabHref = (t: Tab) => `/office/parties/${party?.id}${t === 'statement' ? '' : `?tab=${t}`}`;
+const page = pageParam(sp);
+const todayStr = today();
+
+/* ---------- statement ---------- */
+const range = statementRange(sp);
+const heads = statementHeads(mode);
+const st = party && tab === 'statement' ? await statementView(party.id, mode, range.from, range.to) : null;
+// With no end date the closing balance is today's balance — it must match the ledger's to the cent.
+const stMismatch = !!(st && bal && (!st.consistent || (!range.to && Math.round(st.closing * 100) !== Math.round(bal.balance * 100))));
+const words = (b: number) => balanceWords(b, mode);
+const periodText = range.from && range.to
+  ? `${fmtDate(range.from)} to ${fmtDate(range.to)}`
+  : range.from
+    ? `From ${fmtDate(range.from)} to today`
+    : range.to
+      ? `Everything up to ${fmtDate(range.to)}`
+      : 'Everything, from the start';
+const quick = quickRanges(todayStr);
+// Without an end date the closing covers every entry — including any dated after today.
+const lastLine = st && st.rows.length ? st.rows[st.rows.length - 1].date : null;
+const closingDate = range.to ?? (lastLine && lastLine > todayStr ? lastLine : todayStr);
+
+if (party && st && sp.get('format') === 'csv') {
+  return csvResponse(
+    `statement-${party.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}-${todayStr}.csv`,
+    ['Date', 'Shipment', 'What', 'Description', `${heads.bill} (USD)`, `${heads.pay} (USD)`, 'Original amount', 'Currency', 'Balance (USD, + they owe us, − we owe them)', 'Balance in words'],
+    [
+      [range.from ?? '', '', 'Opening balance', range.from ? `Everything before ${range.from}` : 'Start of account', '', '', '', '', st.opening, words(st.opening).text],
+      ...st.rows.map((r) => [r.date, r.ref, r.what, r.detail, r.bill, r.pay, r.amount, r.currency, r.balance, words(r.balance).text]),
+      [closingDate, '', 'Closing balance', '', st.totalBill, st.totalPay, '', '', st.closing, words(st.closing).text],
+    ],
+  );
+}
+
+/* ---------- other tabs ---------- */
+const ships = party && tab === 'shipments' ? await clientShipments(party.id) : [];
+const shipTotals = ships.reduce(
+  (a, s) => ({ revenue: a.revenue + s.fig.revenue, received: a.received + s.fig.received, due: a.due + s.fig.due, profit: a.profit + s.fig.profit }),
+  { revenue: 0, received: 0, due: 0, profit: 0 },
+);
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const costs = party && tab === 'costs' ? await payeeCostLines(party.id) : [];
+const costTotal = r2(costs.reduce((a, c) => a + c.usd, 0));
+const pays = party && tab === 'payments' ? await partyPayments(party.id) : [];
+const paidIn = r2(pays.filter((p) => p.direction === 'in').reduce((a, p) => a + p.usd, 0));
+const paidOut = r2(pays.filter((p) => p.direction === 'out').reduce((a, p) => a + p.usd, 0));
+const activity = party && tab === 'history' ? await recentActivity({ entity: 'party', entityId: party.id, limit: 100 }) : [];
+/** ?page= for a tab, never past its last page. */
+const pageOf = (count: number) => Math.min(page, Math.max(1, Math.ceil(count / PAGE_SIZE)));
+const slice = <T,>(list: T[]) => {
+  const p = pageOf(list.length);
+  return list.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE);
+};
+const refs = party && admin ? await partyReferences(party.id) : null;
+
+const when = (v: string) =>
+  new Date(v).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const headline = party && bal ? balanceHeadline(party.name, bal.balance, mode) : '';
+const headTone = bal ? (bal.balance < 0 ? 'neg' : bal.balance === 0 ? 'pos' : '') : '';
+const printHref = party ? `/office/parties/${party.id}/statement${range.from || range.to ? `?${new URLSearchParams({ ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}) })}` : ''}` : '';
+const phones = phoneLinks(party?.phone);
+const place = [party?.city, party?.country].filter(Boolean).join(', ');
+---
+
+<OfficeLayout title={party ? party.name : 'Not found'} user={user} active={party ? navId(party.kind) : 'clients'}>
+  {
+    !party || !bal ? (
+      <>
+        <PageHead title="Not found" crumbs={[{ label: 'Office', href: '/office' }, { label: 'Clients', href: '/office/parties?kind=client' }]} />
+        <Flash error={error} />
+        <div class="o-card o-empty">
+          <p>There is no client or partner with this number — they may have been deleted.</p>
+          <div class="o-actions" style="justify-content:center">
+            <a class="o-btn" href="/office/parties?kind=client">Clients</a>
+            <a class="o-btn" href="/office/parties?kind=partners">Agents & partners</a>
+          </div>
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={party.name}
+          sub={`${kindLabel(party.kind)}${place ? ` · ${place}` : ''}`}
+          crumbs={[
+            { label: 'Office', href: '/office' },
+            { label: isClient ? 'Clients' : 'Agents & partners', href: listHref(party.kind) },
+          ]}
+        >
+          {isClient ? (
+            <>
+              <a class="o-btn primary" href={`/office/payments/new?dir=in&party=${party.id}`}>Record payment received</a>
+              <a class="o-btn" href={`/office/payments/new?dir=out&party=${party.id}`}>Record payment made</a>
+            </>
+          ) : (
+            <>
+              <a class="o-btn primary" href={`/office/payments/new?dir=out&party=${party.id}`}>Record payment made</a>
+              <a class="o-btn" href={`/office/payments/new?dir=in&party=${party.id}`}>Record payment received</a>
+            </>
+          )}
+          <a class="o-btn" href={printHref} target="_blank" rel="noopener" data-astro-prefetch="false">Print statement</a>
+          <a class="o-btn" href={`/office/parties/${party.id}/edit`}>Edit</a>
+        </PageHead>
+        <Flash error={error} />
+
+        {!party.active && (
+          <div class="o-flash err" role="status" style="background:#f3f1f2;color:var(--o-muted);border-color:var(--o-line)">
+            <strong>Inactive.</strong> {party.name} is hidden from the lists and pick-lists. Every record and their balance are kept.{' '}
+            <form method="post" style="display:inline">
+              <input type="hidden" name="action" value="set_active" />
+              <input type="hidden" name="active" value="1" />
+              <button type="submit" class="o-btn sm" style="margin-left:6px">Mark active again</button>
+            </form>
+          </div>
+        )}
+
+        <div class="o-grid-2" style="margin-bottom:16px">
+          <div class="o-card">
+            <div class="small muted" style="font-weight:600;text-transform:uppercase;letter-spacing:.06em">Balance today</div>
+            <div class:list={[headTone]} style="font-family:var(--o-font-head);font-size:28px;font-weight:700;line-height:1.15;margin-top:4px">{headline}</div>
+            <p class="muted" style="margin:8px 0 0">{balanceExplained(bal)}</p>
+            {expenses.n > 0 && (
+              <p class="small muted" style="margin:8px 0 0">
+                We have also paid them {usd(expenses.usd)} as {expenses.n === 1 ? 'an office expense' : `${expenses.n} office expenses`} (rent, salary and the like). Those are paid on the spot, so they don't change the balance.{' '}
+                <a href={`/office/expenses?month=all&q=${encodeURIComponent(party.name)}`}>See {expenses.n === 1 ? 'it' : 'them'} →</a>
+              </p>
+            )}
+            {isClient && (
+              <form method="get" action="/office/shipments/new" class="o-actions" style="margin-top:14px">
+                <input type="hidden" name="client" value={party.id} />
+                <label class="o-field" style="flex:1 1 200px;max-width:320px">
+                  <span>New shipment for {party.name}</span>
+                  <select name="service" required>
+                    <option value="">Choose the section…</option>
+                    {SERVICE_KEYS.map((k) => (
+                      <option value={k}>{SERVICES[k].short} — {SERVICES[k].label}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" class="o-btn" style="align-self:flex-end">New shipment</button>
+              </form>
+            )}
+          </div>
+          <div class="o-card">
+            <div class="o-card-head"><h2>Details</h2></div>
+            <dl class="o-kv">
+              <dt>Kind</dt>
+              <dd>{kindLabel(party.kind)}{!party.active && <span class="o-badge" style="margin-left:6px">Inactive</span>}</dd>
+              <dt>Phone</dt>
+              <dd>
+                {phones.length ? phones.map((p, i) => (<>{i > 0 && ' / '}<a href={p.href}>{p.text}</a></>)) : party.phone ? party.phone : <span class="muted">—</span>}
+              </dd>
+              <dt>City</dt>
+              <dd>{party.city ?? <span class="muted">—</span>}</dd>
+              <dt>Country</dt>
+              <dd>{party.country ?? <span class="muted">—</span>}</dd>
+              {party.notes && (
+                <>
+                  <dt>Notes</dt>
+                  <dd style="white-space:pre-line">{party.notes}</dd>
+                </>
+              )}
+              <dt>Added</dt>
+              <dd class="small">{when(party.created_at)}{party.created_by_name ? ` by ${party.created_by_name}` : ''}</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+          <Stat label="Billed to them" value={usd(bal.billed)} sub="For their shipments" />
+          <Stat label="Received from them" value={usd(bal.received)} sub="Money they paid us" />
+          <Stat label="Their bills to us" value={usd(bal.owed_to_them)} sub="Their charges on our shipments" />
+          <Stat label="Paid to them" value={usd(bal.paid_to_them)} sub="Money we paid them" />
+        </div>
+
+        <nav class="o-tabs" aria-label="Sections">
+          {tabs.map((t) => (
+            <a href={tabHref(t.key)} class:list={[tab === t.key && 'active']} aria-current={tab === t.key ? 'page' : undefined}>{t.label}</a>
+          ))}
+        </nav>
+
+        {tab === 'statement' && st && (
+          <>
+            <form method="get" class="o-filters">
+              <label class="o-field"><span>From date</span><input type="date" name="from" value={range.from ?? ''} /></label>
+              <label class="o-field"><span>To date</span><input type="date" name="to" value={range.to ?? ''} /></label>
+              <div class="o-actions">
+                <button class="o-btn primary" type="submit">Show</button>
+                {(range.from || range.to) && <a class="o-btn ghost" href={`/office/parties/${party.id}`}>Everything</a>}
+              </div>
+              <div class="o-actions small" style="padding-bottom:10px">
+                <span class="muted">Quick:</span>
+                {quick.map((r) => (
+                  <a href={`/office/parties/${party.id}?from=${r.from}&to=${r.to}`} style={range.from === r.from && range.to === r.to ? 'font-weight:700' : undefined}>{r.label}</a>
+                ))}
+              </div>
+            </form>
+
+            {stMismatch && (
+              <div class="o-flash err" role="alert">
+                Warning: this statement does not add up to {party.name}'s balance ({words(bal.balance).text}). Please tell the admin — something is wrong with the records.
+              </div>
+            )}
+
+            <div class="o-card" style="padding-bottom:0">
+              <div class="o-card-head" style="flex-wrap:wrap">
+                <h2>Statement <span class="muted small" style="font-family:var(--o-font);font-weight:500">· {periodText}</span></h2>
+                <span class="o-actions">
+                  <a class="o-btn sm" href={printHref} target="_blank" rel="noopener" data-astro-prefetch="false">Print</a>
+                  <a class="o-btn sm" href={withParams(Astro.url, { format: 'csv', tab: null, page: null })} data-astro-prefetch="false" download>Download CSV</a>
+                </span>
+              </div>
+              <p class="o-help" style="margin:-4px 0 12px">
+                {isClient
+                  ? '“Billed” is what we charged them for shipments; “They paid” is money they gave us. The balance after each line says who owes whom.'
+                  : '“We owe them” is what they charged us for work on our shipments; “Paid” is money we gave them. The balance after each line says who owes whom.'}
+                {' '}Amounts are in US dollars; a figure entered in another currency shows it underneath.
+              </p>
+              <div class="o-table-wrap">
+                <table class="o-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th class="num">{heads.bill}</th>
+                      <th class="num">{heads.pay}</th>
+                      <th class="num">Balance after</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="white-space:nowrap">{range.from ? fmtDate(range.from) : <span class="muted">Start</span>}</td>
+                      <td style="min-width:110px">
+                        <strong>Opening balance</strong>
+                        <div class="small muted">{range.from ? `Everything before ${fmtDate(range.from)}` : 'Before their first shipment or payment'}</div>
+                      </td>
+                      <td></td>
+                      <td></td>
+                      <td class="num" style="white-space:normal;min-width:84px"><strong class:list={[words(st.opening).tone === 'neg' && 'neg']}>{words(st.opening).text}</strong></td>
+                    </tr>
+                    {st.rows.length === 0 && (
+                      <tr>
+                        <td colspan="5" class="o-empty">Nothing was billed or paid in this period.</td>
+                      </tr>
+                    )}
+                    {st.rows.map((r) => {
+                      const w = words(r.balance);
+                      return (
+                        <tr>
+                          <td style="white-space:nowrap">
+                            {fmtDate(r.date)}
+                            {r.shipment_id && r.ref && <div class="small"><a href={`/office/shipments/${r.shipment_id}`}>{r.ref}</a></div>}
+                          </td>
+                          <td style="min-width:110px">
+                            {r.detail}
+                            <div class="small muted">{r.what}</div>
+                          </td>
+                          <td class:list={['num', r.bill !== null && r.bill < 0 && 'neg']}>
+                            {r.bill !== null && (
+                              <>
+                                {usd(r.bill)}
+                                {r.currency !== 'USD' && <div class="small muted">{fmtMoney(r.amount, r.currency)}</div>}
+                              </>
+                            )}
+                          </td>
+                          <td class:list={['num', r.pay !== null && r.pay < 0 && 'neg']}>
+                            {r.pay !== null && (
+                              <>
+                                {usd(r.pay)}
+                                {r.currency !== 'USD' && <div class="small muted">{fmtMoney(r.amount, r.currency)}</div>}
+                              </>
+                            )}
+                          </td>
+                          <td class:list={['num', w.tone === 'neg' && 'neg']} style="white-space:normal;min-width:84px">{w.owed === 'none' ? <span class="muted">{w.text}</span> : w.text}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colspan="2">Totals for this period</td>
+                      <td class="num">{usd(st.totalBill)}</td>
+                      <td class="num">{usd(st.totalPay)}</td>
+                      <td></td>
+                    </tr>
+                    <tr>
+                      <td colspan="2">Closing balance on {fmtDate(closingDate)}</td>
+                      <td></td>
+                      <td></td>
+                      <td class:list={['num', words(st.closing).tone === 'neg' && 'neg']}>{words(st.closing).text}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {tab === 'shipments' && (
+          <div class="o-card" style="padding-bottom:0">
+            <div class="o-card-head">
+              <h2>Shipments where {party.name} is the client</h2>
+            </div>
+            {ships.length === 0 ? (
+              <p class="o-empty">No shipments for {party.name} yet. Use “New shipment” above to enter one.</p>
+            ) : (
+              <>
+                <div class="o-table-wrap">
+                  <table class="o-table">
+                    <thead>
+                      <tr>
+                        <th>Shipment</th>
+                        <th>Section</th>
+                        <th>Status</th>
+                        <th class="num">Billed</th>
+                        <th class="num">Received</th>
+                        <th class="num">Still due</th>
+                        {admin && <th class="num">Profit</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {slice(ships).map((s) => (
+                        <tr>
+                          <td style="white-space:nowrap">
+                            <a href={`/office/shipments/${s.id}`}><strong>{s.ref}</strong></a>
+                            <div class="small muted">{fmtDate(s.ship_date)}</div>
+                          </td>
+                          <td>
+                            <span style="white-space:nowrap">{SERVICES[s.service]?.short ?? s.service}</span>
+                            {(s.origin || s.destination) && <div class="small muted">{[s.origin, s.destination].filter(Boolean).join(' → ')}</div>}
+                          </td>
+                          <td><span class:list={['o-badge', s.status]}>{SHIPMENT_STATUS[s.status as ShipmentStatus] ?? s.status}</span></td>
+                          <td class="num">{usd(s.fig.revenue)}</td>
+                          <td class="num">{s.fig.received ? usd(s.fig.received) : <span class="muted">{usd(0)}</span>}</td>
+                          <td class="num">
+                            {s.fig.due > 0 ? (
+                              <strong>{usd(s.fig.due)}</strong>
+                            ) : s.fig.due < 0 ? (
+                              <span class="small">Overpaid {usd(-s.fig.due)}</span>
+                            ) : (
+                              <span class="muted">{s.fig.revenue > 0 ? 'Paid' : usd(0)}</span>
+                            )}
+                          </td>
+                          {admin && <td class:list={['num', s.fig.profit > 0 && 'pos', s.fig.profit < 0 && 'neg']}>{usd(s.fig.profit)}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colspan="3">
+                          Total — {fmtNum(ships.length, 0)} shipment{ships.length === 1 ? '' : 's'}
+                          {ships.length > PAGE_SIZE && <span class="muted small"> (all pages)</span>}
+                        </td>
+                        <td class="num">{usd(r2(shipTotals.revenue))}</td>
+                        <td class="num">{usd(r2(shipTotals.received))}</td>
+                        <td class="num">{usd(r2(shipTotals.due))}</td>
+                        {admin && <td class:list={['num', shipTotals.profit > 0 && 'pos', shipTotals.profit < 0 && 'neg']}>{usd(r2(shipTotals.profit))}</td>}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                {r2(shipTotals.due) !== r2(bal.balance) && (
+                  <p class="o-help" style="margin:10px 0 12px">
+                    “Still due” counts only the payments linked to each shipment. Their balance above ({words(bal.balance).text}) is the full picture: it also counts{' '}
+                    {joinWords([
+                      ...(r2(bal.received) !== r2(shipTotals.received) ? ['money they paid that is not linked to one of these shipments'] : []),
+                      ...(bal.paid_to_them ? [`money we paid them (${usd(bal.paid_to_them)})`] : []),
+                      ...(bal.owed_to_them ? [`their bills to us (${usd(bal.owed_to_them)})`] : []),
+                    ]) || 'every payment, linked or not'}.
+                  </p>
+                )}
+                <Pager page={pageOf(ships.length)} count={ships.length} noun="shipment" nouns="shipments" />
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === 'payments' && (
+          <div class="o-card" style="padding-bottom:0">
+            <div class="o-card-head">
+              <h2>Payments</h2>
+              <span class="o-actions">
+                <a class="o-btn sm" href={`/office/payments/new?dir=in&party=${party.id}`}>Record received</a>
+                <a class="o-btn sm" href={`/office/payments/new?dir=out&party=${party.id}`}>Record made</a>
+              </span>
+            </div>
+            {pays.length === 0 ? (
+              <p class="o-empty">No money has been received from or paid to {party.name} yet.</p>
+            ) : (
+              <>
+                <div class="o-table-wrap">
+                  <table class="o-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>What</th>
+                        <th class="num">Amount</th>
+                        <th class="num">In US $</th>
+                        <th>Account</th>
+                        <th>Shipment</th>
+                        <th>Reference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {slice(pays).map((p) => (
+                        <tr>
+                          <td style="white-space:nowrap"><a href={`/office/payments/${p.id}`} title="Open this payment">{fmtDate(p.pay_date)}</a></td>
+                          <td>
+                            {p.direction === 'in' ? <span class="pos">They paid us</span> : <span>We paid them</span>}
+                            <div class="small muted">{METHODS[p.method as keyof typeof METHODS] ?? p.method}</div>
+                          </td>
+                          <td class="num">{fmtMoney(p.amount, p.currency)}</td>
+                          <td class="num">{usd(p.usd)}</td>
+                          <td><a href={`/office/accounts/${p.account_id}`} style="color:inherit">{p.account_name}</a></td>
+                          <td style="white-space:nowrap">{p.shipment_id ? <a href={`/office/shipments/${p.shipment_id}`}>{p.shipment_ref}</a> : <span class="muted">—</span>}</td>
+                          <td class="small">{p.reference ?? <span class="muted">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colspan="3">Received from them</td>
+                        <td class="num">{usd(paidIn)}</td>
+                        <td colspan="3"></td>
+                      </tr>
+                      <tr>
+                        <td colspan="3">Paid to them</td>
+                        <td class="num">{usd(paidOut)}</td>
+                        <td colspan="3"></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <Pager page={pageOf(pays.length)} count={pays.length} noun="payment" nouns="payments" />
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === 'costs' && (
+          <div class="o-card" style="padding-bottom:0">
+            <div class="o-card-head">
+              <h2>Their bills to us</h2>
+            </div>
+            <p class="o-help" style="margin:-4px 0 12px">Cost lines on our shipments where {party.name} is the one to be paid. Each one adds to what we owe them.</p>
+            {costs.length === 0 ? (
+              <p class="o-empty">{party.name} has not charged us for anything on a shipment yet.</p>
+            ) : (
+              <>
+                <div class="o-table-wrap">
+                  <table class="o-table">
+                    <thead>
+                      <tr>
+                        <th>Shipment</th>
+                        <th>For</th>
+                        <th>Description</th>
+                        <th class="num">Amount</th>
+                        <th class="num">In US $</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {slice(costs).map((c) => (
+                        <tr>
+                          <td style="white-space:nowrap">
+                            <a href={`/office/shipments/${c.shipment_id}`}><strong>{c.ref}</strong></a>
+                            <div class="small muted">{fmtDate(c.ship_date)} · {SERVICES[c.service]?.short ?? c.service}</div>
+                          </td>
+                          <td>{costCategoryLabel(c.category)}</td>
+                          <td>
+                            {c.description ?? <span class="muted">—</span>}
+                            {c.qty !== null && c.rate !== null && (
+                              <div class="small muted">{fmtNum(c.qty, 3)} × {fmtMoney(c.rate, c.currency)}</div>
+                            )}
+                          </td>
+                          <td class:list={['num', c.amount < 0 && 'neg']}>
+                            {fmtMoney(c.amount, c.currency)}
+                            {c.currency !== 'USD' && <div class="small muted">{fmtNum(c.per_usd, 6)} {c.currency} = $1</div>}
+                          </td>
+                          <td class:list={['num', c.usd < 0 && 'neg']}>{usd(c.usd)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colspan="4">
+                          Total of their bills — {costs.length} line{costs.length === 1 ? '' : 's'}
+                          {costs.length > PAGE_SIZE && <span class="muted small"> (all pages)</span>}
+                        </td>
+                        <td class="num">{usd(costTotal)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+                <Pager page={pageOf(costs.length)} count={costs.length} noun="line" nouns="lines" />
+              </>
+            )}
+          </div>
+        )}
+
+        {tab === 'history' && (
+          <div class="o-card" style="padding-bottom:0">
+            <div class="o-card-head"><h2>History</h2></div>
+            {activity.length === 0 ? (
+              <p class="o-empty">Nothing recorded yet.</p>
+            ) : (
+              <div class="o-table-wrap">
+                <table class="o-table">
+                  <thead>
+                    <tr>
+                      <th>When (Kabul time)</th>
+                      <th>Who</th>
+                      <th>What happened</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activity.map((a) => (
+                      <tr>
+                        <td class="small" style="white-space:nowrap">{when(a.at)}</td>
+                        <td>{a.user_name ?? '—'}</td>
+                        <td class="small">{a.summary ?? a.action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p class="o-help" style="margin:10px 0 14px">Changes to their details. Their shipments and payments have their own history on each record.</p>
+          </div>
+        )}
+
+        {admin && refs && (
+          <div class="o-card" style="margin-top:16px">
+            <div class="o-card-head"><h2>Delete or deactivate</h2></div>
+            {refs.total > 0 ? (
+              <>
+                <p style="margin:0">
+                  {party.name} cannot be deleted: {joinWords(refs.items.map((i) => i.words))} {refs.total === 1 ? 'points' : 'point'} to them. Those are real records, so they must stay.
+                </p>
+                <p class="muted" style="margin:6px 0 0">
+                  {party.active
+                    ? 'If you no longer work with them, mark them inactive: they disappear from the lists and pick-lists, but their statement and balance stay.'
+                    : 'They are already inactive — hidden from the lists and pick-lists, with their records kept.'}
+                </p>
+                {party.active && (
+                  <form method="post" style="margin-top:12px">
+                    <input type="hidden" name="action" value="set_active" />
+                    <input type="hidden" name="active" value="0" />
+                    <button type="submit" class="o-btn">Mark inactive</button>
+                  </form>
+                )}
+              </>
+            ) : (
+              <>
+                <p class="muted" style="margin:0">Nothing points to {party.name} yet — no shipments, bills, payments or expenses — so they can be deleted. To keep them for later, mark them inactive instead.</p>
+                <div class="o-actions" style="margin-top:12px">
+                  <form method="post" onsubmit={`return confirm(${JSON.stringify(`Delete ${party.name}? This cannot be undone.`)})`}>
+                    <input type="hidden" name="action" value="delete" />
+                    <button type="submit" class="o-btn danger">Delete {party.name}</button>
+                  </form>
+                  {party.active && (
+                    <form method="post">
+                      <input type="hidden" name="action" value="set_active" />
+                      <input type="hidden" name="active" value="0" />
+                      <button type="submit" class="o-btn">Mark inactive</button>
+                    </form>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+</OfficeLayout>

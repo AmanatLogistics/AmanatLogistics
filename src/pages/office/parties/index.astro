@@ -1,0 +1,263 @@
+---
+/**
+ * Clients (?kind=client) and agents & partners (?kind=partners, or one partner
+ * kind such as ?kind=carrier). Search by name / phone / city, active only
+ * unless "show inactive" is ticked, sort by name or balance, 50 a page, the
+ * balance of each in words (ledger.ts partyBalances), totals for everything
+ * matching, and a CSV download (?format=csv).
+ *
+ * Balances are what staff need to collect and pay money, so staff see the
+ * same list as an admin — there is no profit or cost total here.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import Pager from './_Pager.astro';
+import { guard } from '../../../lib/office/auth';
+import { usd, fmtNum, today } from '../../../lib/office/money';
+import { PARTY_KINDS } from '../../../lib/office/services';
+import {
+  PAGE_SIZE,
+  PARTNER_KINDS,
+  LIST_SORTS,
+  listFilters,
+  listParties,
+  balanceWords,
+  kindLabel,
+  pageParam,
+  withParams,
+  csvResponse,
+  phoneLinks,
+} from '../../../lib/office/parties';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+const sp = Astro.url.searchParams;
+const f = listFilters(sp);
+const isClients = f.mode === 'client';
+const { rows, totals } = await listParties(f);
+
+if (sp.get('format') === 'csv') {
+  return csvResponse(
+    `${isClients ? 'clients' : f.kind ? `partners-${f.kind}` : 'partners'}-${today()}.csv`,
+    [
+      'Name',
+      'Kind',
+      'Phone',
+      'City',
+      'Country',
+      'Active',
+      'Billed to them (USD)',
+      'Received from them (USD)',
+      'Their bills to us (USD)',
+      'Paid to them (USD)',
+      'Balance (USD, + they owe us, − we owe them)',
+      'Balance in words',
+      'Party no.',
+    ],
+    rows.map((r) => [
+      r.name,
+      kindLabel(r.kind),
+      r.phone,
+      r.city,
+      r.country,
+      r.active,
+      r.billed,
+      r.received,
+      r.owed_to_them,
+      r.paid_to_them,
+      r.balance,
+      balanceWords(r.balance, f.mode).text,
+      r.id,
+    ]),
+  );
+}
+
+const page = Math.min(pageParam(sp), Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
+const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+const filtered = !!(f.q || f.inactive || f.kind);
+const title = isClients ? 'Clients' : f.kind ? `Agents & partners — ${PARTY_KINDS[f.kind]}` : 'Agents & partners';
+const noun = isClients ? 'client' : 'partner';
+const nouns = isClients ? 'clients' : 'partners';
+const baseHref = isClients ? '/office/parties?kind=client' : '/office/parties?kind=partners';
+const newHref = isClients ? '/office/parties/new?kind=client' : `/office/parties/new?kind=${f.kind ?? 'partners'}`;
+const cols = isClients ? 4 : 5;
+---
+
+<OfficeLayout title={title} user={user} active={isClients ? 'clients' : 'partners'}>
+  <PageHead
+    title={title}
+    sub={isClients
+      ? 'Everyone who ships with us — and what each one owes us right now.'
+      : 'Agents, truck owners, airlines, sarafs, suppliers and others we pay — and what we owe each one.'}
+    crumbs={[{ label: 'Office', href: '/office' }]}
+  >
+    <a class="o-btn primary" href={newHref}>{isClients ? 'Add client' : 'Add partner'}</a>
+    <a class="o-btn" href={withParams(Astro.url, { format: 'csv', page: null })} data-astro-prefetch="false" download>Download CSV</a>
+  </PageHead>
+  <Flash />
+
+  <nav class="o-tabs" aria-label="Clients or partners">
+    <a href="/office/parties?kind=client" class:list={[isClients && 'active']} aria-current={isClients ? 'page' : undefined}>Clients</a>
+    <a href="/office/parties?kind=partners" class:list={[!isClients && 'active']} aria-current={!isClients ? 'page' : undefined}>Agents & partners</a>
+  </nav>
+
+  <form method="get" class="o-filters" role="search">
+    {isClients && <input type="hidden" name="kind" value="client" />}
+    <label class="o-field" style="min-width:240px;flex:1 1 240px">
+      <span>Search</span>
+      <input type="search" name="q" value={f.q ?? ''} placeholder="Name, phone or city" maxlength="80" />
+    </label>
+    {
+      !isClients && (
+        <label class="o-field">
+          <span>Kind</span>
+          <select name="kind">
+            <option value="partners" selected={!f.kind}>All partners</option>
+            {PARTNER_KINDS.map((k) => (
+              <option value={k} selected={f.kind === k}>{PARTY_KINDS[k]}</option>
+            ))}
+          </select>
+        </label>
+      )
+    }
+    <label class="o-field">
+      <span>Sort by</span>
+      <select name="sort">
+        {Object.entries(LIST_SORTS).map(([k, label]) => (
+          <option value={k} selected={f.sort === k}>
+            {k === 'balance' ? (isClients ? 'Balance — who owes us most' : 'Balance — whom we owe most') : label}
+          </option>
+        ))}
+      </select>
+    </label>
+    <label class="small" style="display:flex;align-items:center;gap:6px;padding-bottom:10px">
+      <input type="checkbox" name="inactive" value="1" checked={f.inactive} /> Show inactive too
+    </label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {filtered && <a class="o-btn ghost" href={baseHref}>Clear filters</a>}
+    </div>
+  </form>
+
+  {
+    totals.count > 0 && (
+      <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+        <Stat label={filtered ? `${nouns} found` : nouns} value={fmtNum(totals.count, 0)} sub={f.inactive ? 'Including inactive' : 'Active only'} />
+        <Stat
+          label="They owe us"
+          value={usd(totals.theyOwe)}
+          sub={isClients ? 'Clients who still have to pay' : 'Partners who owe us money back'}
+        />
+        <Stat
+          label={isClients ? 'We hold for them' : 'We owe'}
+          value={usd(totals.weOwe)}
+          tone={totals.weOwe > 0 ? 'neg' : ''}
+          sub={isClients ? 'Clients who paid in advance or overpaid' : 'Bills from partners not yet paid'}
+        />
+      </div>
+    )
+  }
+
+  <div class="o-table-wrap">
+    <table class="o-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="num">Balance</th>
+          {!isClients && <th>Kind</th>}
+          <th>Phone</th>
+          <th>City</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          shown.length === 0 && (
+            <tr>
+              <td colspan={cols} class="o-empty">
+                {filtered ? (
+                  <>
+                    No {nouns} match these filters. <a href={baseHref}>Show all {nouns}</a>
+                  </>
+                ) : (
+                  <>No {nouns} yet.</>
+                )}
+                <div style="margin-top:10px">
+                  <a class="o-btn sm" href={newHref}>{isClients ? 'Add client' : 'Add partner'}</a>
+                </div>
+              </td>
+            </tr>
+          )
+        }
+        {
+          shown.map((r) => {
+            const w = balanceWords(r.balance, f.mode);
+            return (
+              <tr>
+                <td style="min-width:130px">
+                  <a href={`/office/parties/${r.id}`} data-astro-prefetch="false"><strong>{r.name}</strong></a>
+                  {!r.active && <span class="o-badge cancelled" style="margin-left:6px;text-decoration:none">Inactive</span>}
+                </td>
+                <td class="num">
+                  {w.owed === 'none' ? (
+                    <span class="muted">{w.text}</span>
+                  ) : (
+                    <strong class:list={[w.tone]}>{w.text}</strong>
+                  )}
+                </td>
+                {!isClients && <td style="white-space:nowrap">{kindLabel(r.kind)}</td>}
+                <td style="white-space:nowrap">
+                  {phoneLinks(r.phone).length ? (
+                    phoneLinks(r.phone).map((p, i) => (
+                      <>
+                        {i > 0 && <br />}
+                        <a href={p.href} style="color:inherit">{p.text}</a>
+                      </>
+                    ))
+                  ) : (
+                    <span class="muted">—</span>
+                  )}
+                </td>
+                <td>{r.city ?? <span class="muted">—</span>}</td>
+              </tr>
+            );
+          })
+        }
+      </tbody>
+      {
+        totals.count > 0 && (
+          <tfoot>
+            <tr>
+              <td>
+                Total they owe us
+                <div class="small muted" style="font-weight:500">
+                  {totals.count} {totals.count === 1 ? noun : nouns}{pages > 1 ? ', all pages' : ''}{filtered ? ', matching the filters' : ''}
+                </div>
+              </td>
+              <td class="num">{usd(totals.theyOwe)}</td>
+              <td colspan={cols - 2}></td>
+            </tr>
+            <tr>
+              <td>{isClients ? 'Total we hold for clients (paid in advance)' : 'Total we owe'}</td>
+              <td class:list={['num', totals.weOwe > 0 && 'neg']}>{usd(totals.weOwe)}</td>
+              <td colspan={cols - 2}></td>
+            </tr>
+            <tr>
+              <td>Overall</td>
+              <td class:list={['num', totals.net < 0 && 'neg']}>
+                {totals.net > 0 ? `They owe us ${usd(totals.net)}` : totals.net < 0 ? `We owe ${usd(-totals.net)}` : 'Even'}
+              </td>
+              <td colspan={cols - 2}></td>
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+
+  <Pager page={page} count={rows.length} noun={noun} nouns={nouns} />
+</OfficeLayout>

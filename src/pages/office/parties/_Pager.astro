@@ -1,0 +1,41 @@
+---
+/**
+ * "Showing 51–100 of 230 · ← Previous · Page 2 of 5 · Next →" — keeps every
+ * other filter in the URL. Shown only when there is more than one page (the
+ * table footer already gives the count). Not a route (leading _).
+ */
+import { withParams, PAGE_SIZE } from '../../../lib/office/parties';
+
+interface Props {
+  page: number;
+  count: number;
+  noun: string;
+  nouns: string;
+}
+const { page, count, noun, nouns } = Astro.props;
+const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+const href = (p: number) => withParams(Astro.url, { page: p > 1 ? p : null });
+const first = count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+const last = Math.min(count, page * PAGE_SIZE);
+---
+
+{
+  pages > 1 && (
+    <nav class="o-actions no-print" style="justify-content:space-between;margin-top:12px" aria-label="Pages">
+      <span class="muted small">Showing {first}–{last} of {count} {count === 1 ? noun : nouns}</span>
+      <span class="o-actions">
+        {page > 1 ? (
+          <a class="o-btn sm" href={href(page - 1)}>← Previous</a>
+        ) : (
+          <span class="o-btn sm" aria-disabled="true" style="opacity:.45;cursor:default">← Previous</span>
+        )}
+        <span class="small muted">Page {page} of {pages}</span>
+        {page < pages ? (
+          <a class="o-btn sm" href={href(page + 1)}>Next →</a>
+        ) : (
+          <span class="o-btn sm" aria-disabled="true" style="opacity:.45;cursor:default">Next →</span>
+        )}
+      </span>
+    </nav>
+  )
+}

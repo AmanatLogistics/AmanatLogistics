@@ -1,0 +1,9 @@
+---
+/** /office/reports → the profit & loss report (admins only, like every report). */
+import { guard } from '../../../lib/office/auth';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+return Astro.redirect('/office/reports/pnl');
+---

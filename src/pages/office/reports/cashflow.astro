@@ -1,0 +1,279 @@
+---
+/**
+ * Cash flow (admin only): money that actually moved in the period — received
+ * from clients, paid to partners, spent on the office — not what was billed
+ * or owed. By payment method, by account (in each account's own currency),
+ * and month by month. Transfers between our own accounts only move money, so
+ * they are not "in" or "out"; they show on each account, and their fees are
+ * noted. CSV download.
+ *
+ * Totals: ledger.ts cashFlow(). By month and by account: insights.ts
+ * monthlyCashFlow() / accountFlows(), which add up the same rows.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import PeriodPicker from '../../../components/office/PeriodPicker.astro';
+import BarChart from '../../../components/office/BarChart.astro';
+import { guard } from '../../../lib/office/auth';
+import { cashFlow } from '../../../lib/office/ledger';
+import { usd, fmtMoney, today, METHODS } from '../../../lib/office/money';
+import {
+  monthlyCashFlow,
+  accountFlows,
+  transferSummary,
+  trimMonths,
+  monthLabel,
+  accountTypeLabel,
+  tone,
+  periodQuery,
+  periodRangeText,
+  csvResponse,
+  csvUsd,
+  periodFromQuery,
+} from '../../../lib/office/insights';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const todayStr = today();
+const period = periodFromQuery(Astro.url.searchParams, todayStr);
+const periodName = period.key === 'custom' ? periodRangeText(period) : period.label;
+const [cf, monthsRaw, flowsAll, tr] = await Promise.all([cashFlow(period), monthlyCashFlow(period), accountFlows(period), transferSummary(period)]);
+const months = trimMonths(monthsRaw, (m) => !m.received && !m.paid && !m.expenses, todayStr);
+const flows = flowsAll.filter((a) => a.moved || a.active);
+const methodLabel = (m: string) => (Object.prototype.hasOwnProperty.call(METHODS, m) ? METHODS[m as keyof typeof METHODS] : m);
+const r2 = (n: number) => Math.round(n * 100) / 100;
+const mt = months.reduce((t, m) => ({ received: t.received + m.received, paid: t.paid + m.paid, expenses: t.expenses + m.expenses, net: t.net + m.net }), { received: 0, paid: 0, expenses: 0, net: 0 });
+const methodTotals = cf.byMethod.reduce((t, m) => ({ received: t.received + m.received, paid: t.paid + m.paid }), { received: 0, paid: 0 });
+const flowNetUsd = r2(flows.reduce((a, f) => a + f.net_usd, 0));
+const balanceUsd = r2(flowsAll.reduce((a, f) => a + f.balance_usd, 0));
+const chartRows = months.map((m) => ({ month: m.month, revenue: m.received, cost: m.paid, expenses: m.expenses, net: m.net }));
+
+if (Astro.url.searchParams.get('format') === 'csv') {
+  const rows: unknown[][] = [
+    ['Cash flow', periodName, `${period.from} to ${period.to}`],
+    [],
+    ['Money received USD', csvUsd(cf.received)],
+    ['Paid to partners USD', csvUsd(cf.paidOut)],
+    ['Office expenses USD', csvUsd(cf.expenses)],
+    ['Net cash USD', csvUsd(cf.net)],
+    ['Transfers between our accounts', tr.n, 'moved USD', csvUsd(tr.moved_usd), 'fees USD', csvUsd(tr.fees)],
+    [],
+    ['Method', 'Received USD', 'Paid out incl. expenses USD', 'Net USD'],
+    ...cf.byMethod.map((m) => [methodLabel(m.method), csvUsd(m.received), csvUsd(m.paid), csvUsd(m.received - m.paid)]),
+    ['Total', csvUsd(methodTotals.received), csvUsd(methodTotals.paid), csvUsd(methodTotals.received - methodTotals.paid)],
+    [],
+    ['Account', 'Currency', 'Received', 'Paid out', 'Expenses', 'Transfers in', 'Transfers out', 'Net change', 'Net change USD', 'Balance today', 'Balance today USD (today\'s rate)'],
+    ...flows.map((f) => [f.name, f.currency, f.received, f.paid, f.expenses, f.transfersIn, f.transfersOut, f.net, csvUsd(f.net_usd), f.balance, csvUsd(f.balance_usd)]),
+    [],
+    ['Month', 'Received USD', 'Paid to partners USD', 'Office expenses USD', 'Net USD'],
+    ...months.map((m) => [m.month, csvUsd(m.received), csvUsd(m.paid), csvUsd(m.expenses), csvUsd(m.net)]),
+    ['Total', csvUsd(mt.received), csvUsd(mt.paid), csvUsd(mt.expenses), csvUsd(mt.net)],
+  ];
+  return csvResponse(`cash-flow-${period.from}-to-${period.to}.csv`, rows);
+}
+
+const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
+---
+
+<OfficeLayout title="Cash flow" user={user} active="report-cashflow" wide>
+  <PageHead
+    title="Cash flow"
+    sub="Money that actually came in and went out — not what was billed or is still owed."
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Reports', href: '/office/reports/pnl' }]}
+  >
+    <a class="o-btn" href={`/office/reports/cashflow?${periodQuery(period)}&format=csv`} data-astro-prefetch="false">Download CSV</a>
+    <button type="button" class="o-btn" onclick="window.print()">Print</button>
+  </PageHead>
+  <Flash />
+  <PeriodPicker period={period} action="/office/reports/cashflow" />
+
+  <div class="o-stats" style={TILES}>
+    <Stat label="Money received" value={usd(cf.received)} sub="From clients and others" href={`/office/payments?dir=in`} />
+    <Stat label="Paid to partners" value={usd(cf.paidOut)} sub="Agents, carriers, airlines…" href={`/office/payments?dir=out`} />
+    <Stat label="Office expenses" value={usd(cf.expenses)} sub="Rent, salaries…" href="/office/expenses" />
+    <Stat
+      label={cf.net >= 0 ? 'More came in' : 'More went out'}
+      value={usd(cf.net)}
+      tone={tone(cf.net)}
+      sub={cf.net >= 0 ? 'Received minus paid and spent' : 'Paid and spent more than received'}
+    />
+  </div>
+  {
+    tr.n > 0 && (
+      <p class="small muted" style="margin:-4px 0 16px">
+        Also {tr.n} transfer{tr.n === 1 ? '' : 's'} between our own accounts ({usd(tr.moved_usd)} moved). They only move money, so they are not counted above
+        {tr.fees !== 0 ? <>; the fees lost on them were {usd(tr.fees)}.</> : '.'} <a href="/office/transfers">See transfers</a>
+      </p>
+    )
+  }
+
+  <div class="o-grid-2">
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2>By method</h2>
+        <span class="small muted">{periodName}</span>
+      </div>
+      {
+        cf.byMethod.length === 0 ? (
+          <p class="o-empty">No money moved in this period.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Method</th><th class="num">Received</th><th class="num">Paid out</th><th class="num">Net</th></tr></thead>
+              <tbody>
+                {cf.byMethod.map((m) => (
+                  <tr>
+                    <td>{methodLabel(m.method)}</td>
+                    <td class="num">{usd(m.received)}</td>
+                    <td class="num">{usd(m.paid)}</td>
+                    <td class:list={['num', tone(m.received - m.paid)]}>{usd(r2(m.received - m.paid))}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  <td class="num">{usd(methodTotals.received)}</td>
+                  <td class="num">{usd(methodTotals.paid)}</td>
+                  <td class:list={['num', tone(cf.net)]}>{usd(r2(methodTotals.received - methodTotals.paid))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      }
+      <p class="small muted" style="margin:12px 0 0">“Paid out” includes office expenses paid by that method.</p>
+    </div>
+
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2>Month by month</h2>
+        <span class="small muted">{months.length} month{months.length === 1 ? '' : 's'}</span>
+      </div>
+      {
+        months.length >= 2 && (
+          <div style="margin-bottom:14px">
+            <BarChart
+              rows={chartRows}
+              title={`Money in, money out and net cash by month, ${periodName}`}
+              revenueLabel="Money in"
+              costLabel="Money out"
+              netLabel="Net cash"
+              costPartLabel="Paid to partners"
+              expensePartLabel="Office expenses"
+              height={180}
+            />
+          </div>
+        )
+      }
+      {
+        months.length === 0 ? (
+          <p class="o-empty">No money moved in this period.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Month</th><th class="num">Received</th><th class="num">Paid</th><th class="num">Expenses</th><th class="num">Net</th></tr></thead>
+              <tbody>
+                {months.map((m) => (
+                  <tr>
+                    <td>{monthLabel(m.month)}</td>
+                    <td class="num">{usd(m.received)}</td>
+                    <td class="num">{usd(m.paid)}</td>
+                    <td class="num">{usd(m.expenses)}</td>
+                    <td class:list={['num', tone(m.net)]}>{usd(m.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Total</td>
+                  <td class="num">{usd(mt.received)}</td>
+                  <td class="num">{usd(mt.paid)}</td>
+                  <td class="num">{usd(mt.expenses)}</td>
+                  <td class:list={['num', tone(mt.net)]}>{usd(r2(mt.net))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      }
+    </div>
+  </div>
+
+  <div class="o-card" style="margin-top:16px">
+    <div class="o-card-head">
+      <h2>By account</h2>
+      <span class="small muted">In each account's own currency · {periodName}</span>
+    </div>
+    {
+      flows.length === 0 ? (
+        <p class="o-empty">No cash boxes or accounts yet.</p>
+      ) : (
+        <div class="o-table-wrap">
+          <table class="o-table">
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th class="num">Received</th>
+                <th class="num">Paid out</th>
+                <th class="num">Expenses</th>
+                <th class="num">Transfers in</th>
+                <th class="num">Transfers out</th>
+                <th class="num">Change</th>
+                <th class="num">Balance today</th>
+              </tr>
+            </thead>
+            <tbody>
+              {flows.map((f) => (
+                <tr>
+                  <td style="min-width:160px">
+                    <a href={`/office/accounts/${f.id}`} data-astro-prefetch="false">{f.name}</a>
+                    <div class="small muted">{accountTypeLabel(f.type)} · {f.currency}{!f.active && ' · closed'}</div>
+                  </td>
+                  <td class:list={['num', !f.received && 'muted']}>{fmtMoney(f.received, f.currency)}</td>
+                  <td class:list={['num', !f.paid && 'muted']}>{fmtMoney(f.paid, f.currency)}</td>
+                  <td class:list={['num', !f.expenses && 'muted']}>{fmtMoney(f.expenses, f.currency)}</td>
+                  <td class:list={['num', !f.transfersIn && 'muted']}>{fmtMoney(f.transfersIn, f.currency)}</td>
+                  <td class:list={['num', !f.transfersOut && 'muted']}>{fmtMoney(f.transfersOut, f.currency)}</td>
+                  <td class:list={['num', tone(f.net)]}>
+                    {f.net > 0 ? '+' : ''}{fmtMoney(f.net, f.currency)}
+                    {f.currency !== 'USD' && f.net !== 0 && <div class="small muted">{usd(f.net_usd)}</div>}
+                  </td>
+                  <td class:list={['num', f.balance < 0 && 'neg']}>
+                    {fmtMoney(f.balance, f.currency)}
+                    {f.currency !== 'USD' && <div class="small muted">≈ {usd(f.balance_usd)}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6">All accounts, in US dollars</td>
+                <td class:list={['num', tone(flowNetUsd)]}>{usd(flowNetUsd)}</td>
+                <td class="num">≈ {usd(balanceUsd)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )
+    }
+    <p class="small muted" style="margin:12px 0 0">
+      “Change” in dollars uses the rate each payment was entered at; “balance today” uses today's rates, so the two can differ for afghani or som accounts.
+      The change across all accounts also counts transfer fees{tr.fees !== 0 ? ` (${usd(tr.fees)})` : ''}, which is why it can be a little lower than the “More came in” figure above.
+    </p>
+  </div>
+</OfficeLayout>
+
+<style>
+  .o-grid-2 > .o-card { min-width: 0; }
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>

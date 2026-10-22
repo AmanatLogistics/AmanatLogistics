@@ -1,0 +1,236 @@
+---
+/**
+ * Who owes whom (admin only), as of today, straight from the ledger's party
+ * balances:
+ *   - everyone who owes us, with how old the money is (0–30, 31–60, 61–90,
+ *     over 90 days since the bill's date);
+ *   - agents, carriers, airlines… we owe;
+ *   - clients we hold money for (paid in advance or overpaid).
+ * The three totals are ledger.ts balanceTotals(). CSV download.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import { guard } from '../../../lib/office/auth';
+import { balanceTotals } from '../../../lib/office/ledger';
+import { usd, fmtDate, today } from '../../../lib/office/money';
+import {
+  balanceGroups,
+  receivablesAging,
+  AGING_BUCKETS,
+  partyKindLabel,
+  balanceWords,
+  daysBetween,
+  csvResponse,
+  csvUsd,
+} from '../../../lib/office/insights';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const todayStr = today();
+const [groups, totals] = await Promise.all([balanceGroups(), balanceTotals()]);
+const aging = await receivablesAging(todayStr, groups.owesUs);
+const sum = (list: { balance: number }[]) => Math.round(list.reduce((a, p) => a + p.balance, 0) * 100) / 100;
+const owedToUs = sum(groups.owesUs);
+const weOwe = -sum(groups.weOwe);
+const weHold = -sum(groups.weHold);
+// Both come from partyBalances(); they can only differ if a record was saved between the two reads.
+const consistent = Math.abs(owedToUs - totals.receivable) < 0.005 && Math.abs(weOwe - totals.payable) < 0.005 && Math.abs(weHold - totals.clientCredit) < 0.005;
+const net = Math.round((totals.receivable - totals.payable - totals.clientCredit) * 100) / 100;
+
+if (Astro.url.searchParams.get('format') === 'csv') {
+  const rows: unknown[][] = [
+    ['Who owes whom', `as of ${todayStr}`],
+    [],
+    ['Group', 'Name', 'Kind', 'Phone', 'City', ...AGING_BUCKETS.map((b) => `${b} USD`), 'Other USD', 'Balance USD', 'In words'],
+    ...aging.rows.map((r) => [
+      'Owes us',
+      r.party.name,
+      partyKindLabel(r.party.kind),
+      r.party.phone ?? '',
+      r.party.city ?? '',
+      ...r.buckets.map(csvUsd),
+      csvUsd(r.other),
+      csvUsd(r.party.balance),
+      balanceWords(r.party.balance, r.party.kind),
+    ]),
+    ['Owes us', 'TOTAL', '', '', '', ...aging.totals.buckets.map(csvUsd), csvUsd(aging.totals.other), csvUsd(totals.receivable), ''],
+    ...groups.weOwe.map((p) => ['We owe', p.name, partyKindLabel(p.kind), p.phone ?? '', p.city ?? '', '', '', '', '', '', csvUsd(p.balance), balanceWords(p.balance, p.kind)]),
+    ['We owe', 'TOTAL', '', '', '', '', '', '', '', '', csvUsd(-totals.payable), ''],
+    ...groups.weHold.map((p) => ['We hold for client', p.name, partyKindLabel(p.kind), p.phone ?? '', p.city ?? '', '', '', '', '', '', csvUsd(p.balance), balanceWords(p.balance, p.kind)]),
+    ['We hold for client', 'TOTAL', '', '', '', '', '', '', '', '', csvUsd(-totals.clientCredit), ''],
+    [],
+    ['A positive balance means they owe us; a negative balance means we owe them.'],
+  ];
+  return csvResponse(`who-owes-whom-${todayStr}.csv`, rows);
+}
+
+const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
+const H2 = 'scroll-margin-top:70px';
+---
+
+<OfficeLayout title="Who owes whom" user={user} active="report-balances" wide>
+  <PageHead
+    title="Who owes whom"
+    sub={`Everyone's balance today, ${fmtDate(todayStr)}: billed and paid, charged and paid — whatever the date.`}
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Reports', href: '/office/reports/pnl' }]}
+  >
+    <a class="o-btn" href="/office/reports/balances?format=csv" data-astro-prefetch="false">Download CSV</a>
+    <button type="button" class="o-btn" onclick="window.print()">Print</button>
+  </PageHead>
+  <Flash error={consistent ? null : 'Some records changed while this page was loading, so the totals may not match the lists. Reload the page.'} />
+
+  <div class="o-stats" style={TILES}>
+    <Stat label="Owed to us" value={usd(totals.receivable)} sub={`${groups.owesUs.length} owe us`} />
+    <Stat label="We owe partners" value={usd(totals.payable)} sub={`${groups.weOwe.length} agents, carriers…`} tone={totals.payable > 0 ? 'neg' : ''} />
+    <Stat label="We hold for clients" value={usd(totals.clientCredit)} sub={`${groups.weHold.length} paid in advance`} />
+    <Stat
+      label="If everyone settled today"
+      value={`${net < 0 ? '−' : '+'}${usd(Math.abs(net))}`}
+      sub={net >= 0 ? 'We would receive more than we pay' : 'We would pay more than we receive'}
+      tone={net > 0 ? 'pos' : net < 0 ? 'neg' : ''}
+    />
+  </div>
+
+  <div class="o-card">
+    <div class="o-card-head">
+      <h2 id="owes-us" style={H2}>Who owes us</h2>
+      <span class="small muted">How long each amount has been waiting, from the bill's date</span>
+    </div>
+    {
+      aging.rows.length === 0 ? (
+        <p class="o-empty">Nobody owes us anything. Every bill is paid.</p>
+      ) : (
+        <div class="o-table-wrap">
+          <table class="o-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                {AGING_BUCKETS.map((b) => <th class="num">{b}</th>)}
+                <th class="num" title="Not from one of their bills — e.g. we paid them more than they charged us">Other</th>
+                <th class="num">Owes us</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aging.rows.map((r) => (
+                <tr>
+                  <td style="min-width:170px">
+                    <a href={`/office/parties/${r.party.id}`} data-astro-prefetch="false"><strong>{r.party.name}</strong></a>
+                    <div class="small muted">
+                      {[r.party.kind === 'client' ? null : partyKindLabel(r.party.kind), r.party.phone, r.party.city].filter(Boolean).join(' · ')}
+                    </div>
+                    {r.oldest && (
+                      <div class="small muted">
+                        {r.bills} unpaid bill{r.bills === 1 ? '' : 's'}, oldest {fmtDate(r.oldest)} ({Math.max(0, daysBetween(r.oldest, todayStr))} days)
+                      </div>
+                    )}
+                    {r.onAccount > 0 && <div class="small muted">{usd(r.onAccount)} paid on account or overpaid on a bill — set against the oldest bills</div>}
+                  </td>
+                  {r.buckets.map((v, i) => (
+                    <td class:list={['num', v === 0 && 'muted', v > 0 && i >= 2 && 'neg']}>{v === 0 ? '—' : usd(v)}</td>
+                  ))}
+                  <td class:list={['num', r.other === 0 && 'muted']}>{r.other === 0 ? '—' : usd(r.other)}</td>
+                  <td class="num"><strong>{usd(r.party.balance)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total — {aging.rows.length} owe us</td>
+                {aging.totals.buckets.map((v) => <td class="num">{usd(v)}</td>)}
+                <td class="num">{usd(aging.totals.other)}</td>
+                <td class="num">{usd(totals.receivable)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )
+    }
+    <p class="small muted" style="margin:12px 0 0">
+      Red = waiting more than 60 days. “Other” is money owed to us that is not from one of their bills — for example an agent we paid more than he charged.
+    </p>
+  </div>
+
+  <div class="o-grid-2" style="margin-top:16px">
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2 id="we-owe" style={H2}>Partners we owe</h2>
+        <span class="small muted">Charged us more than we have paid</span>
+      </div>
+      {
+        groups.weOwe.length === 0 ? (
+          <p class="o-empty">We don't owe any agent, carrier or airline anything.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Name</th><th class="num">We owe them</th><th></th></tr></thead>
+              <tbody>
+                {groups.weOwe.map((p) => (
+                  <tr>
+                    <td>
+                      <a href={`/office/parties/${p.id}`} data-astro-prefetch="false">{p.name}</a>
+                      <div class="small muted">{[partyKindLabel(p.kind), p.phone, p.city].filter(Boolean).join(' · ')}</div>
+                    </td>
+                    <td class="num neg"><strong>{usd(-p.balance)}</strong></td>
+                    <td style="text-align:right">
+                      <a class="o-btn sm no-print" href={`/office/payments/new?dir=out&party=${p.id}`} data-astro-prefetch="false">Pay</a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td>Total</td><td class="num">{usd(totals.payable)}</td><td></td></tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      }
+    </div>
+
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2 id="we-hold" style={H2}>Clients we hold money for</h2>
+        <span class="small muted">Paid in advance or overpaid</span>
+      </div>
+      {
+        groups.weHold.length === 0 ? (
+          <p class="o-empty">No client has paid in advance.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Client</th><th class="num">We hold</th></tr></thead>
+              <tbody>
+                {groups.weHold.map((p) => (
+                  <tr>
+                    <td>
+                      <a href={`/office/parties/${p.id}`} data-astro-prefetch="false">{p.name}</a>
+                      <div class="small muted">{[p.phone, p.city].filter(Boolean).join(' · ')}</div>
+                    </td>
+                    <td class="num"><strong>{usd(-p.balance)}</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td>Total</td><td class="num">{usd(totals.clientCredit)}</td></tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      }
+      <p class="small muted" style="margin:12px 0 0">This money belongs to the client: it pays for their next shipment, or is given back.</p>
+    </div>
+  </div>
+</OfficeLayout>
+
+<style>
+  .o-grid-2 > .o-card { min-width: 0; }
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>

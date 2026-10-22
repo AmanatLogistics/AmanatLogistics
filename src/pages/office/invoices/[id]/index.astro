@@ -1,0 +1,301 @@
+---
+/**
+ * One invoice on screen: who it bills, the shipment, the lines (the
+ * shipment's charges), what has been paid and what is still due — with
+ * Print, Record payment and View shipment. An admin can change the due date
+ * and the note printed on the invoice; the amounts are the shipment's charges
+ * and are changed on the shipment.
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import Stat from '../../../../components/office/Stat.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { withMsg } from '../../../../lib/office/form';
+import { usd, fmtMoney, fmtDate, fmtNum, today, METHODS } from '../../../../lib/office/money';
+import { SERVICES } from '../../../../lib/office/services';
+import { INVOICE_STATUS_LABEL } from '../../../../lib/office/invoices';
+import {
+  getInvoice,
+  updateInvoiceMeta,
+  idParam,
+  isoDate,
+  routeText,
+  statusLabel,
+  fmtRateMoney,
+  unitText,
+} from '../../../../lib/office/insights';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+const todayStr = today();
+let error: string | null = null;
+let posted: { due_date: string; notes: string } | null = null;
+
+if (id && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else if (!admin) error = 'Only an admin can change an invoice.';
+  else {
+    const fd = await Astro.request.formData();
+    const rawDue = String(fd.get('due_date') ?? '').trim();
+    const rawNotes = String(fd.get('notes') ?? '').replace(/\r\n/g, '\n').trim();
+    posted = { due_date: rawDue, notes: rawNotes };
+    const due = rawDue === '' ? null : isoDate(rawDue);
+    const current = await getInvoice(id, todayStr);
+    if (!current) error = 'This invoice no longer exists.';
+    else if (rawDue !== '' && !due) error = 'The due date is not a real date — use the date picker, or leave it empty for no due date.';
+    else if (due && due < current.issue_date) error = `The due date cannot be before the invoice date (${fmtDate(current.issue_date)}).`;
+    else if (due && due > '2100-12-31') error = 'That due date is too far in the future — check the year.';
+    else if (rawNotes.length > 1000) error = `The note is too long (${rawNotes.length} characters) — keep it under 1,000.`;
+    else {
+      const r = await updateInvoiceMeta(id, due, rawNotes || null, user.id);
+      return Astro.redirect(withMsg(`/office/invoices/${id}`, r ? 'Invoice updated.' : 'Nothing was changed.'), 303);
+    }
+  }
+}
+
+const inv = id ? await getInvoice(id, todayStr) : null;
+if (!inv) Astro.response.status = 404;
+const s = inv?.shipment;
+const multi = inv ? inv.byCurrency.length > 1 || (inv.byCurrency[0] && inv.byCurrency[0].currency !== 'USD') : false;
+const payLink = inv && inv.client ? `/office/payments/new?dir=in&party=${inv.client.id}&shipment=${inv.shipment.id}` : null;
+const dueValue = posted ? posted.due_date : inv?.due_date ?? '';
+const notesValue = posted ? posted.notes : inv?.notes ?? '';
+const statusSentence = inv
+  ? {
+      paid: 'Paid in full.',
+      partial: `Part paid — ${usd(inv.fig.due)} still to collect.`,
+      unpaid: `Not paid yet — ${usd(inv.fig.due)} to collect.`,
+      overdue: `Overdue by ${inv.days_overdue} day${inv.days_overdue === 1 ? '' : 's'} — ${usd(inv.fig.due)} still to collect.`,
+      credit: `The client has paid ${usd(-inv.fig.due)} more than this invoice.`,
+    }[inv.status]
+  : '';
+---
+
+<OfficeLayout title={inv ? `Invoice ${inv.number}` : 'Invoice not found'} user={user} active="invoices">
+  {
+    !inv || !s ? (
+      <>
+        <PageHead title="Invoice not found" crumbs={[{ label: 'Office', href: '/office' }, { label: 'Invoices', href: '/office/invoices' }]} />
+        <div class="o-card o-empty">
+          There is no such invoice. It may have been removed with its shipment. <a href="/office/invoices">See all invoices</a>
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead title={`Invoice ${inv.number}`} sub={statusSentence} crumbs={[{ label: 'Office', href: '/office' }, { label: 'Invoices', href: '/office/invoices' }]}>
+          <a class="o-btn primary" href={`/office/invoices/${inv.id}/print`} data-astro-prefetch="false">Print / save as PDF</a>
+          {payLink && inv.fig.due > 0 && <a class="o-btn" href={payLink}>Record payment</a>}
+          <a class="o-btn" href={`/office/shipments/${s.id}`}>View shipment</a>
+        </PageHead>
+        <Flash error={error} />
+
+        <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+          <Stat label="Billed" value={usd(inv.fig.revenue)} sub={`${inv.charges.length} line${inv.charges.length === 1 ? '' : 's'}`} />
+          <Stat label="Received" value={usd(inv.fig.received)} sub={`${inv.payments.length} payment${inv.payments.length === 1 ? '' : 's'} for this shipment`} />
+          <Stat
+            label={inv.fig.due < 0 ? 'Overpaid' : 'Still due'}
+            value={usd(Math.abs(inv.fig.due))}
+            sub={inv.fig.due < 0 ? 'Client paid more than billed' : inv.fig.due === 0 ? 'Nothing left to pay' : 'To collect from the client'}
+            tone={inv.status === 'overdue' ? 'neg' : inv.status === 'paid' ? 'pos' : ''}
+          />
+          <Stat
+            label="Due date"
+            value={inv.due_date ? fmtDate(inv.due_date) : '—'}
+            sub={inv.days_overdue !== null ? `${inv.days_overdue} day${inv.days_overdue === 1 ? '' : 's'} late` : `Issued ${fmtDate(inv.issue_date)}`}
+          />
+        </div>
+
+        <div class="o-grid-2">
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Bill to</h2>
+              <span class:list={['o-badge', inv.status]}>{INVOICE_STATUS_LABEL[inv.status]}</span>
+            </div>
+            {inv.client ? (
+              <dl class="o-kv">
+                <dt>Client</dt>
+                <dd><a href={`/office/parties/${inv.client.id}`}>{inv.client.name}</a></dd>
+                <dt>Phone</dt>
+                <dd>{inv.client.phone ?? '—'}</dd>
+                <dt>City</dt>
+                <dd>{[inv.client.city, inv.client.country].filter(Boolean).join(', ') || '—'}</dd>
+              </dl>
+            ) : (
+              <p class="o-error" style="margin:0">
+                This shipment has no client, so the invoice has nobody to bill. <a href={`/office/shipments/${s.id}/edit`}>Choose the client on the shipment</a>.
+              </p>
+            )}
+            <dl class="o-kv" style="margin-top:14px">
+              <dt>Invoice no.</dt>
+              <dd>{inv.number}</dd>
+              <dt>Invoice date</dt>
+              <dd>{fmtDate(inv.issue_date)}</dd>
+              <dt>Due date</dt>
+              <dd>{inv.due_date ? fmtDate(inv.due_date) : 'No due date'}</dd>
+            </dl>
+          </div>
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Shipment</h2>
+              <span class:list={['o-badge', s.status]}>{statusLabel(s.status)}</span>
+            </div>
+            <dl class="o-kv">
+              <dt>Ref</dt>
+              <dd><a href={`/office/shipments/${s.id}`}>{s.ref}</a></dd>
+              <dt>Section</dt>
+              <dd>{SERVICES[s.service]?.label ?? s.service}</dd>
+              <dt>Route</dt>
+              <dd>{routeText(s)}</dd>
+              <dt>Ship date</dt>
+              <dd>{fmtDate(s.ship_date)}</dd>
+              {s.goods && (<><dt>Goods</dt><dd>{s.goods}</dd></>)}
+              {s.pieces !== null && (<><dt>Pieces</dt><dd>{fmtNum(s.pieces, 0)}</dd></>)}
+              {s.weight_kg !== null && (<><dt>Weight</dt><dd>{fmtNum(s.weight_kg)} kg</dd></>)}
+              {s.chargeable_kg !== null && (<><dt>Chargeable</dt><dd>{fmtNum(s.chargeable_kg)} kg</dd></>)}
+              {s.cbm !== null && (<><dt>Volume</dt><dd>{fmtNum(s.cbm, 3)} CBM</dd></>)}
+              {s.awb_no && (<><dt>Airway bill</dt><dd>{s.awb_no}</dd></>)}
+              {s.tracking_no && (<><dt>Tracking no.</dt><dd>{s.tracking_no}</dd></>)}
+            </dl>
+          </div>
+        </div>
+
+        <div class="o-card" style="margin-top:16px">
+          <div class="o-card-head">
+            <h2>What is billed</h2>
+            <a class="small" href={`/office/shipments/${s.id}/edit`}>Change the charges on the shipment →</a>
+          </div>
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead>
+                <tr><th>Description</th><th class="num">Quantity</th><th class="num">Rate</th><th class="num">Amount</th>{multi && <th class="num">In USD</th>}</tr>
+              </thead>
+              <tbody>
+                {inv.charges.length === 0 && (
+                  <tr><td colspan={multi ? 5 : 4} class="o-empty">This shipment has no charges any more, so the invoice is for nothing.</td></tr>
+                )}
+                {inv.charges.map((c) => (
+                  <tr>
+                    <td>{c.description}</td>
+                    <td class="num">{c.qty !== null ? `${fmtNum(c.qty, 3)} ${unitText(c.unit, c.qty)}`.trim() : '—'}</td>
+                    <td class="num">{c.rate !== null ? fmtRateMoney(c.rate, c.currency) : '—'}</td>
+                    <td class="num">{fmtMoney(c.amount, c.currency)}</td>
+                    {multi && <td class="num muted">{usd(c.usd)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                {multi &&
+                  inv.byCurrency.map((b) => (
+                    <tr>
+                      <td colspan="3">
+                        Subtotal in {b.currency}
+                        {b.currency !== 'USD' && (
+                          <span class="small muted" style="font-weight:400">
+                            {' '}— at {b.rates.map((r) => `${fmtNum(r, 4)} ${b.currency}`).join(' / ')} = $1
+                          </span>
+                        )}
+                      </td>
+                      <td class="num">{fmtMoney(b.amount, b.currency)}</td>
+                      <td class="num">{usd(b.usd)}</td>
+                    </tr>
+                  ))}
+                <tr>
+                  <td colspan={multi ? 4 : 3}>Total (USD)</td>
+                  <td class="num">{usd(inv.fig.revenue)}</td>
+                </tr>
+                <tr>
+                  <td colspan={multi ? 4 : 3} style="font-weight:500">Paid to date</td>
+                  <td class="num" style="font-weight:500">{usd(inv.fig.received)}</td>
+                </tr>
+                <tr>
+                  <td colspan={multi ? 4 : 3}>{inv.fig.due < 0 ? 'Overpaid' : 'Balance due (USD)'}</td>
+                  <td class:list={['num', inv.status === 'overdue' && 'neg']}>{usd(Math.abs(inv.fig.due))}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="o-grid-2" style="margin-top:16px">
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Payments for this shipment</h2>
+              {payLink && <a class="small" href={payLink}>Record a payment →</a>}
+            </div>
+            {inv.payments.length === 0 ? (
+              <p class="o-empty">No money received for this shipment yet.</p>
+            ) : (
+              <div class="o-table-wrap">
+                <table class="o-table">
+                  <thead><tr><th>Date</th><th>How</th><th class="num">Amount</th></tr></thead>
+                  <tbody>
+                    {inv.payments.map((pm) => (
+                      <tr>
+                        <td style="white-space:nowrap"><a href={`/office/payments/${pm.id}`}>{fmtDate(pm.pay_date)}</a></td>
+                        <td>
+                          {METHODS[pm.method as keyof typeof METHODS] ?? pm.method}
+                          <div class="small muted">{[pm.account_name, pm.reference].filter(Boolean).join(' · ')}</div>
+                        </td>
+                        <td class="num">
+                          {fmtMoney(pm.amount, pm.currency)}
+                          {pm.currency !== 'USD' && <div class="small muted">{usd(pm.usd)}</div>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr><td colspan="2">Total received</td><td class="num">{usd(inv.fig.received)}</td></tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+            <p class="small muted" style="margin:12px 0 0">
+              Money the client paid without choosing this shipment still counts on their statement, but not here.
+            </p>
+          </div>
+
+          <div class="o-card">
+            <div class="o-card-head"><h2>Due date & note</h2></div>
+            {admin ? (
+              <form method="post" class="o-form">
+                <label class="o-field">
+                  <span>Due date</span>
+                  <input type="date" name="due_date" value={dueValue} min={inv.issue_date} />
+                  <small class="o-help">When the client should pay by. Leave empty for no due date. Invoice date: {fmtDate(inv.issue_date)}.</small>
+                </label>
+                <label class="o-field">
+                  <span>Note on the invoice</span>
+                  <textarea name="notes" rows="3" maxlength="1000" placeholder="e.g. Half paid in Tashkent; rest due on delivery.">{notesValue}</textarea>
+                  <small class="o-help">Printed on the invoice under the totals.</small>
+                </label>
+                <div><button type="submit" class="o-btn primary">Save</button></div>
+              </form>
+            ) : (
+              <dl class="o-kv">
+                <dt>Due date</dt>
+                <dd>{inv.due_date ? fmtDate(inv.due_date) : 'No due date'}</dd>
+                <dt>Note</dt>
+                <dd style="white-space:pre-line">{inv.notes ?? '—'}</dd>
+              </dl>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+</OfficeLayout>
+
+<style>
+  .o-grid-2 > .o-card { min-width: 0; }
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>

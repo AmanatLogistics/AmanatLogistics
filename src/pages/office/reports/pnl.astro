@@ -1,0 +1,289 @@
+---
+/**
+ * Profit & loss (admin only): for the chosen period, what the shipments
+ * earned (by section), what they cost (by kind of cost), the gross profit,
+ * the office's running costs and transfer fees, and the net profit — then the
+ * same month by month, as a table and a chart. CSV download of all of it.
+ *
+ * All figures: ledger.ts pnl() and monthlyPnl(). Revenue and direct costs
+ * count shipments by their ship date; expenses and fees by their own date.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import PeriodPicker from '../../../components/office/PeriodPicker.astro';
+import BarChart from '../../../components/office/BarChart.astro';
+import { guard } from '../../../lib/office/auth';
+import { pnl, monthlyPnl } from '../../../lib/office/ledger';
+import { usd, fmtNum, today } from '../../../lib/office/money';
+import { SERVICES, SERVICE_KEYS } from '../../../lib/office/services';
+import {
+  margin,
+  fmtPct,
+  tone,
+  trimMonths,
+  monthLabel,
+  costCategoryLabel,
+  expenseCategoryLabel,
+  periodQuery,
+  periodRangeText,
+  csvResponse,
+  csvUsd,
+  periodFromQuery,
+} from '../../../lib/office/insights';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const todayStr = today();
+const period = periodFromQuery(Astro.url.searchParams, todayStr);
+const periodName = period.key === 'custom' ? periodRangeText(period) : period.label;
+const [p, monthsRaw] = await Promise.all([pnl(period), monthlyPnl(period)]);
+const months = trimMonths(monthsRaw, (m) => !m.revenue && !m.cost && !m.expenses, todayStr);
+const sections = SERVICE_KEYS.map((k) => ({ key: k, ...(p.byService.find((r) => r.service === k) ?? { shipments: 0, kg: 0, cbm: 0, revenue: 0, cost: 0, profit: 0 }) }));
+const shipCount = sections.reduce((a, s) => a + s.shipments, 0);
+const officeTotal = Math.round((p.officeExpenses + p.transferFees) * 100) / 100;
+const mt = months.reduce(
+  (t, m) => ({ revenue: t.revenue + m.revenue, cost: t.cost + m.cost, expenses: t.expenses + m.expenses, net: t.net + m.net }),
+  { revenue: 0, cost: 0, expenses: 0, net: 0 },
+);
+
+if (Astro.url.searchParams.get('format') === 'csv') {
+  const rows: unknown[][] = [
+    ['Profit & loss', periodName, `${period.from} to ${period.to}`],
+    [],
+    ['Part', 'Item', 'USD'],
+    ...sections.filter((s) => s.shipments > 0).map((s) => ['Revenue', `${SERVICES[s.key].short} (${s.shipments} shipments)`, csvUsd(s.revenue)]),
+    ['Revenue', 'Total revenue', csvUsd(p.revenue)],
+    ...p.costByCategory.map((c) => ['Direct costs', costCategoryLabel(c.category), csvUsd(c.usd)]),
+    ['Direct costs', 'Total direct costs', csvUsd(p.directCost)],
+    ['Gross profit', `Margin ${fmtPct(margin(p.grossProfit, p.revenue))}`, csvUsd(p.grossProfit)],
+    ...p.expenseByCategory.map((e) => ['Office expenses', expenseCategoryLabel(e.category), csvUsd(e.usd)]),
+    ['Office expenses', 'Transfer (hawala) fees', csvUsd(p.transferFees)],
+    ['Office expenses', 'Total office expenses and fees', csvUsd(officeTotal)],
+    ['Net profit', `Margin ${fmtPct(margin(p.netProfit, p.revenue))}`, csvUsd(p.netProfit)],
+    [],
+    ['Section', 'Shipments', 'Kg', 'CBM', 'Revenue USD', 'Direct cost USD', 'Gross profit USD', 'Margin %'],
+    ...sections.map((s) => [SERVICES[s.key].short, s.shipments, s.kg, s.cbm, csvUsd(s.revenue), csvUsd(s.cost), csvUsd(s.profit), s.revenue ? (margin(s.profit, s.revenue) ?? 0).toFixed(1) : '']),
+    [],
+    ['Month', 'Revenue USD', 'Direct costs USD', 'Office expenses & fees USD', 'Net profit USD'],
+    ...months.map((m) => [m.month, csvUsd(m.revenue), csvUsd(m.cost), csvUsd(m.expenses), csvUsd(m.net)]),
+    ['Total', csvUsd(mt.revenue), csvUsd(mt.cost), csvUsd(mt.expenses), csvUsd(mt.net)],
+  ];
+  return csvResponse(`profit-and-loss-${period.from}-to-${period.to}.csv`, rows);
+}
+
+const ROW_HEAD = 'background:#faf7f8;font-weight:700';
+// "76.7% of revenue", or a plain sentence when there was no revenue to divide by
+const pctOf = (n: number) => (p.revenue ? `${fmtPct(margin(n, p.revenue))} of revenue` : 'no revenue in this period');
+const INDENT = 'padding-left:34px';
+const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
+---
+
+<OfficeLayout title="Profit & loss" user={user} active="report-pnl" wide>
+  <PageHead
+    title="Profit & loss"
+    sub="What the business earned, what it cost, and what was left. Shipments count by their ship date; expenses by the day they were paid."
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Reports', href: '/office/reports/pnl' }]}
+  >
+    <a class="o-btn" href={`/office/reports/pnl?${periodQuery(period)}&format=csv`} data-astro-prefetch="false">Download CSV</a>
+    <button type="button" class="o-btn" onclick="window.print()">Print</button>
+  </PageHead>
+  <Flash />
+  <PeriodPicker period={period} action="/office/reports/pnl" />
+
+  <div class="o-stats" style={TILES}>
+    <Stat label="Revenue" value={usd(p.revenue)} sub={`${fmtNum(shipCount, 0)} shipment${shipCount === 1 ? '' : 's'}`} />
+    <Stat label="Gross profit" value={usd(p.grossProfit)} tone={tone(p.grossProfit)} sub={pctOf(p.grossProfit)} />
+    <Stat label="Office expenses & fees" value={usd(officeTotal)} sub="Rent, salaries, transfer fees…" />
+    {
+      p.netProfit >= 0 ? (
+        <div class="o-stat brand">
+          <div class="label">Net profit</div>
+          <div class="value">{usd(p.netProfit)}</div>
+          <div class="sub">{pctOf(p.netProfit)}</div>
+        </div>
+      ) : (
+        <div class="o-stat brand" style="background:var(--o-red);border-color:var(--o-red)">
+          <div class="label" style="color:#fde1dd">Net loss</div>
+          <div class="value">{usd(p.netProfit)}</div>
+          <div class="sub" style="color:#fde1dd">Spent more than earned</div>
+        </div>
+      )
+    }
+  </div>
+
+  <div class="o-grid-2">
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2>Statement — {periodName}</h2>
+      </div>
+      <div class="o-table-wrap">
+        <table class="o-table">
+          <caption class="small muted" style="caption-side:bottom;text-align:left;padding:10px 20px 0">
+            Costs are shown as positive amounts and taken away.
+          </caption>
+          <tbody>
+            <tr><td colspan="2" style={ROW_HEAD}>Money earned from shipments (revenue)</td></tr>
+            {sections.filter((s) => s.shipments > 0 || s.revenue !== 0).map((s) => (
+              <tr>
+                <td style={INDENT}>
+                  <a href={`/office/sections/${s.key}?${periodQuery(period)}`}>{SERVICES[s.key].short}</a>
+                  <span class="small muted"> · {fmtNum(s.shipments, 0)} shipment{s.shipments === 1 ? '' : 's'}</span>
+                </td>
+                <td class="num">{usd(s.revenue)}</td>
+              </tr>
+            ))}
+            {shipCount === 0 && <tr><td style={INDENT} class="muted">No shipments in this period</td><td class="num">{usd(0)}</td></tr>}
+            <tr><td><strong>Total revenue</strong></td><td class="num"><strong>{usd(p.revenue)}</strong></td></tr>
+
+            <tr><td colspan="2" style={ROW_HEAD}>Less: what those shipments cost (direct costs)</td></tr>
+            {p.costByCategory.map((c) => (
+              <tr><td style={INDENT}>{costCategoryLabel(c.category)}</td><td class="num">{usd(c.usd)}</td></tr>
+            ))}
+            {p.costByCategory.length === 0 && <tr><td style={INDENT} class="muted">No costs recorded</td><td class="num">{usd(0)}</td></tr>}
+            <tr><td><strong>Total direct costs</strong></td><td class="num"><strong>{usd(p.directCost)}</strong></td></tr>
+
+            <tr style="background:var(--o-blush)">
+              <td><strong>GROSS PROFIT</strong> <span class="small muted">· {pctOf(p.grossProfit)}</span></td>
+              <td class:list={['num', tone(p.grossProfit)]}><strong>{usd(p.grossProfit)}</strong></td>
+            </tr>
+
+            <tr><td colspan="2" style={ROW_HEAD}>Less: running the office</td></tr>
+            {p.expenseByCategory.map((e) => (
+              <tr><td style={INDENT}>{expenseCategoryLabel(e.category)}</td><td class="num">{usd(e.usd)}</td></tr>
+            ))}
+            <tr>
+              <td style={INDENT}>Transfer (hawala) fees <span class="small muted">· lost moving money between our accounts</span></td>
+              <td class="num">{usd(p.transferFees)}</td>
+            </tr>
+            <tr><td><strong>Total office expenses & fees</strong></td><td class="num"><strong>{usd(officeTotal)}</strong></td></tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style="font-size:16px">{p.netProfit < 0 ? 'NET LOSS' : 'NET PROFIT'} <span class="small muted" style="font-weight:500">· {pctOf(p.netProfit)}</span></td>
+              <td class:list={['num', tone(p.netProfit)]} style="font-size:16px">{usd(p.netProfit)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2>By section</h2>
+        <span class="small muted">Gross profit — before office expenses</span>
+      </div>
+      <div class="o-table-wrap">
+        <table class="o-table">
+          <thead>
+            <tr><th>Section</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin</th></tr>
+          </thead>
+          <tbody>
+            {sections.map((s) => (
+              <tr>
+                <td>
+                  <a href={`/office/sections/${s.key}?${periodQuery(period)}`}>{SERVICES[s.key].short}</a>
+                  <div class="small muted">
+                    {fmtNum(s.shipments, 0)} shipment{s.shipments === 1 ? '' : 's'} · {SERVICES[s.key].unit === 'cbm' ? `${fmtNum(s.cbm, 3)} CBM` : `${fmtNum(s.kg)} kg`}
+                  </div>
+                </td>
+                <td class="num">{usd(s.revenue)}</td>
+                <td class="num">{usd(s.cost)}</td>
+                <td class:list={['num', tone(s.profit)]}>{usd(s.profit)}</td>
+                <td class="num">{fmtPct(margin(s.profit, s.revenue))}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>All sections</td>
+              <td class="num">{usd(p.revenue)}</td>
+              <td class="num">{usd(p.directCost)}</td>
+              <td class:list={['num', tone(p.grossProfit)]}>{usd(p.grossProfit)}</td>
+              <td class="num">{fmtPct(margin(p.grossProfit, p.revenue))}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="small muted" style="margin:12px 0 0">
+        Margin = profit out of every $100 billed. Office expenses are not split between sections, so each section stops at gross profit.
+      </p>
+    </div>
+  </div>
+
+  <div class="o-card" style="margin-top:16px">
+    <div class="o-card-head">
+      <h2>Month by month</h2>
+      <span class="small muted">{months.length} month{months.length === 1 ? '' : 's'}</span>
+    </div>
+    {
+      months.length >= 2 && (
+        <div style="margin-bottom:16px">
+          <BarChart rows={months} title={`Revenue, costs and net profit by month, ${periodName}`} />
+        </div>
+      )
+    }
+    {
+      months.length === 0 ? (
+        <p class="o-empty">Nothing recorded in this period.</p>
+      ) : (
+        <div class="o-table-wrap">
+          <table class="o-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="num">Revenue</th>
+                <th class="num">Direct costs</th>
+                <th class="num">Gross profit</th>
+                <th class="num">Office expenses & fees</th>
+                <th class="num">Net profit</th>
+                <th class="num">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {months.map((m) => {
+                const gross = Math.round((m.revenue - m.cost) * 100) / 100;
+                return (
+                  <tr>
+                    <td>{monthLabel(m.month)}</td>
+                    <td class="num">{usd(m.revenue)}</td>
+                    <td class="num">{usd(m.cost)}</td>
+                    <td class:list={['num', tone(gross)]}>{usd(gross)}</td>
+                    <td class="num">{usd(m.expenses)}</td>
+                    <td class:list={['num', tone(m.net)]}><strong>{usd(m.net)}</strong></td>
+                    <td class="num">{fmtPct(margin(m.net, m.revenue))}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td class="num">{usd(mt.revenue)}</td>
+                <td class="num">{usd(mt.cost)}</td>
+                <td class:list={['num', tone(mt.revenue - mt.cost)]}>{usd(mt.revenue - mt.cost)}</td>
+                <td class="num">{usd(mt.expenses)}</td>
+                <td class:list={['num', tone(mt.net)]}>{usd(mt.net)}</td>
+                <td class="num">{fmtPct(margin(mt.net, mt.revenue))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )
+    }
+    {months.length === 1 && <p class="small muted" style="margin:12px 0 0">Choose “This year” or a longer period to see the chart.</p>}
+  </div>
+</OfficeLayout>
+
+<style>
+  .o-grid-2 > .o-card { min-width: 0; }
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>

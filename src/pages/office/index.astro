@@ -1,14 +1,439 @@
 ---
-/** PLACEHOLDER — replaced by the dashboard module. */
+/**
+ * Dashboard. Admins see how the business is doing for the chosen period
+ * (profit, the five sections, a 12-month chart), the money position today
+ * (who owes whom, cash in the accounts) and what needs attention (unpaid
+ * invoices). Staff see the day's work: shipments by status, recent shipments,
+ * invoices still to collect and quick buttons — no profit, cost or expenses.
+ *
+ * Every figure comes from ledger.ts (directly, or via insights.ts which only
+ * chooses the rows and adds up the ledger's own per-row figures).
+ */
 import OfficeLayout from '../../layouts/OfficeLayout.astro';
 import PageHead from '../../components/office/PageHead.astro';
-import { guard } from '../../lib/office/auth';
+import Flash from '../../components/office/Flash.astro';
+import Stat from '../../components/office/Stat.astro';
+import PeriodPicker from '../../components/office/PeriodPicker.astro';
+import BarChart from '../../components/office/BarChart.astro';
+import { guard, isAdmin } from '../../lib/office/auth';
+import { pnl, monthlyPnl, balanceTotals, accountBalances } from '../../lib/office/ledger';
+import { usd, fmtMoney, fmtDate, fmtNum, today } from '../../lib/office/money';
+import { SERVICES, SERVICE_KEYS } from '../../lib/office/services';
+import { INVOICE_STATUS_LABEL } from '../../lib/office/invoices';
+import {
+  balanceGroups,
+  listInvoices,
+  recentShipments,
+  statusCounts,
+  last12Months,
+  margin,
+  fmtPct,
+  tone,
+  kgOf,
+  partyKindLabel,
+  expenseCategoryLabel,
+  accountTypeLabel,
+  serviceShort,
+  statusLabel,
+  periodQuery,
+  periodRangeText,
+  periodFromQuery,
+} from '../../lib/office/insights';
 
 export const prerender = false;
 const user = await guard(Astro);
 if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const todayStr = today();
+const period = periodFromQuery(Astro.url.searchParams, todayStr);
+const periodName = period.key === 'custom' ? periodRangeText(period) : period.label;
+
+const OPEN_FILTER = { status: 'open' as const, client: null, service: null, from: null, to: null, q: null };
+const [counts, recent, open] = await Promise.all([
+  statusCounts(period),
+  recentShipments(10),
+  listInvoices(OPEN_FILTER, null, todayStr, { sort: 'due', limit: 10 }),
+]);
+const shippedInPeriod = counts.reduce((a, c) => a + c.n, 0);
+// shipment list link for a status within this period
+const shipLink = (status?: string) => {
+  const u = new URLSearchParams({ from: period.from, to: period.to });
+  if (status) u.set('status', status);
+  return `/office/shipments?${u.toString()}`;
+};
+
+// Admin-only figures — never fetched for staff.
+let p: Awaited<ReturnType<typeof pnl>> | null = null;
+let totals: Awaited<ReturnType<typeof balanceTotals>> | null = null;
+let accounts: Awaited<ReturnType<typeof accountBalances>> = [];
+let months: Awaited<ReturnType<typeof monthlyPnl>> = [];
+let groups: Awaited<ReturnType<typeof balanceGroups>> | null = null;
+if (admin) {
+  [p, totals, accounts, months, groups] = await Promise.all([
+    pnl(period),
+    balanceTotals(),
+    accountBalances(),
+    monthlyPnl(last12Months(todayStr)),
+    balanceGroups(),
+  ]);
+}
+const officeCosts = p ? Math.round((p.officeExpenses + p.transferFees) * 100) / 100 : 0;
+const shipCount = p ? p.byService.reduce((a, s) => a + s.shipments, 0) : 0;
+const activeAccounts = accounts.filter((a) => a.active || a.balance !== 0);
+const cashUsd = Math.round(activeAccounts.reduce((a, r) => a + r.balance_usd, 0) * 100) / 100;
+const pq = periodQuery(period);
+const H2 = 'font-size:18px;font-weight:700;margin:26px 0 10px';
+const TILE = 'display:block;color:inherit;text-decoration:none';
+// two tiles a row on a phone instead of one (office.css .o-stats needs 190px each)
+const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
 ---
 
-<OfficeLayout title="Dashboard" user={user} active="dashboard">
-  <PageHead title="Dashboard" sub="Coming next." />
+<OfficeLayout title="Dashboard" user={user} active="dashboard" wide>
+  <PageHead
+    title="Dashboard"
+    sub={admin ? 'How the business is doing: profit, who owes whom, and what needs attention.' : 'Today\'s work at a glance: shipments, and money still to collect.'}
+  >
+    <a class="o-btn primary" href="/office/shipments/new">New shipment</a>
+    <a class="o-btn" href="/office/payments/new?dir=in">Record payment</a>
+    <a class="o-btn" href="/office/expenses/new">Add expense</a>
+  </PageHead>
+  <Flash />
+  <PeriodPicker period={period} action="/office" />
+
+  {
+    admin && p && totals && groups && (
+      <>
+        <h2 style={H2}>Profit — {periodName}</h2>
+        <div class="o-stats" style={TILES}>
+          <Stat label="Revenue" value={usd(p.revenue)} sub={`Billed on ${fmtNum(shipCount, 0)} shipment${shipCount === 1 ? '' : 's'}`} />
+          <Stat label="Direct costs" value={usd(p.directCost)} sub="Trucks, agents, airlines for those shipments" />
+          <Stat
+            label="Gross profit"
+            value={usd(p.grossProfit)}
+            tone={tone(p.grossProfit)}
+            sub={p.revenue ? `${fmtPct(margin(p.grossProfit, p.revenue))} of revenue` : 'Revenue minus direct costs'}
+          />
+          <Stat
+            label="Office expenses"
+            value={usd(officeCosts)}
+            sub={p.transferFees ? `Incl. ${usd(p.transferFees)} transfer fees` : 'Rent, salaries, internet…'}
+            href="/office/expenses"
+          />
+          {p.netProfit >= 0 ? (
+            <a class="o-stat brand" href={`/office/reports/pnl?${pq}`} style="display:block;text-decoration:none">
+              <div class="label">Net profit</div>
+              <div class="value">{usd(p.netProfit)}</div>
+              <div class="sub">{p.revenue ? `${fmtPct(margin(p.netProfit, p.revenue))} of revenue — what the business kept` : 'What the business kept'}</div>
+            </a>
+          ) : (
+            <a class="o-stat brand" href={`/office/reports/pnl?${pq}`} style="display:block;text-decoration:none;background:var(--o-red);border-color:var(--o-red)">
+              <div class="label" style="color:#fde1dd">Net loss</div>
+              <div class="value">{usd(p.netProfit)}</div>
+              <div class="sub" style="color:#fde1dd">Costs and expenses were more than revenue</div>
+            </a>
+          )}
+        </div>
+
+        <h2 style={H2}>Money position today</h2>
+        <div class="o-stats" style={TILES}>
+          <Stat label="Clients owe us" value={usd(totals.receivable)} sub="Billed, not yet paid" href="/office/reports/balances" />
+          <Stat label="We owe partners" value={usd(totals.payable)} sub="Agents, carriers, airlines not yet paid" tone={totals.payable > 0 ? 'neg' : ''} href="/office/reports/balances#we-owe" />
+          <Stat label="We hold for clients" value={usd(totals.clientCredit)} sub="Paid in advance or overpaid" href="/office/reports/balances#we-hold" />
+          <Stat label="Cash & accounts ≈" value={usd(cashUsd)} sub={`${activeAccounts.length} account${activeAccounts.length === 1 ? '' : 's'}, at today's rates`} href="/office/accounts" />
+        </div>
+
+        <h2 style={H2}>Sections — {periodName}</h2>
+        <div class="o-stats" style={TILES}>
+          {SERVICE_KEYS.map((k) => {
+            const s = p!.byService.find((r) => r.service === k) ?? { shipments: 0, kg: 0, cbm: 0, revenue: 0, cost: 0, profit: 0 };
+            const m = margin(s.profit, s.revenue);
+            const measure = SERVICES[k].unit === 'cbm' ? `${fmtNum(s.cbm, 3)} CBM` : `${fmtNum(s.kg)} kg`;
+            return (
+              <a class="o-stat" href={`/office/sections/${k}?${pq}`} style={TILE} data-astro-prefetch="false">
+                <div class="label">{SERVICES[k].short}</div>
+                <div class:list={['value', tone(s.profit)]} title="Gross profit">{usd(s.profit)}</div>
+                <div class="sub">
+                  {fmtNum(s.shipments, 0)} shipment{s.shipments === 1 ? '' : 's'} · {measure}
+                </div>
+                <div class="sub">Revenue {usd(s.revenue)}</div>
+                <div class="sub">Cost {usd(s.cost)} · Margin {fmtPct(m)}</div>
+              </a>
+            );
+          })}
+        </div>
+
+        <div class="o-card" style="margin-top:16px">
+          <div class="o-card-head">
+            <h2>Last 12 months</h2>
+            <a class="small" href="/office/reports/pnl?period=this-year">Profit & loss report →</a>
+          </div>
+          <BarChart rows={months} title="Revenue, costs and net profit for each of the last 12 months" />
+        </div>
+
+        <div class="o-grid-2" style="margin-top:16px">
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Who owes us most</h2>
+              <a class="small" href="/office/reports/balances">Everyone →</a>
+            </div>
+            {groups.owesUs.length === 0 ? (
+              <p class="o-empty">Nobody owes us anything right now.</p>
+            ) : (
+              <div class="o-table-wrap">
+                <table class="o-table">
+                  <thead><tr><th>Name</th><th class="num">Owes us</th></tr></thead>
+                  <tbody>
+                    {groups.owesUs.slice(0, 8).map((r) => (
+                      <tr>
+                        <td>
+                          <a href={`/office/parties/${r.id}`} data-astro-prefetch="false">{r.name}</a>
+                          {r.kind !== 'client' && <div class="small muted">{partyKindLabel(r.kind)} — we paid them more than they charged</div>}
+                          {r.kind === 'client' && r.city && <div class="small muted">{r.city}</div>}
+                        </td>
+                        <td class="num"><strong>{usd(r.balance)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr><td>All {groups.owesUs.length} who owe us</td><td class="num">{usd(totals.receivable)}</td></tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Partners we owe most</h2>
+              <a class="small" href="/office/reports/balances#we-owe">Everyone →</a>
+            </div>
+            {groups.weOwe.length === 0 ? (
+              <p class="o-empty">We don't owe any agent, carrier or airline anything.</p>
+            ) : (
+              <div class="o-table-wrap">
+                <table class="o-table">
+                  <thead><tr><th>Name</th><th class="num">We owe them</th></tr></thead>
+                  <tbody>
+                    {groups.weOwe.slice(0, 8).map((r) => (
+                      <tr>
+                        <td>
+                          <a href={`/office/parties/${r.id}`} data-astro-prefetch="false">{r.name}</a>
+                          <div class="small muted">{partyKindLabel(r.kind)}</div>
+                        </td>
+                        <td class="num neg"><strong>{usd(-r.balance)}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr><td>All {groups.weOwe.length} we owe</td><td class="num">{usd(totals.payable)}</td></tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  {
+    !admin && (
+      <>
+        <h2 style={H2}>Shipments — {periodName}</h2>
+        <div class="o-stats" style={TILES}>
+          <Stat label="All shipments" value={fmtNum(shippedInPeriod, 0)} sub="Shipped in this period" href={shipLink()} />
+          {counts.map((c) => (
+            <Stat label={c.label} value={fmtNum(c.n, 0)} href={shipLink(c.status)} />
+          ))}
+        </div>
+        <h2 style={H2}>Money to collect</h2>
+        <div class="o-stats" style={TILES}>
+          <Stat label="Invoices not fully paid" value={fmtNum(open.totals.count, 0)} sub="All dates" href="/office/invoices?status=open" />
+          <Stat label="Still to collect" value={usd(open.totals.due)} sub="On those invoices" href="/office/invoices?status=open" />
+        </div>
+      </>
+    )
+  }
+
+  <div class="o-grid-2" style="margin-top:16px">
+    <div class="o-card">
+      <div class="o-card-head">
+        <h2>Overdue & unpaid invoices</h2>
+        <a class="small" href="/office/invoices?status=open">All unpaid →</a>
+      </div>
+      {
+        open.rows.length === 0 ? (
+          <p class="o-empty">Every invoice is paid. Nothing to collect.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Invoice</th><th>Due</th><th class="num">Still due</th></tr></thead>
+              <tbody>
+                {open.rows.map((r) => (
+                  <tr>
+                    <td>
+                      <a href={`/office/invoices/${r.id}`} data-astro-prefetch="false"><strong>{r.number}</strong></a>
+                      <div class="small muted">{r.client_name ?? 'No client'} · {r.ref}</div>
+                    </td>
+                    <td style="white-space:nowrap">
+                      {r.due_date ? fmtDate(r.due_date) : <span class="muted">No due date</span>}
+                      <div><span class:list={['o-badge', r.status]}>{r.status === 'overdue' ? `${r.days_overdue} day${r.days_overdue === 1 ? '' : 's'} late` : INVOICE_STATUS_LABEL[r.status]}</span></div>
+                    </td>
+                    <td class="num"><strong>{usd(r.fig.due)}</strong>{r.fig.received > 0 && <div class="small muted">of {usd(r.fig.revenue)}</div>}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr><td colspan="2">All {open.totals.count} not fully paid</td><td class="num">{usd(open.totals.due)}</td></tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      }
+    </div>
+
+    {
+      admin ? (
+        <div class="o-card">
+          <div class="o-card-head">
+            <h2>Cash & accounts</h2>
+            <a class="small" href="/office/accounts">Open accounts →</a>
+          </div>
+          {activeAccounts.length === 0 ? (
+            <p class="o-empty">No cash boxes or accounts yet. <a href="/office/accounts">Add the first one</a>.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead><tr><th>Account</th><th class="num">Balance</th><th class="num">≈ USD</th></tr></thead>
+                <tbody>
+                  {activeAccounts.map((a) => (
+                    <tr>
+                      <td>
+                        <a href={`/office/accounts/${a.id}`} data-astro-prefetch="false">{a.name}</a>
+                        <div class="small muted">{accountTypeLabel(a.type)}{!a.active && ' · closed'}</div>
+                      </td>
+                      <td class:list={['num', a.balance < 0 && 'neg']}>{fmtMoney(a.balance, a.currency)}</td>
+                      <td class:list={['num', a.balance_usd < 0 && 'neg']}>{a.currency === 'USD' ? '' : usd(a.balance_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr><td colspan="2">Total, at today's rates</td><td class="num">{usd(cashUsd)}</td></tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div class="o-card">
+          <div class="o-card-head"><h2>Quick actions</h2></div>
+          <div class="o-actions">
+            <a class="o-btn primary" href="/office/shipments/new">New shipment</a>
+            <a class="o-btn" href="/office/payments/new?dir=in">Record money received</a>
+            <a class="o-btn" href="/office/payments/new?dir=out">Record money paid</a>
+            <a class="o-btn" href="/office/expenses/new">Add office expense</a>
+            <a class="o-btn" href="/office/invoices">Invoices</a>
+          </div>
+        </div>
+      )
+    }
+  </div>
+
+  <div class="o-grid-2" style="margin-top:16px">
+    <div class="o-card" style={admin ? undefined : 'grid-column:1 / -1'}>
+      <div class="o-card-head">
+        <h2>Recent shipments</h2>
+        <a class="small" href="/office/shipments">All shipments →</a>
+      </div>
+      {
+        recent.length === 0 ? (
+          <p class="o-empty">No shipments yet. <a href="/office/shipments/new">Enter the first one</a>.</p>
+        ) : (
+          <div class="o-table-wrap">
+            <table class="o-table">
+              <thead><tr><th>Shipment</th><th>Status</th><th class="num">Billed / due</th></tr></thead>
+              <tbody>
+                {recent.map((s) => {
+                  const measure = s.service === 'china' && s.cbm !== null ? `${fmtNum(s.cbm, 3)}\u00a0CBM` : kgOf(s) !== null ? `${fmtNum(kgOf(s))}\u00a0kg` : '';
+                  return (
+                    <tr>
+                      <td>
+                        <a href={`/office/shipments/${s.id}`} data-astro-prefetch="false"><strong>{s.ref}</strong></a>
+                        <div class="small muted">{fmtDate(s.ship_date)} · {serviceShort(s.service)}</div>
+                        <div class="small">{[s.client_name ?? 'No client', measure].filter(Boolean).join(' · ')}</div>
+                      </td>
+                      <td><span class:list={['o-badge', s.status]}>{statusLabel(s.status)}</span></td>
+                      <td class="num">
+                        {usd(s.fig.revenue)}
+                        <div class="small">
+                          {s.fig.due > 0 ? <strong>Due {usd(s.fig.due)}</strong> : s.fig.due < 0 ? <span>Overpaid {usd(-s.fig.due)}</span> : s.fig.revenue === 0 ? <span class="muted">Not billed yet</span> : <span class="pos">Paid</span>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+
+    {
+      admin && p && (
+        <div class="o-card">
+          <div class="o-card-head">
+            <h2>Office expenses — {periodName}</h2>
+            <a class="small" href="/office/expenses">All expenses →</a>
+          </div>
+          {p.expenseByCategory.length === 0 && p.transferFees === 0 ? (
+            <p class="o-empty">No office expenses in this period.</p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead><tr><th>What for</th><th class="num">Amount</th><th class="num">Share</th></tr></thead>
+                <tbody>
+                  {p.expenseByCategory.map((e) => (
+                    <tr>
+                      <td>
+                        {expenseCategoryLabel(e.category)}
+                        <div class="o-bar" style="margin-top:6px" aria-hidden="true"><span style={`width:${officeCosts ? Math.max(1, (e.usd / officeCosts) * 100) : 0}%`} /></div>
+                      </td>
+                      <td class="num">{usd(e.usd)}</td>
+                      <td class="num muted">{fmtPct(officeCosts ? (e.usd / officeCosts) * 100 : null, 0)}</td>
+                    </tr>
+                  ))}
+                  {p.transferFees !== 0 && (
+                    <tr>
+                      <td>
+                        Transfer (hawala) fees
+                        <div class="small muted">Lost between our own accounts when moving money</div>
+                      </td>
+                      <td class="num">{usd(p.transferFees)}</td>
+                      <td class="num muted">{fmtPct(officeCosts ? (p.transferFees / officeCosts) * 100 : null, 0)}</td>
+                    </tr>
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr><td>Total</td><td class="num">{usd(officeCosts)}</td><td class="num"></td></tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )
+    }
+  </div>
 </OfficeLayout>
+
+<style>
+  /* Grid items default to min-width:auto, so a wide table would push a card
+     past the screen on a phone; 0 lets the table scroll inside its card. */
+  .o-grid-2 > .o-card { min-width: 0; }
+  @media (max-width: 600px) {
+    .o-stats { gap: 8px; }
+    .o-stats :global(.o-stat) { padding: 10px 12px; }
+    .o-stats :global(.value) { font-size: 21px; }
+    .o-stats :global(.label) { font-size: 11px; letter-spacing: 0.04em; }
+  }
+</style>
