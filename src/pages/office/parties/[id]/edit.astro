@@ -1,0 +1,99 @@
+---
+/**
+ * Change a client's or partner's details: name, kind, phone, city, country,
+ * notes, active. Warns when the new name (or re-activating) clashes with
+ * another active party of the same name.
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import PartyForm from '../_PartyForm.astro';
+import { guard, sameOrigin } from '../../../../lib/office/auth';
+import { tx } from '../../../../lib/office/db';
+import { logActivity } from '../../../../lib/office/activity';
+import { withMsg } from '../../../../lib/office/form';
+import {
+  idParam,
+  getParty,
+  modeOf,
+  listHref,
+  navId,
+  formValues,
+  readPartyForm,
+  sameNameParties,
+  updateParty,
+  partyChanges,
+  partyCounts,
+  normalizeName,
+} from '../../../../lib/office/parties';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+const id = idParam(Astro.params.id);
+const party = id ? await getParty(id) : null;
+if (!party) return Astro.redirect(withMsg('/office/parties?kind=client', 'That client or partner was not found — it may have been deleted.', 'err'), 303);
+
+let error: string | null = null;
+let dupes: Awaited<ReturnType<typeof sameNameParties>> = [];
+let values: Record<string, string> = {
+  name: party.name,
+  kind: party.kind,
+  phone: party.phone ?? '',
+  city: party.city ?? '',
+  country: party.country ?? '',
+  notes: party.notes ?? '',
+  active: party.active ? 'on' : '',
+  confirm_dup: '',
+};
+
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked. Reload the page and try again.';
+  else {
+    const fd = await Astro.request.formData();
+    values = formValues(fd);
+    const r = readPartyForm(fd);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      // Only worth asking when the name changes or they come back into use.
+      const renamed = normalizeName(party.name).toLowerCase() !== v.name.toLowerCase();
+      const reactivated = !party.active && v.active;
+      const confirmed = fd.get('confirm_dup') === '1';
+      dupes = v.active && (renamed || reactivated) && !confirmed ? await sameNameParties(v.name, party.id) : [];
+      if (!dupes.length) {
+        await tx(async (t) => {
+          await updateParty(party.id, v, t);
+          await logActivity(user.id, 'party_updated', 'party', party.id, partyChanges(party, v), t);
+        });
+        return Astro.redirect(withMsg(`/office/parties/${party.id}`, 'Saved.'), 303);
+      }
+    }
+  }
+}
+
+const counts = await partyCounts(party.id);
+const mode = modeOf(party.kind);
+---
+
+<OfficeLayout title={`Edit ${party.name}`} user={user} active={navId(party.kind)}>
+  <PageHead
+    title={`Edit ${party.name}`}
+    sub="Change their details. Their shipments, bills, payments and balance are not affected."
+    crumbs={[
+      { label: 'Office', href: '/office' },
+      { label: mode === 'client' ? 'Clients' : 'Agents & partners', href: listHref(party.kind) },
+      { label: party.name, href: `/office/parties/${party.id}` },
+    ]}
+  />
+  <Flash error={error} />
+  <PartyForm
+    mode="edit"
+    values={values}
+    cancelHref={`/office/parties/${party.id}`}
+    dupes={dupes}
+    listMode={mode}
+    hasRecords={counts.shipments + counts.costs + counts.payments > 0}
+  />
+</OfficeLayout>

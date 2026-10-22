@@ -63,7 +63,11 @@ const siteLinks = NAV.filter((n) => n.href !== '/contact');
 
     <div class="flex flex-col justify-between gap-3 border-t border-[rgba(255,255,255,0.12)] pt-6 sm:flex-row">
       <span class="text-[13px] text-[#C2A6B0]">© {year} {SITE.name}. All rights reserved.</span>
-      <span class="text-[13px] text-[#C2A6B0]">{CONTACT.location}</span>
+      <span class="flex items-center gap-4 text-[13px] text-[#C2A6B0]">
+        {CONTACT.location}
+        <!-- The only public link to the staff system; it asks for a username and password. -->
+        <a href="/office/login" rel="nofollow" class="text-[#C2A6B0] underline-offset-2 transition-colors hover:text-white hover:underline">Staff login</a>
+      </span>
     </div>
   </div>
 </footer>

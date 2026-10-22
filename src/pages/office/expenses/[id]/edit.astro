@@ -1,0 +1,64 @@
+---
+/** Edit an office expense (admin only). */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import ExpenseForm from '../_ExpenseForm.astro';
+import { guard, sameOrigin } from '../../../../lib/office/auth';
+import { tx } from '../../../../lib/office/db';
+import { logActivity } from '../../../../lib/office/activity';
+import { withMsg } from '../../../../lib/office/form';
+import { rateMap } from '../../../../lib/office/money';
+import { EXPENSE_FIELDS, formValues, getExpense, readExpenseForm, updateExpense, expenseChanges, accountOptions, partyOptions, rateInput, idParam } from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const id = idParam(Astro.params.id);
+const e = id ? await getExpense(id) : null;
+if (!e) return Astro.redirect(withMsg('/office/expenses', 'That expense was not found — it may have been deleted.', 'err'), 303);
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    posted = formValues(fd, EXPENSE_FIELDS);
+    const r = await readExpenseForm(fd, e);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      await tx(async (t) => {
+        await updateExpense(e.id, v, t);
+        await logActivity(user.id, 'expense_updated', 'expense', e.id, expenseChanges(e, v), t);
+      });
+      return Astro.redirect(withMsg(`/office/expenses/${e.id}`, 'Expense saved.'), 303);
+    }
+  }
+}
+
+const values = posted ?? {
+  exp_date: e.exp_date,
+  category: e.category,
+  description: e.description ?? '',
+  payee: e.payee_id ? String(e.payee_id) : '',
+  account: String(e.account_id),
+  amount: String(e.amount),
+  per_usd: rateInput(e.per_usd),
+  method: e.method,
+  reference: e.reference ?? '',
+};
+const [accounts, parties, rates] = await Promise.all([accountOptions(e.account_id), partyOptions({ includeId: idParam(values.payee) ?? e.payee_id }), rateMap()]);
+---
+
+<OfficeLayout title={`Edit expense #${e.id}`} user={user} active="expenses">
+  <PageHead
+    title={`Edit expense #${e.id}`}
+    sub="Changes are written to the activity log with the old and new figures."
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Office expenses', href: '/office/expenses' }, { label: `Expense #${e.id}`, href: `/office/expenses/${e.id}` }]}
+  />
+  <Flash error={error} />
+  <ExpenseForm mode="edit" cancelHref={`/office/expenses/${e.id}`} values={values} parties={parties} accounts={accounts} rates={rates} />
+</OfficeLayout>

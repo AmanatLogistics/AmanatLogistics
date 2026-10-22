@@ -1,0 +1,147 @@
+---
+/**
+ * Import old records from spreadsheets (admin only).
+ * Upload → every row checked and shown → confirm → the good rows saved together.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import { guard, sameOrigin } from '../../../lib/office/auth';
+import { KINDS, KIND_ORDER, isKind, checkFile, runImport, type CheckResult, type ImportKind } from '../../../lib/office/importer';
+import { withMsg } from '../../../lib/office/form';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const MAX_BYTES = 2_000_000;
+let error: string | null = null;
+let checked: CheckResult | null = null;
+let fileText = '';
+let kind: ImportKind = 'parties';
+let createParties = true;
+
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    const k = String(fd.get('kind') ?? '');
+    kind = isKind(k) ? k : 'parties';
+    createParties = fd.get('create_parties') === 'on';
+    const action = String(fd.get('action') ?? 'check');
+    const file = fd.get('file');
+    if (file instanceof File && file.size > 0) {
+      if (file.size > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
+      else fileText = await file.text();
+    } else fileText = String(fd.get('csv') ?? '');
+    if (!error && !fileText.trim()) error = 'Choose a CSV file first.';
+    if (!error && fileText.length > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
+    if (!error && action === 'import') {
+      try {
+        const res = await runImport(kind, fileText, createParties, user.id);
+        const parts = [`${res.saved} ${KINDS[kind].label.toLowerCase()} rows saved`];
+        if (res.skipped) parts.push(`${res.skipped} skipped because of problems`);
+        if (res.createdParties) parts.push(`${res.createdParties} new clients/partners created`);
+        if (res.invoices) parts.push(`${res.invoices} invoices ready`);
+        return Astro.redirect(withMsg('/office/import', parts.join(', ') + '.'), 303);
+      } catch (e) {
+        console.error('Import failed:', e);
+        error = `Nothing was saved: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+    if (!error || action === 'import') {
+      try {
+        checked = await checkFile(kind, fileText, createParties);
+      } catch (e) {
+        error = `Could not read the file: ${e instanceof Error ? e.message : String(e)}`;
+      }
+    }
+  }
+}
+
+const okRows = checked ? checked.rows.filter((r) => !r.errors.length).length : 0;
+const badRows = checked ? checked.rows.length - okRows : 0;
+const blocking = checked?.headerProblems.some((p) => p.startsWith('Missing') || p.startsWith('The file')) ?? false;
+---
+
+<OfficeLayout title="Import old data" user={user} active="import">
+  <PageHead title="Import old data" sub="Bring in records from your old spreadsheets. Each file is checked first; nothing is saved until you confirm." />
+  <Flash error={error} />
+
+  {
+    checked && (
+      <div class="o-card">
+        <div class="o-card-head">
+          <h2>Check: {KINDS[checked.kind].label}</h2>
+          <span class="muted small">{checked.rows.length} rows · <span class="pos">{okRows} ready</span>{badRows > 0 && <> · <span class="neg">{badRows} with problems</span></>}</span>
+        </div>
+        {checked.headerProblems.map((p) => <div class:list={['o-flash', p.startsWith('Missing') || p.startsWith('The file') ? 'err' : 'ok']}>{p}</div>)}
+        {checked.newParties.length > 0 && (
+          <p class="small">These names are new and will be created: {checked.newParties.map((p) => `${p.name} (${p.kind})`).join(', ')}.</p>
+        )}
+        {!blocking && (
+          <div class="o-table-wrap" style="max-height:480px;overflow:auto">
+            <table class="o-table">
+              <thead><tr><th>Line</th><th>Will be saved as</th><th>Problems</th></tr></thead>
+              <tbody>
+                {checked.rows.slice(0, 500).map((r) => (
+                  <tr>
+                    <td class="muted">{r.line}</td>
+                    <td>{r.preview}</td>
+                    <td>{r.errors.length ? <span class="neg small">{r.errors.join(' ')}</span> : <span class="o-badge paid">OK</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {checked.rows.length > 500 && <p class="muted small">Showing the first 500 rows; all {checked.rows.length} are checked.</p>}
+        {!blocking && okRows > 0 && (
+          <form method="post" class="o-actions" style="margin-top:14px">
+            <input type="hidden" name="action" value="import" />
+            <input type="hidden" name="kind" value={checked.kind} />
+            {createParties && <input type="hidden" name="create_parties" value="on" />}
+            <textarea name="csv" hidden>{fileText}</textarea>
+            <button class="o-btn primary" type="submit" onclick="this.disabled=true;this.form.submit();">Save {okRows} rows{badRows > 0 ? ` (skip ${badRows})` : ''}</button>
+            <a class="o-btn" href="/office/import">Cancel</a>
+          </form>
+        )}
+      </div>
+    )
+  }
+
+  <div class="o-grid-2" style="margin-top:16px">
+    <form method="post" enctype="multipart/form-data" class="o-card o-form">
+      <div class="o-card-head"><h2>Check a file</h2></div>
+      <input type="hidden" name="action" value="check" />
+      <label class="o-field"><span>What is in the file?</span>
+        <select name="kind">
+          {KIND_ORDER.map((k, i) => <option value={k} selected={k === kind}>{i + 1}. {KINDS[k].label}</option>)}
+        </select>
+      </label>
+      <label class="o-field"><span>CSV file</span><input type="file" name="file" accept=".csv,text/csv,text/plain" required />
+        <span class="o-help">In Excel: File → Save As → "CSV UTF-8". Comma, semicolon or tab separated all work. Dates as 2026-03-15 or 15/03/2026.</span>
+      </label>
+      <label class="small"><input type="checkbox" name="create_parties" checked={createParties} /> Create clients and partners that are not in the system yet</label>
+      <div><button class="o-btn primary" type="submit">Check file</button></div>
+    </form>
+
+    <div class="o-card">
+      <div class="o-card-head"><h2>Templates — in this order</h2></div>
+      <p class="small muted" style="margin-top:0">Later files refer to earlier ones by name or reference, so import them in this order. Download a template, fill it in (keep the first row), save as CSV and check it here.</p>
+      <ol class="small" style="padding-left:18px;margin:0;display:grid;gap:10px">
+        {KIND_ORDER.map((k) => (
+          <li>
+            <strong>{KINDS[k].label}</strong> — <a href={`/office/import/template/${k}.csv`} data-astro-prefetch="false">download template</a>
+            <div class="muted">{KINDS[k].what}</div>
+            <details><summary class="muted" style="cursor:pointer">Columns</summary>
+              <ul style="padding-left:16px;margin:6px 0">
+                {KINDS[k].cols.map((c) => <li><code>{c.key}</code>{c.required && <strong> (required)</strong>}{c.help && <span class="muted"> — {c.help}</span>}</li>)}
+              </ul>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </div>
+</OfficeLayout>

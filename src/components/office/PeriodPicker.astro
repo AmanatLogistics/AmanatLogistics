@@ -1,0 +1,92 @@
+---
+/**
+ * Choose the period a page reports on. Works without JavaScript: the presets
+ * are plain links and "custom dates" is a small GET form, all producing the
+ * ?period=…&from=…&to=… that ledger.ts periodFromParams() reads.
+ *
+ *   const period = periodFromParams(Astro.url.searchParams, today());
+ *   <PeriodPicker period={period} action="/office/reports/pnl" />
+ *
+ * `keep` carries other query values (e.g. a tab) through every choice; the
+ * page number is never kept, so a new period starts on page 1.
+ */
+import { fmtDate } from '../../lib/office/money';
+
+interface Props {
+  period: { key: string; label: string; from: string; to: string };
+  action: string;
+  keep?: Record<string, string | null | undefined>;
+}
+const { period, action, keep = {} } = Astro.props;
+
+const PRESETS = [
+  { key: 'this-month', label: 'This month' },
+  { key: 'last-month', label: 'Last month' },
+  { key: 'this-year', label: 'This year' },
+  { key: 'last-year', label: 'Last year' },
+  { key: 'all', label: 'All time' },
+];
+const kept = Object.entries(keep).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1] !== '');
+const href = (key: string) => {
+  const u = new URLSearchParams(kept);
+  u.set('period', key);
+  return `${action}?${u.toString()}`;
+};
+const custom = period.key === 'custom';
+const range = period.key === 'all' ? 'every record, whatever its date' : `${fmtDate(period.from)} – ${fmtDate(period.to)}`;
+const pickerId = `pp-${Math.random().toString(36).slice(2, 8)}`;
+---
+
+<section class="o-card no-print period-picker" aria-labelledby={pickerId}>
+  <div class="pp-row">
+    <div class="pp-now">
+      <span class="o-label" id={pickerId}>Showing</span>
+      <strong>{custom ? 'Custom dates' : period.label}</strong>
+      <span class="muted small">{range}</span>
+    </div>
+    <nav class="o-actions" aria-label="Quick periods">
+      {
+        PRESETS.map((p) => (
+          <a
+            class:list={['o-btn', 'sm', period.key === p.key && 'primary']}
+            href={href(p.key)}
+            aria-current={period.key === p.key ? 'true' : undefined}
+            data-astro-prefetch="false"
+          >
+            {p.label}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+  <details open={custom}>
+    <summary class="small">Choose your own dates</summary>
+    <form method="get" action={action} class="o-filters pp-form">
+      {kept.map(([k, v]) => <input type="hidden" name={k} value={v} />)}
+      <input type="hidden" name="period" value="custom" />
+      <label class="o-field">
+        <span>From</span>
+        <input type="date" name="from" value={period.key === 'all' ? '' : period.from} required />
+      </label>
+      <label class="o-field">
+        <span>To</span>
+        <input type="date" name="to" value={period.key === 'all' ? '' : period.to} required />
+      </label>
+      <div class="o-actions"><button type="submit" class="o-btn primary">Show these dates</button></div>
+    </form>
+  </details>
+</section>
+
+<style>
+  .period-picker { padding: 12px 16px; margin-bottom: 16px; }
+  .pp-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+  .pp-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+  .pp-now strong { font-size: 16px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--o-maroon); font-weight: 600; width: max-content; }
+  .pp-form { margin: 10px 0 0; }
+  @media (max-width: 720px) {
+    .pp-row .o-actions { width: 100%; }
+    .pp-row .o-actions .o-btn { flex: 1 1 auto; }
+  }
+</style>

@@ -1,0 +1,263 @@
+---
+/**
+ * All shipments, newest first, 50 a page. Filter by section, status, client,
+ * dates or free text (ref, AWB, tracking no, goods, client name, invoice no).
+ * Totals cover everything the filters match, not just this page. Cost and
+ * profit columns and the CSV export are for admins only.
+ *
+ * Row links carry data-astro-prefetch="false": the site prefetches every
+ * visible link, which here would render ~150 office pages per visit.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import Stat from '../../../components/office/Stat.astro';
+import { guard, isAdmin } from '../../../lib/office/auth';
+import { usd, fmtDate, fmtNum, today } from '../../../lib/office/money';
+import { SERVICES, SERVICE_KEYS, SHIPMENT_STATUS } from '../../../lib/office/services';
+import { INVOICE_STATUS_LABEL } from '../../../lib/office/invoices';
+import {
+  filtersFromParams,
+  filtersQuery,
+  hasFilters,
+  listShipments,
+  shipmentsCsv,
+  allClients,
+  routeText,
+} from '../../../lib/office/shipments';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const f = filtersFromParams(Astro.url.searchParams);
+const todayStr = today();
+
+if (Astro.url.searchParams.get('format') === 'csv') {
+  if (!admin)
+    return new Response('Only an admin can export shipments — the export includes cost and profit.', {
+      status: 403,
+      headers: { 'content-type': 'text/plain; charset=utf-8' },
+    });
+  const all = await listShipments(f, null, todayStr);
+  return new Response(shipmentsCsv(all), {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="shipments-${todayStr}.csv"`,
+      'cache-control': 'no-store',
+      'x-robots-tag': 'noindex, nofollow',
+    },
+  });
+}
+
+const pageNo = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+const list = await listShipments(f, pageNo, todayStr);
+const clients = await allClients();
+const t = list.totals;
+const filtered = hasFilters(f);
+const firstRow = (list.page - 1) * list.perPage + 1;
+const lastRow = firstRow + list.rows.length - 1;
+const cols = admin ? 10 : 9;
+const kgText = (r: { weight_kg: number | null; chargeable_kg: number | null }) => {
+  const kg = r.chargeable_kg ?? r.weight_kg;
+  return kg === null ? null : `${fmtNum(kg)} kg`;
+};
+---
+
+<OfficeLayout title="Shipments" user={user} active="shipments" wide>
+  <PageHead title="Shipments" sub="Every consignment on every route — what was billed, what has been paid, and what is still due." crumbs={[{ label: 'Office', href: '/office' }]}>
+    {admin && (
+      <a class="o-btn" href={`/office/shipments${filtersQuery(f, { format: 'csv' })}`} data-astro-prefetch="false">Download CSV</a>
+    )}
+    <a class="o-btn primary" href="/office/shipments/new">New shipment</a>
+  </PageHead>
+  <Flash />
+
+  <form method="get" class="o-filters" action="/office/shipments">
+    <label class="o-field" style="flex:2;min-width:220px">
+      <span>Search</span>
+      <input type="search" name="q" value={f.q ?? ''} placeholder="Ref, AWB, tracking, client…" title="Searches the ref, airway bill, tracking no., goods, client name and invoice no." />
+    </label>
+    <label class="o-field">
+      <span>Section</span>
+      <select name="service">
+        <option value="">All sections</option>
+        {SERVICE_KEYS.map((k) => <option value={k} selected={f.service === k}>{SERVICES[k].short}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Status</span>
+      <select name="status">
+        <option value="">Any status</option>
+        {Object.entries(SHIPMENT_STATUS).map(([k, v]) => <option value={k} selected={f.status === k}>{v}</option>)}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Client</span>
+      <select name="client">
+        <option value="">All clients</option>
+        {clients.map((c) => (
+          <option value={String(c.id)} selected={f.client === c.id}>{c.name}{c.city ? ` — ${c.city}` : ''}</option>
+        ))}
+      </select>
+    </label>
+    <label class="o-field">
+      <span>Shipped from</span>
+      <input type="date" name="from" value={f.from ?? ''} />
+    </label>
+    <label class="o-field">
+      <span>Shipped to</span>
+      <input type="date" name="to" value={f.to ?? ''} />
+    </label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      {filtered && <a class="o-btn ghost" href="/office/shipments">Clear filters</a>}
+    </div>
+  </form>
+
+  {
+    t.count > 0 && (
+      <div class="o-stats">
+        <Stat label={filtered ? 'Shipments found' : 'Shipments'} value={fmtNum(t.count, 0)} sub={[t.kg ? `${fmtNum(t.kg)} kg` : '', t.cbm ? `${fmtNum(t.cbm, 3)} CBM` : ''].filter(Boolean).join(' · ') || undefined} />
+        <Stat label="Billed" value={usd(t.revenue)} sub="Charged to clients" />
+        <Stat label="Received" value={usd(t.received)} sub="Paid by clients for these shipments" />
+        <Stat
+          label="Still to collect"
+          value={usd(t.due)}
+          sub={t.due < 0 ? 'Clients have paid more than billed' : t.due === 0 ? 'Everything is paid' : 'Billed but not yet paid'}
+        />
+        {admin && <Stat label="Profit" value={usd(t.profit)} sub={`Cost ${usd(t.cost)}`} tone={t.profit > 0 ? 'pos' : t.profit < 0 ? 'neg' : ''} />}
+      </div>
+    )
+  }
+
+  <div class="o-table-wrap">
+    <table class="o-table">
+      <thead>
+        <tr>
+          <th>Ref / date</th>
+          <th>Section / route</th>
+          <th>Client</th>
+          <th class="num">Kg / CBM</th>
+          <th>Status</th>
+          <th class="num">Billed</th>
+          <th class="num">Received</th>
+          <th class="num">Due</th>
+          <th>Invoice</th>
+          {admin && <th class="num">Profit / cost</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          list.rows.length === 0 && (
+            <tr>
+              <td colspan={cols} class="o-empty">
+                {filtered ? (
+                  <>No shipments match these filters. <a href="/office/shipments">Show all shipments</a></>
+                ) : (
+                  <>No shipments yet. <a href="/office/shipments/new">Enter the first one</a></>
+                )}
+              </td>
+            </tr>
+          )
+        }
+        {
+          list.rows.map((r) => (
+            <tr>
+              <td style="white-space:nowrap">
+                <a href={`/office/shipments/${r.id}`} data-astro-prefetch="false" title={r.goods ?? undefined}><strong>{r.ref}</strong></a>
+                <div class="small muted">{fmtDate(r.ship_date)}</div>
+              </td>
+              <td>
+                <span style="white-space:nowrap">{SERVICES[r.service]?.short ?? r.service}</span>
+                <div class="small muted">{routeText(r)}</div>
+              </td>
+              <td style="min-width:120px">
+                {r.client_id ? <a href={`/office/parties/${r.client_id}`} data-astro-prefetch="false">{r.client_name}</a> : <span class="muted">—</span>}
+              </td>
+              <td class="num">
+                {kgText(r) ?? (r.cbm === null ? '—' : '')}
+                {r.cbm !== null && <div class:list={[kgText(r) && 'small muted']}>{fmtNum(r.cbm, 3)} CBM</div>}
+              </td>
+              <td><span class:list={['o-badge', r.status]}>{SHIPMENT_STATUS[r.status] ?? r.status}</span></td>
+              <td class="num">{usd(r.fig.revenue)}</td>
+              <td class="num">{r.fig.received ? usd(r.fig.received) : <span class="muted">{usd(0)}</span>}</td>
+              <td class="num">
+                {r.fig.due > 0 ? (
+                  <strong>{usd(r.fig.due)}</strong>
+                ) : r.fig.due < 0 ? (
+                  <span class="small" title="The client paid more than billed">Overpaid {usd(-r.fig.due)}</span>
+                ) : (
+                  <span class="muted">{usd(0)}</span>
+                )}
+              </td>
+              <td style="white-space:nowrap">
+                {r.invoice_id ? (
+                  <>
+                    <a href={`/office/invoices/${r.invoice_id}`} class="small" data-astro-prefetch="false">{r.invoice_number}</a>
+                    {r.invoice_status && (
+                      <div><span class:list={['o-badge', r.invoice_status]}>{INVOICE_STATUS_LABEL[r.invoice_status]}</span></div>
+                    )}
+                  </>
+                ) : (
+                  <span class="muted small">None yet</span>
+                )}
+              </td>
+              {admin && (
+                <td class="num">
+                  <span class:list={[r.fig.profit > 0 && 'pos', r.fig.profit < 0 && 'neg']}>{usd(r.fig.profit)}</span>
+                  <div class="small muted">cost {usd(r.fig.cost)}</div>
+                </td>
+              )}
+            </tr>
+          ))
+        }
+      </tbody>
+      {
+        t.count > 0 && (
+          <tfoot>
+            <tr>
+              <td colspan="3">
+                Total — {fmtNum(t.count, 0)} shipment{t.count === 1 ? '' : 's'}
+                {list.pages > 1 && <span class="muted small"> (all pages)</span>}
+              </td>
+              <td class="num">
+                {t.kg ? `${fmtNum(t.kg)} kg` : ''}
+                {t.cbm ? <div class="small">{fmtNum(t.cbm, 3)} CBM</div> : ''}
+              </td>
+              <td></td>
+              <td class="num">{usd(t.revenue)}</td>
+              <td class="num">{usd(t.received)}</td>
+              <td class="num">{usd(t.due)}</td>
+              <td></td>
+              {admin && (
+                <td class="num">
+                  <span class:list={[t.profit > 0 && 'pos', t.profit < 0 && 'neg']}>{usd(t.profit)}</span>
+                  <div class="small">cost {usd(t.cost)}</div>
+                </td>
+              )}
+            </tr>
+          </tfoot>
+        )
+      }
+    </table>
+  </div>
+
+  {
+    t.count > 0 && (
+      <div class="o-actions" style="justify-content:space-between;margin-top:12px">
+        <span class="muted small">
+          Showing {fmtNum(firstRow, 0)}–{fmtNum(lastRow, 0)} of {fmtNum(t.count, 0)}
+          {list.pages > 1 && ` · page ${list.page} of ${list.pages}`}
+        </span>
+        {list.pages > 1 && (
+          <span class="o-actions">
+            {list.page > 1 && <a class="o-btn sm" href={`/office/shipments${filtersQuery(f, { page: list.page - 1 })}`}>← Newer</a>}
+            {list.page < list.pages && <a class="o-btn sm" href={`/office/shipments${filtersQuery(f, { page: list.page + 1 })}`}>Older →</a>}
+          </span>
+        )}
+      </div>
+    )
+  }
+</OfficeLayout>

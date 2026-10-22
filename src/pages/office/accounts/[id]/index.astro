@@ -1,0 +1,310 @@
+---
+/**
+ * One account: opening balance, then every movement (payments in and out,
+ * expenses, transfers in and out) in date order with a running balance in the
+ * account's own currency. The running balance is checked against ledger.ts
+ * accountBalances() — they must agree to the cent.
+ *
+ * Admin: change the account's details, close / re-open it, or delete it if
+ * nothing uses it.
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import Stat from '../../../../components/office/Stat.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { q, tx } from '../../../../lib/office/db';
+import { logActivity } from '../../../../lib/office/activity';
+import { str, withMsg } from '../../../../lib/office/form';
+import { fmtDate, usd, listCurrencies, today } from '../../../../lib/office/money';
+import { ACCOUNT_TYPES } from '../../../../lib/office/services';
+import { accountBalances } from '../../../../lib/office/ledger';
+import {
+  ACCOUNT_FIELDS,
+  formValues,
+  getAccount,
+  readAccountForm,
+  accountUsage,
+  accountLedger,
+  accountTypeLabel,
+  csvResponse,
+  dateParam,
+  idParam,
+  withParams,
+  rateInput,
+  fmtAmount,
+} from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+const acc = id ? await getAccount(id) : null;
+if (!acc) return Astro.redirect(withMsg('/office/accounts', 'That account was not found.', 'err'), 303);
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else if (!admin) error = 'Only an admin can change an account.';
+  else {
+    const fd = await Astro.request.formData();
+    const action = str(fd, 'action');
+    const bal = (await accountBalances()).find((b) => b.id === acc.id);
+    if (action === 'update') {
+      posted = formValues(fd, ACCOUNT_FIELDS);
+      const r = await readAccountForm(fd, acc);
+      if (!r.ok) error = r.error;
+      else {
+        const v = r.value;
+        const used = await accountUsage(acc.id);
+        if (v.currency !== acc.currency && used.total > 0) {
+          error = `The currency can't change: ${used.total} record${used.total === 1 ? '' : 's'} already use this account in ${acc.currency}. Add a new account for ${v.currency} instead.`;
+        } else {
+          const ch: string[] = [];
+          if (v.name !== acc.name) ch.push(`name "${acc.name}" → "${v.name}"`);
+          if (v.type !== acc.type) ch.push(`type ${acc.type} → ${v.type}`);
+          if (v.currency !== acc.currency) ch.push(`currency ${acc.currency} → ${v.currency}`);
+          if (v.opening_balance !== acc.opening_balance) ch.push(`opening balance ${fmtAmount(acc.opening_balance, acc.currency)} → ${fmtAmount(v.opening_balance, v.currency)}`);
+          if ((v.opening_date ?? '') !== (acc.opening_date ?? '')) ch.push(`opening date ${acc.opening_date ?? 'none'} → ${v.opening_date ?? 'none'}`);
+          if ((v.notes ?? '') !== (acc.notes ?? '')) ch.push('notes changed');
+          await tx(async (t) => {
+            await q(
+              'UPDATE office_accounts SET name = $1, type = $2, currency = $3, opening_balance = $4, opening_date = $5, notes = $6 WHERE id = $7',
+              [v.name, v.type, v.currency, v.opening_balance, v.opening_date, v.notes, acc.id],
+              t,
+            );
+            await logActivity(user.id, 'account_updated', 'account', acc.id, `${acc.name}: ${ch.length ? ch.join('; ') : 'saved with no changes'}`, t);
+          });
+          return Astro.redirect(withMsg(`/office/accounts/${acc.id}`, 'Account saved.'), 303);
+        }
+      }
+    } else if (action === 'deactivate') {
+      if (bal && bal.balance !== 0) {
+        error = `"${acc.name}" still holds ${fmtAmount(bal.balance, acc.currency)}. Move the money to another account first (a transfer), so its balance is zero, then close it.`;
+      } else {
+        await tx(async (t) => {
+          await q('UPDATE office_accounts SET active = FALSE WHERE id = $1', [acc.id], t);
+          await logActivity(user.id, 'account_deactivated', 'account', acc.id, `${acc.name} closed`, t);
+        });
+        return Astro.redirect(withMsg(`/office/accounts/${acc.id}`, `"${acc.name}" is closed. Its history stays; it can't take new entries.`), 303);
+      }
+    } else if (action === 'reactivate') {
+      await tx(async (t) => {
+        await q('UPDATE office_accounts SET active = TRUE WHERE id = $1', [acc.id], t);
+        await logActivity(user.id, 'account_reactivated', 'account', acc.id, `${acc.name} re-opened`, t);
+      });
+      return Astro.redirect(withMsg(`/office/accounts/${acc.id}`, `"${acc.name}" is open again.`), 303);
+    } else if (action === 'delete') {
+      const used = await accountUsage(acc.id);
+      if (used.total > 0) {
+        const parts = [
+          used.payments && `${used.payments} payment${used.payments === 1 ? '' : 's'}`,
+          used.expenses && `${used.expenses} expense${used.expenses === 1 ? '' : 's'}`,
+          used.transfers && `${used.transfers} transfer${used.transfers === 1 ? '' : 's'}`,
+        ].filter(Boolean);
+        error = `"${acc.name}" can't be deleted: ${parts.join(', ')} use it. Close it instead — its history stays.`;
+      } else {
+        await tx(async (t) => {
+          await q('DELETE FROM office_accounts WHERE id = $1', [acc.id], t);
+          await logActivity(user.id, 'account_deleted', 'account', acc.id, `Deleted ${acc.name} (${acc.currency}, opening ${fmtAmount(acc.opening_balance, acc.currency)})`, t);
+        });
+        return Astro.redirect(withMsg('/office/accounts', `Account "${acc.name}" deleted.`), 303);
+      }
+    }
+  }
+}
+
+const sp = Astro.url.searchParams;
+let from = dateParam(sp.get('from'));
+let to = dateParam(sp.get('to'));
+if (from && to && from > to) [from, to] = [to, from];
+const filtered = !!(from || to);
+const [ledger, balances, usage, currencies] = await Promise.all([accountLedger(acc.id, from, to), accountBalances(), accountUsage(acc.id), listCurrencies()]);
+const bal = balances.find((b) => b.id === acc.id)!;
+const L = ledger!;
+// The running balance over every movement must land exactly on the ledger's balance.
+const mismatch = L.allTimeClosing !== bal.balance;
+const cur = acc.currency;
+
+if (sp.get('format') === 'csv') {
+  return csvResponse(
+    `account-${acc.name}-${today()}.csv`,
+    ['Date', 'What', 'Details', 'Reference', 'Shipment', `Money in (${cur})`, `Money out (${cur})`, `Balance (${cur})`],
+    [
+      [from ?? acc.opening_date ?? '', filtered && from ? 'Balance brought forward' : 'Opening balance', '', '', '', '', '', L.opening],
+      ...L.lines.map((l) => [l.date, l.title, l.detail, l.reference, l.shipment_ref, l.money_in || null, l.money_out || null, l.balance]),
+    ],
+  );
+}
+
+const v = posted ?? {
+  name: acc.name,
+  type: acc.type,
+  currency: acc.currency,
+  opening_balance: rateInput(acc.opening_balance),
+  opening_date: acc.opening_date ?? '',
+  notes: acc.notes ?? '',
+};
+const periodLabel = from && to ? `${fmtDate(from)} – ${fmtDate(to)}` : from ? `from ${fmtDate(from)}` : to ? `up to ${fmtDate(to)}` : 'all dates';
+const monthStart = today().slice(0, 8) + '01';
+---
+
+<OfficeLayout title={acc.name} user={user} active="accounts">
+  <PageHead
+    title={acc.name}
+    sub={`${accountTypeLabel(acc.type)} · ${cur}${acc.active ? '' : ' · closed'}${acc.notes ? ' · ' + acc.notes : ''}`}
+    crumbs={[{ label: 'Office', href: '/office' }, { label: 'Cash & accounts', href: '/office/accounts' }]}
+  >
+    {acc.active && <a class="o-btn" href="/office/transfers/new">Transfer</a>}
+    <a class="o-btn" href={withParams(Astro.url, { format: 'csv' })} data-astro-prefetch="false" download>Download CSV</a>
+  </PageHead>
+  <Flash error={error} />
+  {mismatch && (
+    <div class="o-flash err" role="alert">
+      Warning: the running balance below ({fmtAmount(L.allTimeClosing, cur)}) does not match the account balance ({fmtAmount(bal.balance, cur)}). Please tell the admin — something is wrong with the records.
+    </div>
+  )}
+
+  <div class="o-stats">
+    <Stat label="Balance now" value={fmtAmount(bal.balance, cur)} sub={cur === 'USD' ? 'US dollars' : `≈ ${usd(bal.balance_usd)} at today's rate`} tone="brand" />
+    <Stat label={`Money in · ${periodLabel}`} value={fmtAmount(L.totalIn, cur)} />
+    <Stat label={`Money out · ${periodLabel}`} value={fmtAmount(L.totalOut, cur)} />
+    {filtered && <Stat label={`Balance at ${to ? fmtDate(to) : 'end'}`} value={fmtAmount(L.closing, cur)} tone={L.closing < 0 ? 'neg' : ''} />}
+  </div>
+
+  <form method="get" class="o-filters">
+    <label class="o-field"><span>From date</span><input type="date" name="from" value={from ?? ''} /></label>
+    <label class="o-field"><span>To date</span><input type="date" name="to" value={to ?? ''} /></label>
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">Show</button>
+      <a class="o-btn ghost" href={`/office/accounts/${acc.id}?from=${monthStart}`}>This month</a>
+      {filtered && <a class="o-btn ghost" href={`/office/accounts/${acc.id}`}>All dates</a>}
+    </div>
+  </form>
+
+  <div class="o-table-wrap">
+    <table class="o-table" style="min-width:620px">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>What</th>
+          <th class="num">Money in</th>
+          <th class="num">Money out</th>
+          <th class="num">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="white-space:nowrap">{filtered && from ? fmtDate(from) : fmtDate(acc.opening_date)}</td>
+          <td><strong>{filtered && from ? 'Balance brought forward' : 'Opening balance'}</strong></td>
+          <td></td>
+          <td></td>
+          <td class:list={['num', L.opening < 0 && 'neg']}><strong>{fmtAmount(L.opening, cur)}</strong></td>
+        </tr>
+        {
+          L.lines.length === 0 && (
+            <tr>
+              <td colspan="5" class="o-empty">{filtered ? 'Nothing moved in or out on these dates.' : 'Nothing has moved in or out of this account yet.'}</td>
+            </tr>
+          )
+        }
+        {
+          L.lines.map((l) => (
+            <tr>
+              <td style="white-space:nowrap"><a href={l.href}>{fmtDate(l.date)}</a></td>
+              <td style="min-width:200px">
+                {l.kind === 'payment_in' || l.kind === 'payment_out' ? (
+                  <>
+                    {l.kind === 'payment_in' ? 'Received from ' : 'Paid to '}
+                    <a href={`/office/parties/${l.party_id}`}>{l.party_name}</a>
+                  </>
+                ) : (
+                  l.title
+                )}
+                {l.shipment_id && <> · <a href={`/office/shipments/${l.shipment_id}`}>{l.shipment_ref}</a></>}
+                {(l.reference || l.detail) && <div class="muted small">{[l.reference && `Ref ${l.reference}`, l.detail].filter(Boolean).join(' · ')}</div>}
+              </td>
+              <td class="num">{l.money_in ? fmtAmount(l.money_in, cur) : ''}</td>
+              <td class="num">{l.money_out ? fmtAmount(l.money_out, cur) : ''}</td>
+              <td class:list={['num', l.balance < 0 && 'neg']}>{fmtAmount(l.balance, cur)}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2">{filtered ? `Totals · ${periodLabel}` : 'Totals'} · {L.lines.length} movement{L.lines.length === 1 ? '' : 's'}</td>
+          <td class="num">{fmtAmount(L.totalIn, cur)}</td>
+          <td class="num">{fmtAmount(L.totalOut, cur)}</td>
+          <td class:list={['num', L.closing < 0 && 'neg']}>{fmtAmount(L.closing, cur)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <p class="o-help">Oldest first. Click a date to open that payment, expense or transfer.</p>
+
+  {
+    admin && (
+      <div class="o-grid-2" style="margin-top:20px">
+        <form method="post" class="o-card o-form">
+          <div class="o-card-head"><h2>Change account details</h2></div>
+          <input type="hidden" name="action" value="update" />
+          <div class="o-row">
+            <label class="o-field"><span>Name</span><input name="name" value={v.name} required maxlength="80" /></label>
+            <label class="o-field">
+              <span>Type</span>
+              <select name="type">{Object.entries(ACCOUNT_TYPES).map(([k, label]) => <option value={k} selected={k === v.type}>{label}</option>)}</select>
+            </label>
+          </div>
+          <div class="o-row">
+            <label class="o-field">
+              <span>Currency</span>
+              {usage.total > 0 ? (
+                <>
+                  <input type="hidden" name="currency" value={acc.currency} />
+                  <input value={acc.currency} disabled />
+                  <span class="o-help">Fixed — records already use it.</span>
+                </>
+              ) : (
+                <select name="currency">{currencies.map((c) => <option value={c.code} selected={c.code === v.currency}>{c.code} — {c.name}</option>)}</select>
+              )}
+            </label>
+            <label class="o-field"><span>Opening balance</span><input name="opening_balance" value={v.opening_balance} inputmode="decimal" /></label>
+            <label class="o-field"><span>Opening date</span><input type="date" name="opening_date" value={v.opening_date} /></label>
+          </div>
+          <label class="o-field"><span>Notes</span><textarea name="notes" rows="2" maxlength="1000">{v.notes}</textarea></label>
+          <p class="o-help" style="margin:0">Changing the opening balance changes every running balance on this page. The change is kept in the activity log.</p>
+          <div><button class="o-btn primary" type="submit">Save</button></div>
+        </form>
+        <div class="o-stack">
+          {acc.active ? (
+            <form method="post" class="o-card" onsubmit="return confirm('Close this account? It will no longer appear in payment, expense or transfer forms.')">
+              <div class="o-card-head"><h2>Close account</h2></div>
+              <p class="o-help" style="margin:0 0 10px">For an account no longer used. Its balance must be zero first; its history stays.</p>
+              <input type="hidden" name="action" value="deactivate" />
+              <button class="o-btn danger" type="submit">Close this account</button>
+            </form>
+          ) : (
+            <form method="post" class="o-card">
+              <div class="o-card-head"><h2>Closed</h2></div>
+              <p class="o-help" style="margin:0 0 10px">This account is closed. Re-open it to use it in forms again.</p>
+              <input type="hidden" name="action" value="reactivate" />
+              <button class="o-btn" type="submit">Re-open this account</button>
+            </form>
+          )}
+          {usage.total === 0 && (
+            <form method="post" class="o-card" onsubmit="return confirm('Delete this account for good?')">
+              <div class="o-card-head"><h2>Delete</h2></div>
+              <p class="o-help" style="margin:0 0 10px">Nothing uses this account yet, so it can be deleted (e.g. added by mistake).</p>
+              <input type="hidden" name="action" value="delete" />
+              <button class="o-btn danger" type="submit">Delete account</button>
+            </form>
+          )}
+        </div>
+      </div>
+    )
+  }
+</OfficeLayout>

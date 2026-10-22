@@ -1,0 +1,267 @@
+---
+/**
+ * Printable A4 statement of account for one client or partner, to hand over
+ * or send: letterhead (Settings), their name, the period, opening balance,
+ * every line with a running balance (ledger.ts partyStatement), and the
+ * closing balance in words — "Amount due to Amanat Logistics: $X" or
+ * "Amount Amanat Logistics owes you: $X".
+ *
+ *   /office/parties/<id>/statement?from=YYYY-MM-DD&to=YYYY-MM-DD   (both optional)
+ *
+ * Standalone page (no office layout) so it prints cleanly. Signed-in only.
+ */
+import '../../../../styles/office.css';
+import { guard } from '../../../../lib/office/auth';
+import { getSettings } from '../../../../lib/office/settings';
+import { partyBalance } from '../../../../lib/office/ledger';
+import { usd, fmtMoney, fmtDate, today } from '../../../../lib/office/money';
+import {
+  idParam,
+  getParty,
+  modeOf,
+  kindLabel,
+  statementView,
+  statementHeads,
+  statementRange,
+  readerWords,
+  printDescription,
+} from '../../../../lib/office/parties';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+const id = idParam(Astro.params.id);
+const party = id ? await getParty(id) : null;
+if (!party) {
+  return new Response('That client or partner was not found — they may have been deleted.', {
+    status: 404,
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow' },
+  });
+}
+const mode = modeOf(party.kind);
+const range = statementRange(Astro.url.searchParams);
+const [settings, st, bal] = await Promise.all([getSettings(), statementView(party.id, mode, range.from, range.to), partyBalance(party.id)]);
+const heads = statementHeads(mode);
+const todayStr = today();
+const company = settings.companyName || 'Amanat Logistics';
+const closing = Math.round(st.closing * 100) / 100;
+const closingText =
+  closing > 0
+    ? { label: `Amount due to ${company}`, value: usd(closing) }
+    : closing < 0
+      ? { label: `Amount ${company} owes you`, value: usd(-closing) }
+      : { label: 'Balance', value: 'Settled — nothing is due either way' };
+// Without an end date the statement covers every entry — including any dated after today.
+const lastLine = st.rows.length ? st.rows[st.rows.length - 1].date : null;
+const asOf = range.to ?? (lastLine && lastLine > todayStr ? lastLine : todayStr);
+const periodText =
+  range.from && range.to
+    ? `${fmtDate(range.from)} – ${fmtDate(range.to)}`
+    : range.from
+      ? `${fmtDate(range.from)} – ${fmtDate(asOf)}`
+      : range.to
+        ? `Up to ${fmtDate(range.to)}`
+        : `All transactions up to ${fmtDate(asOf)}`;
+const generated = new Date().toLocaleString('en-GB', {
+  timeZone: 'Asia/Kabul',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const mismatch = !st.consistent || (!range.to && bal && Math.round(st.closing * 100) !== Math.round(bal.balance * 100));
+const backQuery = new URLSearchParams({ ...(range.from ? { from: range.from } : {}), ...(range.to ? { to: range.to } : {}) }).toString();
+const backHref = `/office/parties/${party.id}${backQuery ? `?${backQuery}` : ''}`;
+const place = [party.city, party.country].filter(Boolean).join(', ');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Statement — {party.name} — {company}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style is:global>
+      @page { size: A4; margin: 14mm; }
+      body.st-body { background: #ecebec; color: #1f1419; font-family: var(--o-font); font-size: 13px; line-height: 1.4; margin: 0; }
+      .st-bar { max-width: 210mm; margin: 0 auto; padding: 14px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+      .st-sheet { background: #fff; max-width: 210mm; margin: 0 auto 32px; padding: 14mm; box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12); }
+      .st-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-bottom: 3px solid var(--o-maroon); padding-bottom: 12px; }
+      .st-brand { display: flex; gap: 12px; align-items: center; }
+      .st-brand img { width: 64px; height: auto; }
+      .st-brand strong { display: block; font-family: var(--o-font-head); font-size: 22px; color: var(--o-maroon); line-height: 1.1; }
+      .st-brand span { display: block; color: var(--o-muted); font-size: 12px; }
+      .st-contact { text-align: right; font-size: 12px; color: #463a40; white-space: pre-line; }
+      .st-title { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin: 18px 0 14px; flex-wrap: wrap; }
+      .st-title h1 { font-family: var(--o-font-head); font-size: 24px; margin: 0; letter-spacing: 0.02em; text-transform: uppercase; }
+      .st-title .period { color: var(--o-muted); font-size: 13px; margin-top: 2px; }
+      .st-to { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+      .st-box { border: 1px solid var(--o-line); border-radius: 6px; padding: 10px 12px; }
+      .st-box .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--o-muted); margin-bottom: 4px; }
+      .st-box .name { font-size: 16px; font-weight: 700; }
+      .st-box.sum .value { font-family: var(--o-font-head); font-size: 22px; font-weight: 700; color: var(--o-maroon); }
+      table.st-lines { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      table.st-lines th { text-align: left; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1.5px solid #bbb; padding: 6px 6px; }
+      table.st-lines td { border-bottom: 1px solid #e7e1e3; padding: 6px 6px; vertical-align: top; }
+      table.st-lines .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      table.st-lines .sub { display: block; color: var(--o-muted); font-size: 11px; }
+      table.st-lines tr.open td, table.st-lines tr.close td { background: #f7f3f5; font-weight: 700; }
+      table.st-lines tfoot td { border-top: 1.5px solid #bbb; font-weight: 700; border-bottom: none; }
+      table.st-lines .neg { color: var(--o-red); }
+      tr { page-break-inside: avoid; break-inside: avoid; }
+      thead { display: table-header-group; }
+      .st-due { margin-top: 18px; display: flex; justify-content: flex-end; }
+      .st-due > div { border: 2px solid var(--o-maroon); border-radius: 8px; padding: 12px 18px; text-align: right; min-width: 280px; }
+      .st-due .lbl { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--o-maroon); }
+      .st-due .value { font-family: var(--o-font-head); font-size: 26px; font-weight: 700; margin-top: 2px; }
+      .st-note { margin-top: 16px; font-size: 12px; color: #463a40; }
+      .st-foot { margin-top: 22px; padding-top: 10px; border-top: 1px solid var(--o-line); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--o-muted); }
+      .st-warn { max-width: 210mm; margin: 0 auto 12px; padding: 10px 14px; background: var(--o-red-bg); color: var(--o-red); border: 1px solid #f3c2bc; border-radius: 8px; }
+      @media (max-width: 640px) {
+        .st-sheet { padding: 18px 14px; margin-bottom: 16px; }
+        .st-head { flex-direction: column; }
+        .st-contact { text-align: left; }
+        .st-to { grid-template-columns: 1fr; }
+        .st-due > div { min-width: 0; width: 100%; }
+        .st-scroll { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+        table.st-lines { min-width: 560px; }
+      }
+      @media print {
+        body.st-body { background: #fff; font-size: 12px; }
+        .no-print { display: none !important; }
+        .st-sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+        .st-warn { display: none; }
+        a { color: inherit; text-decoration: none; }
+      }
+    </style>
+  </head>
+  <body class="st-body">
+    <div class="st-bar no-print">
+      <a class="o-btn" href={backHref}>← Back to {party.name}</a>
+      <button type="button" class="o-btn primary" onclick="window.print()">Print</button>
+    </div>
+    {mismatch && (
+      <div class="st-warn no-print" role="alert">
+        Warning: this statement does not add up to {party.name}'s balance in the office system. Please tell the admin before sending it.
+      </div>
+    )}
+
+    <main class="st-sheet">
+      <header class="st-head">
+        <div class="st-brand">
+          <img src="/images/brand-logo-maroon.png" alt="" width="64" height="61" />
+          <div>
+            <strong>{company}</strong>
+            {settings.companyTagline && <span>{settings.companyTagline}</span>}
+          </div>
+        </div>
+        <div class="st-contact">
+          {[settings.address, settings.phone, settings.email, settings.website].filter(Boolean).join('\n')}
+        </div>
+      </header>
+
+      <div class="st-title">
+        <div>
+          <h1>Statement of account</h1>
+          <div class="period">{periodText}</div>
+        </div>
+        <div class="period">Date: {fmtDate(todayStr)}</div>
+      </div>
+
+      <section class="st-to">
+        <div class="st-box">
+          <div class="lbl">{mode === 'client' ? 'Client' : kindLabel(party.kind)}</div>
+          <div class="name">{party.name}</div>
+          {party.phone && <div>{party.phone}</div>}
+          {place && <div>{place}</div>}
+        </div>
+        <div class="st-box sum">
+          <div class="lbl">Balance on {fmtDate(asOf)}</div>
+          <div class="value">{readerWords(st.closing)}</div>
+          <div class="muted small">Opening balance{range.from ? ` on ${fmtDate(range.from)}` : ''}: {readerWords(st.opening)}</div>
+        </div>
+      </section>
+
+      <div class="st-scroll">
+        <table class="st-lines">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Shipment</th>
+              <th>Description</th>
+              <th class="num">{heads.printBill}</th>
+              <th class="num">{heads.printPay}</th>
+              <th class="num">Balance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="open">
+              <td>{range.from ? fmtDate(range.from) : ''}</td>
+              <td></td>
+              <td>Opening balance{range.from ? '' : ' (start of account)'}</td>
+              <td></td>
+              <td></td>
+              <td class="num">{readerWords(st.opening)}</td>
+            </tr>
+            {st.rows.length === 0 && (
+              <tr>
+                <td colspan="6" style="text-align:center;color:var(--o-muted);padding:16px">No transactions in this period.</td>
+              </tr>
+            )}
+            {st.rows.map((r) => (
+              <tr>
+                <td style="white-space:nowrap">{fmtDate(r.date)}</td>
+                <td style="white-space:nowrap">{r.ref ?? ''}</td>
+                <td>
+                  {printDescription(r, mode).text}
+                  {printDescription(r, mode).note && <span class="sub">({printDescription(r, mode).note})</span>}
+                  {r.currency !== 'USD' && <span class="sub">{fmtMoney(r.amount, r.currency)}</span>}
+                </td>
+                <td class:list={['num', r.bill !== null && r.bill < 0 && 'neg']}>{r.bill !== null ? usd(r.bill) : ''}</td>
+                <td class:list={['num', r.pay !== null && r.pay < 0 && 'neg']}>{r.pay !== null ? usd(r.pay) : ''}</td>
+                <td class="num">{readerWords(r.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3">Totals for the period</td>
+              <td class="num">{usd(st.totalBill)}</td>
+              <td class="num">{usd(st.totalPay)}</td>
+              <td></td>
+            </tr>
+            <tr class="close">
+              <td colspan="5">Closing balance on {fmtDate(asOf)}</td>
+              <td class="num">{readerWords(st.closing)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="st-due">
+        <div>
+          <div class="lbl">{closingText.label}</div>
+          <div class="value">{closingText.value}</div>
+        </div>
+      </div>
+
+      <p class="st-note">
+        All amounts are in US dollars. A figure paid or billed in another currency is shown under its line, converted at the rate of the day.
+        {closing > 0 && settings.paymentInstructions && <><br />{settings.paymentInstructions}</>}
+        <br />If anything on this statement looks wrong, please contact us{settings.phone ? ` on ${settings.phone}` : ''} so we can check it together.
+      </p>
+
+      <footer class="st-foot">
+        <span>{company} · Statement for {party.name}</span>
+        <span>Generated {generated} (Kabul time) by {user.name}</span>
+      </footer>
+    </main>
+  </body>
+</html>

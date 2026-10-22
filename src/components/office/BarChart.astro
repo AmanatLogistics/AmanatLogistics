@@ -1,0 +1,282 @@
+---
+/**
+ * Monthly money chart — server-rendered SVG, no chart library, no script.
+ *
+ *   <BarChart rows={await monthlyPnl(last12, service)} title="Last 12 months" />
+ *
+ * Per month: two bars side by side (revenue, and costs — plus office expenses
+ * when `combineExpenses`) and a dot for net profit, green above zero and red
+ * below, joined by a thin line. Every bar and dot has a <title> tooltip, each
+ * month has a hover band with a one-line summary, and the same figures are in
+ * a table underneath (closed <details>), so nothing depends on seeing colour
+ * or hovering.
+ *
+ * Fluid width: horizontal positions are percentages and vertical ones pixels,
+ * so text keeps its real size on a phone instead of shrinking with the chart.
+ * The dollar axis is plain HTML beside the SVG for the same reason.
+ */
+import { usd } from '../../lib/office/money';
+
+interface Row {
+  month: string; // YYYY-MM
+  revenue: number;
+  cost: number;
+  expenses?: number;
+  net: number;
+}
+interface Props {
+  rows: Row[];
+  /** what the chart shows, for screen readers and the table caption */
+  title: string;
+  /** add office expenses (and transfer fees) to the cost bar */
+  combineExpenses?: boolean;
+  revenueLabel?: string;
+  costLabel?: string;
+  netLabel?: string;
+  /** table headings for the two parts of the cost bar (when combineExpenses) */
+  costPartLabel?: string;
+  expensePartLabel?: string;
+  height?: number;
+}
+const {
+  rows,
+  title,
+  combineExpenses = true,
+  revenueLabel = 'Revenue',
+  costLabel = combineExpenses ? 'Costs & expenses' : 'Direct costs',
+  netLabel = combineExpenses ? 'Net profit' : 'Gross profit',
+  costPartLabel = 'Shipment costs',
+  expensePartLabel = 'Office expenses',
+  height = 210,
+} = Astro.props;
+const negLabel = netLabel.includes('profit') ? netLabel.replace('profit', 'loss') : netLabel;
+const legendNote = netLabel.includes('profit') ? 'green = profit, red = loss' : 'green = above zero, red = below zero';
+
+const COLORS = { revenue: '#7e2e47', cost: '#c9b3bc', profit: '#1e7b4f', loss: '#b42318', line: '#6c5f65', grid: '#efe7eb', zero: '#cdbcc4' };
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthName = (m: string) => `${MON[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}`;
+
+const data = rows.map((r) => {
+  const out = Math.round(((r.cost ?? 0) + (combineExpenses ? r.expenses ?? 0 : 0)) * 100) / 100;
+  return { month: r.month, a: r.revenue ?? 0, b: out, net: r.net ?? 0, cost: r.cost ?? 0, expenses: r.expenses ?? 0 };
+});
+const n = data.length;
+const hasData = data.some((d) => d.a !== 0 || d.b !== 0 || d.net !== 0);
+
+// ---- scale: clean round steps, zero always on the axis ----
+const vals = data.flatMap((d) => [d.a, d.b, d.net]);
+const rawMax = Math.max(0, ...vals);
+const rawMin = Math.min(0, ...vals);
+function niceStep(range: number): number {
+  if (range <= 0) return 1;
+  const raw = range / 4;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const f = raw / mag;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+}
+const step = niceStep(rawMax - rawMin);
+const hi = Math.max(step, Math.ceil(rawMax / step) * step);
+const lo = Math.min(0, Math.floor(rawMin / step) * step);
+const TOP = 12;
+const H = height;
+const AXIS = 34;
+const total = TOP + H + AXIS;
+const y = (v: number) => TOP + (H * (hi - v)) / (hi - lo || 1);
+const ticks: number[] = [];
+for (let v = lo; v <= hi + step / 1000; v += step) ticks.push(Math.round(v * 100) / 100);
+function tickText(v: number): string {
+  const s = v < 0 ? '−' : '';
+  const a = Math.abs(v);
+  if (a === 0) return '$0';
+  if (a >= 1_000_000) return `${s}$${+(a / 1_000_000).toFixed(2)}M`;
+  if (a >= 1000) return `${s}$${+(a / 1000).toFixed(1)}k`;
+  return `${s}$${+a.toFixed(0)}`;
+}
+
+// ---- horizontal layout, in % of the plot width ----
+const slot = 100 / Math.max(1, n);
+const pct = (v: number) => `${+v.toFixed(3)}%`;
+// Thin bars: never wider than in a 12-month chart (about 24px on a laptop),
+// so two or three months don't turn into slabs.
+const barW = Math.min(slot * 0.3, 2.5);
+const gap = Math.min(slot * 0.04, 0.35);
+const center = (i: number) => slot * i + slot / 2;
+// with many months, label every k-th one (the rest are in the tooltip & table)
+const every = Math.max(1, Math.ceil(n / 12));
+// counted back from the latest month, so it is always labelled
+const labelled = (i: number) => (n - 1 - i) % every === 0;
+// the year goes under the first labelled month of each year
+const showYear = data.map((d, i) => {
+  if (!labelled(i)) return false;
+  for (let j = i - 1; j >= 0; j--) if (labelled(j)) return data[j].month.slice(0, 4) !== d.month.slice(0, 4);
+  return true;
+});
+
+function bar(v: number) {
+  const top = y(Math.max(v, 0));
+  const bottom = y(Math.min(v, 0));
+  const h = Math.max(0, bottom - top);
+  const r = Math.min(3, h / 2);
+  // rounded data-end (rx), squared off at the baseline by a small patch
+  const patch = h > r * 2 ? (v >= 0 ? { y: bottom - r, h: r } : { y: top, h: r }) : null;
+  return { top, h, r, patch };
+}
+
+const summary = (d: (typeof data)[number]) =>
+  `${monthName(d.month)}: ${revenueLabel} ${usd(d.a)} · ${costLabel} ${usd(d.b)}${combineExpenses && d.expenses ? ` (incl. ${expensePartLabel.toLowerCase()} ${usd(d.expenses)})` : ''} · ${d.net < 0 ? negLabel : netLabel} ${usd(d.net)}`;
+
+const totals = data.reduce((t, d) => ({ a: t.a + d.a, b: t.b + d.b, net: t.net + d.net, cost: t.cost + d.cost, exp: t.exp + d.expenses }), { a: 0, b: 0, net: 0, cost: 0, exp: 0 });
+const best = hasData ? data.reduce((m, d) => (d.net > m.net ? d : m), data[0]) : null;
+const worst = hasData ? data.reduce((m, d) => (d.net < m.net ? d : m), data[0]) : null;
+const uid = `bc-${Math.random().toString(36).slice(2, 8)}`;
+const desc = hasData
+  ? `${n} months from ${monthName(data[0].month)} to ${monthName(data[n - 1].month)}. In total: ${revenueLabel.toLowerCase()} ${usd(totals.a)}, ${costLabel.toLowerCase()} ${usd(totals.b)}, ${netLabel.toLowerCase()} ${usd(totals.net)}. Best month ${monthName(best!.month)} (${usd(best!.net)}), weakest ${monthName(worst!.month)} (${usd(worst!.net)}). The table below has every figure.`
+  : 'Nothing recorded in these months yet.';
+---
+
+<figure class="bc" aria-labelledby={`${uid}-t`}>
+  <figcaption id={`${uid}-t`} class="sr">{title}</figcaption>
+  <div class="legend" aria-hidden="true">
+    <span><i class="sw" style={`background:${COLORS.revenue}`}></i>{revenueLabel}</span>
+    <span><i class="sw" style={`background:${COLORS.cost}`}></i>{costLabel}</span>
+    <span><i class="dot" style={`background:${COLORS.profit}`}></i><i class="dot" style={`background:${COLORS.loss};margin-left:-3px`}></i>{netLabel} <span class="muted">({legendNote})</span></span>
+  </div>
+  {
+    !hasData ? (
+      <p class="o-empty">Nothing recorded in these months yet.</p>
+    ) : (
+      <div class="plot" style={`height:${total}px`}>
+        <div class="axis" aria-hidden="true">
+          {ticks.map((t) => (
+            <span style={`top:${y(t)}px`}>{tickText(t)}</span>
+          ))}
+        </div>
+        <svg role="img" aria-labelledby={`${uid}-st ${uid}-sd`} height={total} width="100%" style={`height:${total}px`}>
+          <title id={`${uid}-st`}>{title}</title>
+          <desc id={`${uid}-sd`}>{desc}</desc>
+          {ticks.map((t) => (
+            <line x1="0" x2="100%" y1={y(t)} y2={y(t)} stroke={t === 0 ? COLORS.zero : COLORS.grid} stroke-width="1" shape-rendering="crispEdges" />
+          ))}
+          {data.map((d, i) => {
+            const A = bar(d.a);
+            const B = bar(d.b);
+            const xa = center(i) - gap / 2 - barW;
+            const xb = center(i) + gap / 2;
+            return (
+              <g class="slot">
+                <rect class="hit" x={pct(slot * i)} width={pct(slot)} y={TOP} height={H} fill="transparent">
+                  <title>{summary(d)}</title>
+                </rect>
+                {A.h > 0 && (
+                  <g fill={COLORS.revenue}>
+                    <title>{`${monthName(d.month)} — ${revenueLabel}: ${usd(d.a)}`}</title>
+                    <rect x={pct(xa)} width={pct(barW)} y={A.top} height={A.h} rx={A.r} />
+                    {A.patch && <rect x={pct(xa)} width={pct(barW)} y={A.patch.y} height={A.patch.h} />}
+                  </g>
+                )}
+                {B.h > 0 && (
+                  <g fill={COLORS.cost}>
+                    <title>{`${monthName(d.month)} — ${costLabel}: ${usd(d.b)}${combineExpenses && d.expenses ? ` (${costPartLabel.toLowerCase()} ${usd(d.cost)}, ${expensePartLabel.toLowerCase()} ${usd(d.expenses)})` : ''}`}</title>
+                    <rect x={pct(xb)} width={pct(barW)} y={B.top} height={B.h} rx={B.r} />
+                    {B.patch && <rect x={pct(xb)} width={pct(barW)} y={B.patch.y} height={B.patch.h} />}
+                  </g>
+                )}
+                {labelled(i) && (
+                  <text x={pct(center(i))} y={TOP + H + 15} text-anchor="middle" font-size="11.5" fill="#6c5f65" class:list={[n > 12 && ((n - 1 - i) / every) % 2 === 1 && 'alt']}>
+                    {MON[+d.month.slice(5, 7) - 1]}
+                  </text>
+                )}
+                {showYear[i] && (
+                  <text x={pct(center(i))} y={TOP + H + 29} text-anchor="middle" font-size="10.5" fill="#8d7f86">
+                    {d.month.slice(0, 4)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+          {data.slice(1).map((d, i) => (
+            <line x1={pct(center(i))} x2={pct(center(i + 1))} y1={y(data[i].net)} y2={y(d.net)} stroke={COLORS.line} stroke-width="1.5" stroke-linecap="round" opacity="0.7" />
+          ))}
+          {data.map((d, i) => (
+            <circle cx={pct(center(i))} cy={y(d.net)} r="4.5" fill={d.net < 0 ? COLORS.loss : COLORS.profit} stroke="#fff" stroke-width="2">
+              <title>{`${monthName(d.month)} — ${d.net < 0 ? negLabel : netLabel}: ${usd(d.net)}`}</title>
+            </circle>
+          ))}
+        </svg>
+      </div>
+    )
+  }
+  {
+    hasData && (
+      <details class="bc-table">
+        <summary class="small">Show these figures as a table</summary>
+        <div class="o-table-wrap">
+          <table class="o-table">
+            <caption class="sr">{title}</caption>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="num">{revenueLabel}</th>
+                {combineExpenses ? (
+                  <>
+                    <th class="num">{costPartLabel}</th>
+                    <th class="num">{expensePartLabel}</th>
+                  </>
+                ) : (
+                  <th class="num">{costLabel}</th>
+                )}
+                <th class="num">{netLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((d) => (
+                <tr>
+                  <td>{monthName(d.month)}</td>
+                  <td class="num">{usd(d.a)}</td>
+                  <td class="num">{usd(d.cost)}</td>
+                  {combineExpenses && <td class="num">{usd(d.expenses)}</td>}
+                  <td class:list={['num', d.net < 0 ? 'neg' : d.net > 0 ? 'pos' : '']}>{usd(d.net)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td class="num">{usd(totals.a)}</td>
+                <td class="num">{usd(totals.cost)}</td>
+                {combineExpenses && <td class="num">{usd(totals.exp)}</td>}
+                <td class:list={['num', totals.net < 0 ? 'neg' : totals.net > 0 ? 'pos' : '']}>{usd(totals.net)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </details>
+    )
+  }
+</figure>
+
+<style>
+  .bc { margin: 0; }
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--o-ink); margin: 0 0 8px; }
+  .legend > span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px #fff; }
+  .plot { display: flex; gap: 6px; position: relative; }
+  .axis { position: relative; flex: none; width: 42px; font-size: 11px; color: var(--o-muted); font-variant-numeric: tabular-nums; }
+  .axis span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; line-height: 1; }
+  svg { flex: 1 1 auto; min-width: 0; display: block; overflow: visible; font-family: inherit; }
+  .slot .hit { transition: fill 0.12s; }
+  .slot:hover .hit { fill: rgba(126, 46, 71, 0.06); }
+  .bc-table { margin-top: 10px; }
+  .bc-table summary { cursor: pointer; color: var(--o-maroon); font-weight: 600; width: max-content; }
+  .bc-table .o-table-wrap { margin-top: 8px; }
+  .o-card .bc-table .o-table-wrap { margin-left: 0; margin-right: 0; border: 1px solid var(--o-line); border-radius: var(--o-radius); }
+  @media (max-width: 600px) {
+    .alt { display: none; }
+    .axis { width: 36px; }
+  }
+  @media print {
+    .slot .hit { fill: transparent !important; }
+  }
+</style>

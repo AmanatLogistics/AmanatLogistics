@@ -1,0 +1,106 @@
+---
+/** The office-expense form (record and edit). Not a route (leading _). */
+import MoneyScript from '../payments/_MoneyScript.astro';
+import { METHODS } from '../../../lib/office/money';
+import { EXPENSE_CATEGORIES } from '../../../lib/office/services';
+import { groupParties, accountLabel, type PartyOption, type AccountOption } from '../../../lib/office/entries';
+
+interface Props {
+  mode: 'new' | 'edit';
+  cancelHref: string;
+  values: Record<string, string>;
+  parties: PartyOption[];
+  accounts: AccountOption[];
+  rates: Record<string, number>;
+}
+const { mode, cancelHref, values: v, parties, accounts, rates } = Astro.props;
+const groups = groupParties(parties, 'expense');
+const acc = accounts.find((a) => String(a.id) === v.account) ?? null;
+const cur = acc?.currency ?? '';
+---
+
+<form method="post" class="o-card o-form" data-money-form data-rates={JSON.stringify(rates)} autocomplete="off" style="max-width:820px">
+  <div class="o-card-head"><h2>{mode === 'new' ? 'New office expense' : 'Expense details'}</h2></div>
+  <div class="o-row">
+    <label class="o-field">
+      <span>Date</span>
+      <input type="date" name="exp_date" value={v.exp_date} required />
+    </label>
+    <label class="o-field">
+      <span>What for</span>
+      <select name="category" required>
+        <option value="">— choose —</option>
+        {Object.entries(EXPENSE_CATEGORIES).map(([k, label]) => <option value={k} selected={k === v.category}>{label}</option>)}
+      </select>
+    </label>
+  </div>
+  <label class="o-field">
+    <span>Description</span>
+    <input name="description" value={v.description} maxlength="300" placeholder="e.g. October rent, Kandahar office" />
+  </label>
+  <label class="o-field">
+    <span>Paid to (optional)</span>
+    <select name="payee">
+      <option value="">— nobody in particular —</option>
+      {
+        groups.map((g) => (
+          <optgroup label={g.label}>
+            {g.parties.map((p) => <option value={p.id} selected={String(p.id) === v.payee}>{p.name}{!p.active ? ' — inactive' : ''}</option>)}
+          </optgroup>
+        ))
+      }
+    </select>
+    <span class="o-help">For your records only — an office expense is paid straight away, so it doesn't change anyone's balance.</span>
+  </label>
+
+  {
+    accounts.length === 0 ? (
+      <div class="o-flash err" role="alert">
+        There are no accounts yet. An admin must first add a cash box or bank account under <a href="/office/accounts">Cash &amp; accounts</a>.
+      </div>
+    ) : (
+      <div class="o-row">
+        <label class="o-field">
+          <span>Paid from account</span>
+          <select name="account" data-account="main" required>
+            {!acc && <option value="">— choose account —</option>}
+            {accounts.map((a) => (
+              <option value={a.id} data-currency={a.currency} data-type={a.type} selected={String(a.id) === v.account}>
+                {accountLabel(a)}
+              </option>
+            ))}
+          </select>
+          <span class="o-help">The account decides the currency.</span>
+        </label>
+        <label class="o-field">
+          <span>How</span>
+          <select name="method" data-method="main">
+            {Object.entries(METHODS).map(([k, label]) => <option value={k} selected={k === v.method}>{label}</option>)}
+          </select>
+        </label>
+      </div>
+    )
+  }
+
+  <div class="o-row">
+    <label class="o-field">
+      <span>Amount (<b data-cur="main">{cur || '—'}</b>)</span>
+      <input name="amount" value={v.amount} inputmode="decimal" required data-amount="main" placeholder="0" />
+      <span class="o-help" data-usd="main" aria-live="polite"></span>
+    </label>
+    <label class="o-field">
+      <span>Rate: <b data-cur="main">{cur || '—'}</b> per 1 US dollar</span>
+      <input name="per_usd" value={v.per_usd} inputmode="decimal" required data-rate="main" readonly={cur === 'USD'} />
+      <span class="o-help">Today's usual rate is filled in. Change it if a different rate was used.</span>
+    </label>
+  </div>
+  <label class="o-field">
+    <span>Reference</span>
+    <input name="reference" value={v.reference} maxlength="120" placeholder="Receipt no., bank reference…" />
+  </label>
+  <div class="o-actions">
+    <button type="submit" class="o-btn primary" disabled={accounts.length === 0}>{mode === 'new' ? 'Record expense' : 'Save changes'}</button>
+    <a class="o-btn ghost" href={cancelHref}>Cancel</a>
+  </div>
+</form>
+<MoneyScript />

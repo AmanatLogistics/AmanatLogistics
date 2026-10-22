@@ -1,0 +1,138 @@
+---
+/**
+ * One payment. Everyone can view; an admin can edit or delete it (delete asks
+ * first and is written to the activity log).
+ */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import Stat from '../../../../components/office/Stat.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { q, tx } from '../../../../lib/office/db';
+import { logActivity, recentActivity } from '../../../../lib/office/activity';
+import { str, withMsg } from '../../../../lib/office/form';
+import { METHODS, fmtDate, usd } from '../../../../lib/office/money';
+import { partyBalance, shipmentFigure } from '../../../../lib/office/ledger';
+import { getPayment, paymentSummary, idParam, balanceWords, partyKindLabel, fmtRate, moneyWithUsd, fmtAmount } from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+let p = id ? await getPayment(id) : null;
+
+let error: string | null = null;
+if (p && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    if (str(fd, 'action') === 'delete') {
+      if (!admin) error = 'Only an admin can delete a payment.';
+      else {
+        const row = p;
+        await tx(async (t) => {
+          await q('DELETE FROM office_payments WHERE id = $1', [row.id], t);
+          await logActivity(user.id, 'payment_deleted', 'payment', row.id, `Deleted payment #${row.id}: ${paymentSummary({ ...row, account_name: row.account_name })}`, t);
+        });
+        return Astro.redirect(
+          withMsg(`/office/payments?dir=${row.direction}`, `Payment of ${moneyWithUsd(row.amount, row.currency, row.usd)} ${row.direction === 'in' ? 'from' : 'to'} ${row.party_name} deleted.`),
+          303,
+        );
+      }
+    }
+  }
+}
+
+if (!p) Astro.response.status = 404;
+const [bal, fig, history] = p
+  ? await Promise.all([partyBalance(p.party_id), p.shipment_id ? shipmentFigure(p.shipment_id) : Promise.resolve(null), recentActivity({ entity: 'payment', entityId: p.id, limit: 20 })])
+  : [null, null, []];
+const words = bal ? balanceWords(bal.balance, bal.kind) : null;
+const listHref = `/office/payments?dir=${p?.direction ?? 'in'}`;
+const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+---
+
+<OfficeLayout title={p ? `Payment #${p.id}` : 'Payment not found'} user={user} active={p?.direction === 'out' ? 'payments-out' : 'payments-in'}>
+  {
+    !p ? (
+      <>
+        <PageHead title="Payment not found" sub="It may have been deleted." crumbs={[{ label: 'Office', href: '/office' }, { label: 'Payments received', href: '/office/payments?dir=in' }]} />
+        <div class="o-card o-empty">
+          <a class="o-btn" href="/office/payments?dir=in">Payments received</a> <a class="o-btn" href="/office/payments?dir=out">Payments made</a>
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={`${p.direction === 'in' ? 'Received from' : 'Paid to'} ${p.party_name}`}
+          sub={`${fmtDate(p.pay_date)} · ${moneyWithUsd(p.amount, p.currency, p.usd)} · ${METHODS[p.method] ?? p.method}`}
+          crumbs={[{ label: 'Office', href: '/office' }, { label: p.direction === 'in' ? 'Payments received' : 'Payments made', href: listHref }]}
+        >
+          <a class="o-btn" href={`/office/payments/new?dir=${p.direction}`}>Record another</a>
+          {admin && <a class="o-btn primary" href={`/office/payments/${p.id}/edit`}>Edit</a>}
+        </PageHead>
+        <Flash error={error} />
+        <div class="o-grid-2">
+          <div class="o-card">
+            <div class="o-card-head">
+              <h2>Payment #{p.id}</h2>
+              <span class:list={['o-badge', p.direction === 'in' ? 'paid' : 'unpaid']}>{p.direction === 'in' ? 'Money in' : 'Money out'}</span>
+            </div>
+            <dl class="o-kv">
+              <dt>Date</dt><dd>{fmtDate(p.pay_date)}</dd>
+              <dt>{p.direction === 'in' ? 'Received from' : 'Paid to'}</dt>
+              <dd><a href={`/office/parties/${p.party_id}`}>{p.party_name}</a> <span class="muted small">{partyKindLabel(p.party_kind)}</span></dd>
+              <dt>{p.direction === 'in' ? 'Into account' : 'Out of account'}</dt>
+              <dd><a href={`/office/accounts/${p.account_id}`}>{p.account_name}</a>{!p.account_active && <span class="muted small"> (closed)</span>}</dd>
+              <dt>Amount</dt><dd><strong>{fmtAmount(p.amount, p.currency)}</strong></dd>
+              {p.currency !== 'USD' && (<><dt>Rate</dt><dd>{fmtRate(p.per_usd)} {p.currency} per US dollar</dd></>)}
+              <dt>In US dollars</dt><dd>{usd(p.usd)}</dd>
+              <dt>How</dt><dd>{METHODS[p.method] ?? p.method}</dd>
+              <dt>Reference</dt><dd>{p.reference ?? <span class="muted">—</span>}</dd>
+              <dt>Shipment</dt><dd>{p.shipment_id ? <a href={`/office/shipments/${p.shipment_id}`}>{p.shipment_ref}</a> : <span class="muted">Not linked to a shipment</span>}</dd>
+              {p.notes && (<><dt>Notes</dt><dd style="white-space:pre-wrap">{p.notes}</dd></>)}
+              <dt>Entered by</dt><dd>{p.created_by_name ?? '—'} <span class="muted small">· {when(p.created_at)}</span></dd>
+            </dl>
+          </div>
+          <div class="o-stack">
+            {bal && words && (
+              <div class="o-card">
+                <div class="o-card-head"><h2><a href={`/office/parties/${p.party_id}`}>{p.party_name}</a> today</h2></div>
+                <Stat label="Balance" value={words.text} tone={words.tone} />
+                <p class="small" style="margin:10px 0 0"><a href={`/office/parties/${p.party_id}`}>Full statement →</a></p>
+              </div>
+            )}
+            {fig && (
+              <div class="o-card">
+                <div class="o-card-head"><h2>Shipment <a href={`/office/shipments/${p.shipment_id}`}>{p.shipment_ref}</a></h2></div>
+                <dl class="o-kv">
+                  <dt>Billed</dt><dd>{usd(fig.revenue)}</dd>
+                  <dt>Received</dt><dd>{usd(fig.received)}</dd>
+                  <dt>Still due</dt><dd class={fig.due < 0 ? 'neg' : ''}><strong>{fig.due < 0 ? `Overpaid by ${usd(-fig.due)}` : usd(fig.due)}</strong></dd>
+                </dl>
+              </div>
+            )}
+            {history.length > 0 && (
+              <div class="o-card">
+                <div class="o-card-head"><h2>History</h2></div>
+                <ul style="margin:0;padding-left:18px" class="small">
+                  {history.map((h) => <li><span class="muted">{when(h.at)} · {h.user_name ?? '—'}:</span> {h.summary ?? h.action}</li>)}
+                </ul>
+              </div>
+            )}
+            {admin && (
+              <form method="post" class="o-card" onsubmit="return confirm('Delete this payment for good? Balances will change. This cannot be undone.')">
+                <div class="o-card-head"><h2>Delete</h2></div>
+                <p class="o-help" style="margin:0 0 10px">Only if it was entered by mistake. The deletion is kept in the activity log.</p>
+                <input type="hidden" name="action" value="delete" />
+                <button type="submit" class="o-btn danger">Delete this payment</button>
+              </form>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+</OfficeLayout>

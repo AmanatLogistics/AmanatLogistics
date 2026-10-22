@@ -1,0 +1,120 @@
+---
+/** Edit a payment (admin only) — the same form as recording one. */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import PaymentForm from '../_PaymentForm.astro';
+import { guard, sameOrigin } from '../../../../lib/office/auth';
+import { tx } from '../../../../lib/office/db';
+import { logActivity } from '../../../../lib/office/activity';
+import { withMsg } from '../../../../lib/office/form';
+import { rateMap } from '../../../../lib/office/money';
+import {
+  PAYMENT_FIELDS,
+  formValues,
+  getPayment,
+  readPaymentForm,
+  insertParty,
+  updatePayment,
+  paymentChanges,
+  partyKindLabel,
+  accountOptions,
+  partyOptions,
+  paymentShipmentOptions,
+  paymentPanel,
+  rateInput,
+  dirFrom,
+  idParam,
+} from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+
+const id = idParam(Astro.params.id);
+const p = id ? await getPayment(id) : null;
+if (!p) return Astro.redirect(withMsg('/office/payments?dir=in', 'That payment was not found — it may have been deleted.', 'err'), 303);
+
+let error: string | null = null;
+let posted: Record<string, string> | null = null;
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    posted = formValues(fd, PAYMENT_FIELDS);
+    const r = await readPaymentForm(fd, p);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      await tx(async (t) => {
+        let partyId = v.party_id;
+        if (v.new_party) {
+          partyId = await insertParty(v.new_party.name, v.new_party.kind, user.id, t);
+          await logActivity(user.id, 'party_created', 'party', partyId, `${v.new_party.name} (${partyKindLabel(v.new_party.kind)}) — added while editing payment #${p.id}`, t);
+        }
+        await updatePayment(p.id, { ...v, party_id: partyId! }, t);
+        await logActivity(user.id, 'payment_updated', 'payment', p.id, paymentChanges(p, v), t);
+      });
+      return Astro.redirect(withMsg(`/office/payments/${p.id}`, 'Payment saved.'), 303);
+    }
+  }
+}
+
+const sp = Astro.url.searchParams;
+let values: Record<string, string>;
+if (posted) values = posted;
+else if (sp.has('reload')) {
+  values = Object.fromEntries(PAYMENT_FIELDS.map((k) => [k, sp.get(k) ?? '']));
+  values.dir = dirFrom(values.dir);
+} else {
+  values = {
+    dir: p.direction,
+    pay_date: p.pay_date,
+    party: String(p.party_id),
+    new_name: '',
+    new_kind: p.direction === 'in' ? 'client' : 'agent',
+    account: String(p.account_id),
+    amount: String(p.amount),
+    per_usd: rateInput(p.per_usd),
+    method: p.method,
+    reference: p.reference ?? '',
+    shipment: p.shipment_id ? String(p.shipment_id) : '',
+    notes: p.notes ?? '',
+    from_shipment: '',
+  };
+}
+
+const dir = dirFrom(values.dir);
+const partyId = idParam(values.party);
+const [accounts, parties, shipments, panel, rates] = await Promise.all([
+  accountOptions(p.account_id),
+  partyOptions({ includeId: partyId ?? p.party_id }),
+  paymentShipmentOptions(dir, partyId, idParam(values.shipment)),
+  paymentPanel(partyId),
+  rateMap(),
+]);
+---
+
+<OfficeLayout title={`Edit payment #${p.id}`} user={user} active={dir === 'out' ? 'payments-out' : 'payments-in'}>
+  <PageHead
+    title={`Edit payment #${p.id}`}
+    sub="Changes are written to the activity log with the old and new figures."
+    crumbs={[
+      { label: 'Office', href: '/office' },
+      { label: p.direction === 'in' ? 'Payments received' : 'Payments made', href: `/office/payments?dir=${p.direction}` },
+      { label: `Payment #${p.id}`, href: `/office/payments/${p.id}` },
+    ]}
+  />
+  <Flash error={error} />
+  <PaymentForm
+    mode="edit"
+    reloadAction={`/office/payments/${p.id}/edit`}
+    cancelHref={`/office/payments/${p.id}`}
+    values={values}
+    parties={parties}
+    accounts={accounts}
+    shipments={shipments}
+    rates={rates}
+    panel={panel}
+  />
+</OfficeLayout>

@@ -1,0 +1,160 @@
+---
+/**
+ * Shell for every signed-in Amanat Office page: sidebar, top bar, content.
+ * Never indexed, never cached, never linked from the public site except the
+ * small "Staff login" link in the footer.
+ *
+ *   <OfficeLayout title="Shipments" user={user} active="shipments">…</OfficeLayout>
+ *
+ * `active` is the id of the sidebar item to highlight (see NAV below).
+ */
+import '../styles/office.css';
+import { SERVICES, SERVICE_KEYS } from '../lib/office/services';
+import type { OfficeUser } from '../lib/office/auth';
+
+interface Props {
+  title: string;
+  user: OfficeUser;
+  active?: string;
+  /** Wide pages (dashboards) can drop the max width. */
+  wide?: boolean;
+}
+const { title, user, active = '', wide = false } = Astro.props;
+const admin = user.role === 'admin';
+
+type Item = { id: string; label: string; href: string; adminOnly?: boolean };
+const NAV: { group: string; adminOnly?: boolean; items: Item[] }[] = [
+  { group: 'Overview', items: [{ id: 'dashboard', label: 'Dashboard', href: '/office' }] },
+  {
+    group: 'Operations',
+    items: [
+      { id: 'shipments', label: 'Shipments', href: '/office/shipments' },
+      { id: 'invoices', label: 'Invoices', href: '/office/invoices' },
+    ],
+  },
+  {
+    group: 'Sections',
+    items: SERVICE_KEYS.map((k) => ({ id: `section-${k}`, label: SERVICES[k].short, href: `/office/sections/${k}` })),
+  },
+  {
+    group: 'Money',
+    items: [
+      { id: 'payments-in', label: 'Payments received', href: '/office/payments?dir=in' },
+      { id: 'payments-out', label: 'Payments made', href: '/office/payments?dir=out' },
+      { id: 'expenses', label: 'Office expenses', href: '/office/expenses' },
+      { id: 'accounts', label: 'Cash & accounts', href: '/office/accounts' },
+      { id: 'transfers', label: 'Transfers', href: '/office/transfers' },
+    ],
+  },
+  {
+    group: 'People',
+    items: [
+      { id: 'clients', label: 'Clients', href: '/office/parties?kind=client' },
+      { id: 'partners', label: 'Agents & partners', href: '/office/parties?kind=partners' },
+    ],
+  },
+  {
+    group: 'Reports',
+    adminOnly: true,
+    items: [
+      { id: 'report-pnl', label: 'Profit & loss', href: '/office/reports/pnl' },
+      { id: 'report-balances', label: 'Who owes whom', href: '/office/reports/balances' },
+      { id: 'report-cashflow', label: 'Cash flow', href: '/office/reports/cashflow' },
+    ],
+  },
+  {
+    group: 'Admin',
+    adminOnly: true,
+    items: [
+      { id: 'import', label: 'Import old data', href: '/office/import' },
+      { id: 'users', label: 'Users', href: '/office/users' },
+      { id: 'settings', label: 'Settings', href: '/office/settings' },
+      { id: 'activity', label: 'Activity log', href: '/office/activity' },
+    ],
+  },
+];
+const nav = NAV.filter((g) => admin || !g.adminOnly).map((g) => ({
+  ...g,
+  items: g.items.filter((i) => admin || !i.adminOnly),
+}));
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title} — Amanat Office</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <slot name="head" />
+  </head>
+  <body class="o-body">
+    <div class="o-shell" id="o-shell">
+      <aside class="o-side" aria-label="Office navigation">
+        <a href="/office" class="o-brand">
+          <img src="/images/brand-logo-white.png" alt="" width="40" height="38" />
+          <span><strong>Amanat Office</strong><small>Staff only</small></span>
+        </a>
+        <nav class="o-nav">
+          {
+            nav.map((g) => (
+              <div class="o-nav-group">
+                <span>{g.group}</span>
+                {g.items.map((i) => (
+                  <a href={i.href} data-astro-prefetch="false" class:list={[active === i.id && 'active']} aria-current={active === i.id ? 'page' : undefined}>
+                    <i class="dot" />
+                    {i.label}
+                  </a>
+                ))}
+              </div>
+            ))
+          }
+        </nav>
+      </aside>
+
+      <div class="o-main">
+        <header class="o-top">
+          <button type="button" class="o-menu-btn" id="o-menu-btn" aria-controls="o-shell" aria-expanded="false">☰ Menu</button>
+          <span class="muted small">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kabul' })}</span>
+          <div class="who">
+            <span><strong>{user.name}</strong> <span class:list={['o-badge', user.role]}>{user.role === 'admin' ? 'Admin' : 'Staff'}</span></span>
+            <a href="/office/account" class="small">My password</a>
+            <form method="post" action="/office/logout">
+              <button type="submit" class="o-btn sm">Sign out</button>
+            </form>
+          </div>
+        </header>
+        <main class="o-content" style={wide ? 'max-width:none' : undefined}>
+          <slot />
+        </main>
+      </div>
+    </div>
+    <script is:inline>
+      (function () {
+        var btn = document.getElementById('o-menu-btn');
+        var shell = document.getElementById('o-shell');
+        if (!btn || !shell) return;
+        btn.addEventListener('click', function () {
+          var open = shell.classList.toggle('nav-open');
+          btn.setAttribute('aria-expanded', String(open));
+        });
+        document.addEventListener('click', function (e) {
+          if (shell.classList.contains('nav-open') && !e.target.closest('.o-side') && e.target !== btn) {
+            shell.classList.remove('nav-open');
+            btn.setAttribute('aria-expanded', 'false');
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

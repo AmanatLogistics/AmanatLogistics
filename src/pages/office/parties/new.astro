@@ -1,0 +1,91 @@
+---
+/**
+ * Add a client (?kind=client) or a partner (?kind=partners, or a partner kind
+ * such as ?kind=carrier to pre-select it). ?name= pre-fills the name.
+ * Warns when an active party already has the same name; the user can still
+ * save after ticking "this is a different person".
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import Flash from '../../../components/office/Flash.astro';
+import PartyForm from './_PartyForm.astro';
+import { guard, sameOrigin } from '../../../lib/office/auth';
+import { tx } from '../../../lib/office/db';
+import { logActivity } from '../../../lib/office/activity';
+import { withMsg } from '../../../lib/office/form';
+import {
+  isKind,
+  modeOf,
+  listHref,
+  navId,
+  formValues,
+  readPartyForm,
+  sameNameParties,
+  insertParty,
+  partySummary,
+} from '../../../lib/office/parties';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+
+const sp = Astro.url.searchParams;
+const kindParam = sp.get('kind');
+const startKind = isKind(kindParam) ? kindParam : kindParam === 'partners' ? 'agent' : 'client';
+
+let error: string | null = null;
+let dupes: Awaited<ReturnType<typeof sameNameParties>> = [];
+let values: Record<string, string> = {
+  name: (sp.get('name') ?? '').slice(0, 120),
+  kind: startKind,
+  phone: '',
+  city: '',
+  country: '',
+  notes: '',
+  active: 'on',
+  confirm_dup: '',
+};
+
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked. Reload the page and try again.';
+  else {
+    const fd = await Astro.request.formData();
+    values = formValues(fd);
+    const r = readPartyForm(fd);
+    if (!r.ok) error = r.error;
+    else {
+      const v = r.value;
+      const confirmed = fd.get('confirm_dup') === '1';
+      dupes = confirmed ? [] : await sameNameParties(v.name);
+      // With a same-name match the form is shown again with its own warning.
+      if (!dupes.length) {
+        const id = await tx(async (t) => {
+          const pid = await insertParty(v, user.id, t);
+          await logActivity(user.id, 'party_created', 'party', pid, partySummary(v), t);
+          return pid;
+        });
+        return Astro.redirect(withMsg(`/office/parties/${id}`, `${v.name} saved.`), 303);
+      }
+    }
+  }
+}
+
+const listMode = modeOf(isKind(values.kind) ? values.kind : startKind);
+const isClient = listMode === 'client';
+const title = isClient ? 'Add a client' : 'Add a partner';
+---
+
+<OfficeLayout title={title} user={user} active={navId(isClient ? 'client' : 'agent')}>
+  <PageHead
+    title={title}
+    sub={isClient
+      ? 'Someone who ships with us. Their shipments, invoices and payments will all show on their statement.'
+      : 'An agent, truck owner, airline, sarafi or anyone else we pay. Their bills and our payments to them show on their statement.'}
+    crumbs={[
+      { label: 'Office', href: '/office' },
+      { label: isClient ? 'Clients' : 'Agents & partners', href: listHref(isClient ? 'client' : 'agent') },
+    ]}
+  />
+  <Flash error={error} />
+  <PartyForm mode="new" values={values} cancelHref={listHref(isClient ? 'client' : 'agent')} dupes={dupes} listMode={listMode} />
+</OfficeLayout>

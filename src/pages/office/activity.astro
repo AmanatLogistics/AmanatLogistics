@@ -1,0 +1,33 @@
+---
+/** Activity log (admin only): the last 300 things anyone did. */
+import OfficeLayout from '../../layouts/OfficeLayout.astro';
+import PageHead from '../../components/office/PageHead.astro';
+import { guard } from '../../lib/office/auth';
+import { recentActivity } from '../../lib/office/activity';
+
+export const prerender = false;
+const user = await guard(Astro, { admin: true });
+if (user instanceof Response) return user;
+const rows = await recentActivity({ limit: 300 });
+const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+---
+
+<OfficeLayout title="Activity log" user={user} active="activity">
+  <PageHead title="Activity log" sub="Who created, changed or deleted what — newest first." />
+  <div class="o-table-wrap">
+    <table class="o-table">
+      <thead><tr><th>When (Kabul time)</th><th>Who</th><th>What</th><th>Details</th></tr></thead>
+      <tbody>
+        {rows.length === 0 && <tr><td colspan="4" class="o-empty">Nothing yet.</td></tr>}
+        {rows.map((r) => (
+          <tr>
+            <td class="small" style="white-space:nowrap">{when(r.at)}</td>
+            <td>{r.user_name ?? '—'}</td>
+            <td><code class="small">{r.action}</code>{r.entity && <span class="muted small"> · {r.entity}{r.entity_id ? ` #${r.entity_id}` : ''}</span>}</td>
+            <td class="small">{r.summary}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</OfficeLayout>

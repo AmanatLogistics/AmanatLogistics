@@ -1,0 +1,106 @@
+---
+/**
+ * New shipment. Without ?service= it asks which section (five big cards);
+ * with one it shows the form, pre-filled with that section's usual charge and
+ * cost lines. Saving creates the shipment, its lines, any new client / payee
+ * and its invoice in one transaction, then opens the shipment.
+ */
+import OfficeLayout from '../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../components/office/PageHead.astro';
+import ShipmentForm from './_ShipmentForm.astro';
+import { guard, sameOrigin, isAdmin } from '../../../lib/office/auth';
+import { withMsg } from '../../../lib/office/form';
+import { listCurrencies, today } from '../../../lib/office/money';
+import { SERVICES, SERVICE_KEYS, type ServiceKey } from '../../../lib/office/services';
+import {
+  newForm,
+  submitShipment,
+  clientOptions,
+  payeeGroups,
+  parseId,
+  isServiceKey,
+  type FormState,
+} from '../../../lib/office/shipments';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const svcParam = Astro.url.searchParams.get('service');
+let service: ServiceKey | null = isServiceKey(svcParam) ? svcParam : null;
+const currencies = await listCurrencies();
+const rates = Object.fromEntries(currencies.map((c) => [c.code, c.per_usd]));
+
+let errors: string[] = [];
+let state: FormState | null = null;
+
+if (Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) errors = ['That request looked unsafe, so it was blocked. Reload the page and try again.'];
+  else {
+    const fd = await Astro.request.formData();
+    const r = await submitShipment(fd, user.id);
+    if (r.ok) return Astro.redirect(withMsg(`/office/shipments/${r.id}`, r.message), 303);
+    errors = r.errors;
+    state = r.state;
+    if (isServiceKey(r.state.form.service)) service = r.state.form.service;
+  }
+}
+const clientParam = parseId(Astro.url.searchParams.get('client'));
+if (service && !state) state = newForm(service, today(), clientParam, rates);
+
+const clientIds = state && /^\d+$/.test(state.form.client_id) ? [Number(state.form.client_id)] : [];
+const payeeIds = (state?.costs ?? []).map((c) => Number(c.payee_id)).filter((n) => Number.isInteger(n) && n > 0);
+const clients = state ? await clientOptions(clientIds) : [];
+const payees = state ? await payeeGroups(payeeIds) : [];
+const unitLabel = { kg: 'Billed per kg', cbm: 'Billed per CBM', fixed: 'Billed as a fixed sum' } as const;
+---
+
+<OfficeLayout title="New shipment" user={user} active="shipments">
+  {
+    !service || !state ? (
+      <>
+        <PageHead
+          title="New shipment"
+          sub="Which kind of shipment is it? Each one starts with the lines it usually has."
+          crumbs={[{ label: 'Office', href: '/office' }, { label: 'Shipments', href: '/office/shipments' }]}
+        />
+        {errors.length > 0 && <div class="o-flash err" role="alert">{errors.join(' ')}</div>}
+        <div class="o-grid-3">
+          {SERVICE_KEYS.map((k) => {
+            const s = SERVICES[k];
+            return (
+              <a class="o-card" href={`/office/shipments/new?service=${k}${clientParam ? `&client=${clientParam}` : ''}`} style="display:flex;flex-direction:column;gap:8px;color:inherit;text-decoration:none">
+                <h2 style="font-size:21px;color:var(--o-maroon)">{s.label}</h2>
+                <p class="muted" style="margin:0;flex:1">{s.route}</p>
+                <div class="o-actions" style="justify-content:space-between">
+                  <span class="o-badge">{unitLabel[s.unit]}</span>
+                  <span class="o-btn sm primary">Start →</span>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={`New ${SERVICES[service].short} shipment`}
+          sub={SERVICES[service].route}
+          crumbs={[{ label: 'Office', href: '/office' }, { label: 'Shipments', href: '/office/shipments' }, { label: 'New', href: '/office/shipments/new' }]}
+        />
+        <ShipmentForm
+          mode="new"
+          state={state}
+          errors={errors}
+          clients={clients}
+          payees={payees}
+          currencies={currencies}
+          rates={rates}
+          admin={admin}
+          cancelHref="/office/shipments"
+        />
+      </>
+    )
+  }
+</OfficeLayout>

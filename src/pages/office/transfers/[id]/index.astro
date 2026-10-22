@@ -1,0 +1,100 @@
+---
+/** One transfer between our accounts. Everyone can view; an admin can delete it. */
+import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
+import PageHead from '../../../../components/office/PageHead.astro';
+import Flash from '../../../../components/office/Flash.astro';
+import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
+import { q, tx } from '../../../../lib/office/db';
+import { logActivity, recentActivity } from '../../../../lib/office/activity';
+import { str, withMsg } from '../../../../lib/office/form';
+import { fmtDate, usd } from '../../../../lib/office/money';
+import { getTransfer, transferSummary, idParam, fmtRate, fmtAmount } from '../../../../lib/office/entries';
+
+export const prerender = false;
+const user = await guard(Astro);
+if (user instanceof Response) return user;
+const admin = isAdmin(user);
+
+const id = idParam(Astro.params.id);
+const t0 = id ? await getTransfer(id) : null;
+
+let error: string | null = null;
+if (t0 && Astro.request.method === 'POST') {
+  if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
+  else {
+    const fd = await Astro.request.formData();
+    if (str(fd, 'action') === 'delete') {
+      if (!admin) error = 'Only an admin can delete a transfer.';
+      else {
+        await tx(async (t) => {
+          await q('DELETE FROM office_transfers WHERE id = $1', [t0.id], t);
+          await logActivity(user.id, 'transfer_deleted', 'transfer', t0.id, `Deleted transfer #${t0.id}: ${transferSummary(t0)}`, t);
+        });
+        return Astro.redirect(withMsg('/office/transfers', `Transfer from ${t0.from_name} to ${t0.to_name} deleted.`), 303);
+      }
+    }
+  }
+}
+
+if (!t0) Astro.response.status = 404;
+const history = t0 ? await recentActivity({ entity: 'transfer', entityId: t0.id, limit: 20 }) : [];
+const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const r = t0;
+---
+
+<OfficeLayout title={r ? `Transfer #${r.id}` : 'Transfer not found'} user={user} active="transfers">
+  {
+    !r ? (
+      <>
+        <PageHead title="Transfer not found" sub="It may have been deleted." crumbs={[{ label: 'Office', href: '/office' }, { label: 'Transfers', href: '/office/transfers' }]} />
+        <div class="o-card o-empty"><a class="o-btn" href="/office/transfers">Back to transfers</a></div>
+      </>
+    ) : (
+      <>
+        <PageHead
+          title={`${r.from_name} → ${r.to_name}`}
+          sub={`${fmtDate(r.tr_date)}${r.reference ? ' · ref ' + r.reference : ''}`}
+          crumbs={[{ label: 'Office', href: '/office' }, { label: 'Transfers', href: '/office/transfers' }]}
+        >
+          <a class="o-btn" href="/office/transfers/new">New transfer</a>
+        </PageHead>
+        <Flash error={error} />
+        <div class="o-grid-2">
+          <div class="o-card">
+            <div class="o-card-head"><h2>Transfer #{r.id}</h2></div>
+            <dl class="o-kv">
+              <dt>Date</dt><dd>{fmtDate(r.tr_date)}</dd>
+              <dt>From</dt><dd><a href={`/office/accounts/${r.from_account}`}>{r.from_name}</a></dd>
+              <dt>Amount sent</dt><dd><strong>{fmtAmount(r.amount_out, r.from_currency)}</strong>{r.from_currency !== 'USD' && <span class="muted small"> at {fmtRate(r.per_usd_out)} per US$ = {usd(r.usd_out)}</span>}</dd>
+              <dt>To</dt><dd><a href={`/office/accounts/${r.to_account}`}>{r.to_name}</a></dd>
+              <dt>Amount arrived</dt><dd><strong>{fmtAmount(r.amount_in, r.to_currency)}</strong>{r.to_currency !== 'USD' && <span class="muted small"> at {fmtRate(r.per_usd_in)} per US$ = {usd(r.usd_in)}</span>}</dd>
+              <dt>Transfer fee</dt>
+              <dd class:list={[r.fee < 0 && 'pos']}>{usd(r.fee)} <span class="muted small">({usd(r.usd_out)} left − {usd(r.usd_in)} arrived)</span></dd>
+              <dt>Reference</dt><dd>{r.reference ?? <span class="muted">—</span>}</dd>
+              {r.notes && (<><dt>Notes</dt><dd style="white-space:pre-wrap">{r.notes}</dd></>)}
+              <dt>Entered by</dt><dd>{r.created_by_name ?? '—'} <span class="muted small">· {when(r.created_at)}</span></dd>
+            </dl>
+          </div>
+          <div class="o-stack">
+            {history.length > 0 && (
+              <div class="o-card">
+                <div class="o-card-head"><h2>History</h2></div>
+                <ul style="margin:0;padding-left:18px" class="small">
+                  {history.map((h) => <li><span class="muted">{when(h.at)} · {h.user_name ?? '—'}:</span> {h.summary ?? h.action}</li>)}
+                </ul>
+              </div>
+            )}
+            {admin && (
+              <form method="post" class="o-card" onsubmit="return confirm('Delete this transfer for good? Both account balances will change. This cannot be undone.')">
+                <div class="o-card-head"><h2>Delete</h2></div>
+                <p class="o-help" style="margin:0 0 10px">Only if it was entered by mistake (then enter it again correctly). The deletion is kept in the activity log.</p>
+                <input type="hidden" name="action" value="delete" />
+                <button type="submit" class="o-btn danger">Delete this transfer</button>
+              </form>
+            )}
+          </div>
+        </div>
+      </>
+    )
+  }
+</OfficeLayout>

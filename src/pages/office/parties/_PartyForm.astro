@@ -1,0 +1,124 @@
+---
+/**
+ * The add / edit form for a client or partner. Not a route (leading _).
+ * `dupes` — active parties with the same name: shown as a warning with a
+ * "this is a different person" tick box, so the user decides.
+ */
+import { PARTY_KINDS } from '../../../lib/office/services';
+import { KIND_KEYS, KIND_HELP, kindLabel, type Mode } from '../../../lib/office/parties';
+
+interface Props {
+  mode: 'new' | 'edit';
+  values: Record<string, string>;
+  cancelHref: string;
+  dupes?: { id: number; name: string; kind: string; city: string | null }[];
+  /** what the list they came from is about — orders the kinds */
+  listMode: Mode;
+  /** edit only: they are the client on shipments / payee on costs — changing kind is worth a note */
+  hasRecords?: boolean;
+}
+const { mode, values: v, cancelHref, dupes = [], listMode, hasRecords = false } = Astro.props;
+const kinds = listMode === 'client' ? KIND_KEYS : [...KIND_KEYS.filter((k) => k !== 'client'), 'client' as const];
+---
+
+<div class="o-grid-2" style="align-items:start">
+  <form method="post" class="o-card o-form">
+    {
+      dupes.length > 0 && (
+        <div class="o-flash err" role="alert" style="margin:0">
+          <strong>Is this someone you already have?</strong>
+          <div style="margin-top:4px;font-weight:400">
+            {dupes.length === 1 ? 'There is already an active client or partner with this name:' : 'There are already active clients or partners with this name:'}{' '}
+            {dupes.map((d, i) => (
+              <>
+                {i > 0 && ', '}
+                <a href={`/office/parties/${d.id}`} target="_blank" rel="noopener">
+                  {d.name}
+                </a>{' '}
+                ({kindLabel(d.kind)}{d.city ? `, ${d.city}` : ''})
+              </>
+            ))}
+            . Two records for one person split their balance in two. If it is the same person, open the existing one instead.
+          </div>
+          <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-weight:600;color:var(--o-ink)">
+            <input type="checkbox" name="confirm_dup" value="1" style="margin-top:3px" />
+            <span>This is a different person or business — save it anyway</span>
+          </label>
+        </div>
+      )
+    }
+
+    <label class="o-field">
+      <span>Name</span>
+      <input name="name" value={v.name} required maxlength="120" autocomplete="off" autofocus={mode === 'new'} />
+      <span class="o-help">As you would say it in the office, e.g. “Haji Gul Traders” or “Wali — truck owner”.</span>
+    </label>
+
+    <label class="o-field">
+      <span>What kind?</span>
+      <select name="kind" required>
+        {kinds.map((k) => (
+          <option value={k} selected={v.kind === k}>{PARTY_KINDS[k]}</option>
+        ))}
+      </select>
+      <span class="o-help">Not sure? “Which kind?” explains each one.</span>
+      {
+        mode === 'edit' && hasRecords && (
+          <span class="o-help">Changing the kind only moves them between the Clients and Agents & partners lists — their shipments, bills, payments and balance stay exactly as they are.</span>
+        )
+      }
+    </label>
+
+    <div class="o-row">
+      <label class="o-field">
+        <span>Phone</span>
+        <input name="phone" value={v.phone} type="tel" inputmode="tel" maxlength="60" autocomplete="off" placeholder="0700 123 456" />
+        <span class="o-help">Two numbers? Separate them with “/”.</span>
+      </label>
+      <label class="o-field">
+        <span>City</span>
+        <input name="city" value={v.city} maxlength="80" placeholder="Kandahar" />
+      </label>
+      <label class="o-field">
+        <span>Country</span>
+        <input name="country" value={v.country} maxlength="80" placeholder="Afghanistan" />
+      </label>
+    </div>
+
+    <label class="o-field">
+      <span>Notes</span>
+      <textarea name="notes" rows="3" maxlength="2000" placeholder="Shop address, who to ask for, bank or hawala details…">{v.notes}</textarea>
+    </label>
+
+    <label style="display:flex;gap:8px;align-items:flex-start">
+      <input type="checkbox" name="active" checked={v.active === 'on'} style="margin-top:3px" />
+      <span>
+        <strong>Active</strong>
+        <span class="o-help" style="display:block">Untick when you no longer work with them. They disappear from lists and pick-lists, but every record and their balance stay.</span>
+      </span>
+    </label>
+
+    <div class="o-actions">
+      <button class="o-btn primary" type="submit">{mode === 'new' ? 'Save' : 'Save changes'}</button>
+      <a class="o-btn ghost" href={cancelHref}>Cancel</a>
+    </div>
+  </form>
+
+  <div class="o-card">
+    <div class="o-card-head"><h2>Which kind?</h2></div>
+    <dl class="o-kv">
+      {
+        kinds.map((k) => (
+          <>
+            <dt><strong style="color:var(--o-ink)">{PARTY_KINDS[k]}</strong></dt>
+            <dd class="small" style="font-weight:400">{KIND_HELP[k]}</dd>
+          </>
+        ))
+      }
+    </dl>
+    <p class="o-help" style="margin:14px 0 0">
+      Clients are listed under <a href="/office/parties?kind=client">Clients</a>; everyone else under{' '}
+      <a href="/office/parties?kind=partners">Agents & partners</a>. Every one of them gets a statement showing what they owe us or what we owe them.
+    </p>
+  </div>
+</div>
