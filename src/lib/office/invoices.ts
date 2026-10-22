@@ -45,11 +45,19 @@ export async function ensureInvoice(shipmentId: number, userId: number | null, r
 
 export type InvoiceStatus = 'paid' | 'partial' | 'unpaid' | 'overdue' | 'credit';
 
+/**
+ * A remainder smaller than this, either way, counts as settled. A client who
+ * pays a dollar bill in afghanis leaves a few cents of exchange rounding
+ * behind; that is not an unpaid invoice and must not sit in the overdue list.
+ * (Balances still show the exact cents.)
+ */
+export const SETTLED_WITHIN_USD = 1;
+
 /** Status from the amount billed, the amount received and the due date. */
 export function invoiceStatus(revenue: number, received: number, dueDate: string | null, todayStr: string): InvoiceStatus {
   const due = Math.round((revenue - received) * 100) / 100;
+  if (revenue > 0 && Math.abs(due) < SETTLED_WITHIN_USD) return 'paid';
   if (due < 0) return 'credit';
-  if (due === 0 && revenue > 0) return 'paid';
   if (dueDate && dueDate < todayStr && due > 0) return 'overdue';
   if (received > 0) return 'partial';
   return 'unpaid';

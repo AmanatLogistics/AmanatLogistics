@@ -54,9 +54,9 @@ function getPool(): pg.Pool {
       // A request that cannot get a connection fails with an error after 10 s
       // instead of waiting forever.
       connectionTimeoutMillis: 10_000,
-      // A transaction left open by a crashed request releases its locks after
-      // a minute rather than blocking everyone behind it.
-      options: '-c idle_in_transaction_session_timeout=60000',
+      // No startup `options` here: Neon's connection pooler (the usual
+      // DATABASE_URL on Vercel) rejects them. The idle-in-transaction limit is
+      // set per transaction in tx() instead.
     });
     // An idle connection the server drops (Neon restart) must not crash the process.
     pool.on('error', (e) => console.error('Office DB pool error:', e.message));
@@ -96,6 +96,9 @@ export async function tx<T>(fn: (tx: Runner) => Promise<T>): Promise<T> {
   client.on('error', onErr);
   try {
     await client.query('BEGIN');
+    // A transaction left open by a crashed request releases its locks after a
+    // minute rather than blocking everyone behind it.
+    await client.query("SET LOCAL idle_in_transaction_session_timeout = '60s'");
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
