@@ -7,7 +7,8 @@ import vercel from '@astrojs/vercel';
 // (src/pages/api/contact.ts opts into server rendering via `export const prerender = false`).
 export default defineConfig({
   site: 'https://amanatlogistics.com',
-  adapter: vercel(),
+  // Long enough for a large import of old records into the office system.
+  adapter: vercel({ maxDuration: 60 }),
   // Prefetch internal links so app-like (View Transitions) navigation is instant.
   prefetch: {
     prefetchAll: true,

@@ -79,6 +79,9 @@ if (admin) {
   ]);
 }
 const officeCosts = p ? Math.round((p.officeExpenses + p.transferFees) * 100) / 100 : 0;
+// "Owed to us" is mostly clients, but also partners we paid ahead of their bills.
+const clientsOwe = groups ? Math.round(groups.owesUs.filter((r) => r.kind === 'client').reduce((a, r) => a + r.balance, 0) * 100) / 100 : 0;
+const paidAhead = totals ? Math.round((totals.receivable - clientsOwe) * 100) / 100 : 0;
 const shipCount = p ? p.byService.reduce((a, s) => a + s.shipments, 0) : 0;
 const activeAccounts = accounts.filter((a) => a.active || a.balance !== 0);
 const cashUsd = Math.round(activeAccounts.reduce((a, r) => a + r.balance_usd, 0) * 100) / 100;
@@ -137,7 +140,12 @@ const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
 
         <h2 style={H2}>Money position today</h2>
         <div class="o-stats" style={TILES}>
-          <Stat label="Clients owe us" value={usd(totals.receivable)} sub="Billed, not yet paid" href="/office/reports/balances" />
+          <Stat
+            label={paidAhead > 0 ? 'Owed to us' : 'Clients owe us'}
+            value={usd(totals.receivable)}
+            sub={paidAhead > 0 ? `Clients ${usd(clientsOwe)} · partners paid ahead ${usd(paidAhead)}` : 'Billed, not yet paid'}
+            href="/office/reports/balances"
+          />
           <Stat label="We owe partners" value={usd(totals.payable)} sub="Agents, carriers, airlines not yet paid" tone={totals.payable > 0 ? 'neg' : ''} href="/office/reports/balances#we-owe" />
           <Stat label="We hold for clients" value={usd(totals.clientCredit)} sub="Paid in advance or overpaid" href="/office/reports/balances#we-hold" />
           <Stat label="Cash & accounts ≈" value={usd(cashUsd)} sub={`${activeAccounts.length} account${activeAccounts.length === 1 ? '' : 's'}, at today's rates`} href="/office/accounts" />

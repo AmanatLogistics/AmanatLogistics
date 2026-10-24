@@ -5,15 +5,21 @@
  * refer to earlier ones by name or reference:
  *   accounts → parties → shipments → charges → costs → payments → expenses → transfers
  *
+ * Several kinds can also come together: several files at once, or one
+ * "bundle" file in which each kind's rows follow a line such as "#shipments".
+ * They are put in the order above and checked as a whole.
+ *
  * Every file is checked row by row first (preview); then the rows without
  * problems are saved in ONE transaction — all of them, or none if anything
- * fails while saving.
+ * fails while saving. Rows are saved in batches, a few statements per kind,
+ * so a large import does not run past the server's time limit when the
+ * database is far away.
  */
 import { q, one, tx, type Runner } from './db';
 import { toUsd, round2, rateMap } from './money';
 import { SERVICES, COST_CATEGORIES, PARTY_KINDS, ACCOUNT_TYPES, EXPENSE_CATEGORIES, SHIPMENT_STATUS } from './services';
 import { METHODS } from './money';
-import { nextShipmentRef } from './settings';
+import { nextShipmentRef, getSettings } from './settings';
 import { ensureInvoice } from './invoices';
 import { logActivity } from './activity';
 
@@ -182,8 +188,9 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'amount', help: 'total; worked out from qty × rate when empty' },
       { key: 'currency', help: 'default USD' },
       { key: 'per_usd', help: 'how many of that currency per 1 USD on the day; default from Settings' },
+      { key: 'invoice_no', help: 'your old invoice number for this shipment, to keep it (optional; otherwise a new number)' },
     ],
-    example: [['AML-OLD-101', 'Air freight via Tashkent', '1000', 'kg', '3.10', '3100', 'USD', '1']],
+    example: [['AML-OLD-101', 'Air freight via Tashkent', '1000', 'kg', '3.10', '3100', 'USD', '1', 'INV-OLD-77']],
   },
   costs: {
     label: 'Shipment costs (what we owe partners)',
@@ -290,7 +297,19 @@ interface Lookups {
   accounts: Map<string, { id: number; currency: string }>;
   shipments: Map<string, number>;
   currencies: Record<string, number>;
+  /** Invoice number (lower case) → its shipment, and shipment → its invoice number. */
+  invoices: Map<string, number>;
+  invoiceOf: Map<number, string>;
+  /** Payments and expenses already saved, as "same record" keys, so a file imported twice is not counted twice. */
+  paymentKeys: Set<string>;
+  expenseKeys: Set<string>;
 }
+
+const money2 = (n: unknown) => Number(n).toFixed(2);
+const paymentKey = (d: { pay_date: unknown; direction: unknown; party_id: unknown; account_id: unknown; amount: unknown }) =>
+  `${d.pay_date}|${d.direction}|${d.party_id}|${d.account_id}|${money2(d.amount)}`;
+const expenseKey = (d: { exp_date: unknown; account_id: unknown; amount: unknown; category: unknown; description: unknown }) =>
+  `${d.exp_date}|${d.account_id}|${money2(d.amount)}|${d.category}|${lk(String(d.description ?? ''))}`;
 
 async function loadLookups(runner?: Runner): Promise<Lookups> {
   const key = (s: string) => s.trim().toLowerCase();
@@ -298,7 +317,16 @@ async function loadLookups(runner?: Runner): Promise<Lookups> {
   const accounts = new Map((await q<{ id: number; name: string; currency: string }>('SELECT id, name, currency FROM office_accounts', [], runner)).map((a) => [key(a.name), { id: a.id, currency: a.currency }]));
   const shipments = new Map((await q<{ id: number; ref: string }>('SELECT id, ref FROM office_shipments', [], runner)).map((s) => [key(s.ref), s.id]));
   const currencies = Object.fromEntries((await q<{ code: string; per_usd: number }>('SELECT code, per_usd FROM office_currencies', [], runner)).map((c) => [c.code, c.per_usd]));
-  return { parties, accounts, shipments, currencies };
+  const inv = await q<{ number: string; shipment_id: number }>('SELECT number, shipment_id FROM office_invoices', [], runner);
+  const invoices = new Map(inv.map((i) => [key(i.number), i.shipment_id]));
+  const invoiceOf = new Map(inv.map((i) => [i.shipment_id, i.number]));
+  const paymentKeys = new Set(
+    (await q<{ pay_date: string; direction: string; party_id: number; account_id: number; amount: number }>('SELECT pay_date, direction, party_id, account_id, amount FROM office_payments', [], runner)).map(paymentKey),
+  );
+  const expenseKeys = new Set(
+    (await q<{ exp_date: string; account_id: number; amount: number; category: string; description: string | null }>('SELECT exp_date, account_id, amount, category, description FROM office_expenses', [], runner)).map(expenseKey),
+  );
+  return { parties, accounts, shipments, currencies, invoices, invoiceOf, paymentKeys, expenseKeys };
 }
 
 const lk = (s: string) => s.trim().toLowerCase();
@@ -309,9 +337,11 @@ function kindForCost(category: string): string {
 
 /**
  * Check every row of a file. `createParties`: unknown client / partner names
- * become new parties instead of errors.
+ * become new parties instead of errors. `alreadyThere`: shipment refs (lower
+ * case) that this import found already in the system, whose charges and costs
+ * in the same import are then skipped rather than added a second time.
  */
-export async function checkFile(kind: ImportKind, text: string, createParties: boolean, runner?: Runner): Promise<CheckResult> {
+export async function checkFile(kind: ImportKind, text: string, createParties: boolean, runner?: Runner, alreadyThere?: Set<string>): Promise<CheckResult> {
   const spec = KINDS[kind];
   const raw = parseCsv(text);
   const result: CheckResult = { kind, headerProblems: [], rows: [], newParties: [] };
@@ -330,6 +360,8 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
   const newParty = new Map<string, string>(); // lower name → kind, from rows that will be saved
   let rowNewParties: [string, string][] = [];
   const seenInFile = new Set<string>();
+  const invoiceInFile = new Map<string, number>(); // lower invoice number → shipment, for charges
+  const fileInvoiceOf = new Map<number, string>(); // shipment → lower invoice number given in this file
 
   const partyFor = (name: string, kindIfNew: string, errors: string[]): { id?: number; name: string } | null => {
     if (!name) return null;
@@ -404,7 +436,8 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (!status) errors.push(`Unknown status "${v('status')}".`);
       const client = partyFor(v('client_name'), 'client', errors);
       const ref = v('ref');
-      if (ref && (L.shipments.has(lk(ref)) || seenInFile.has(lk(ref)))) errors.push(`Shipment ${ref} already exists.`);
+      if (ref && L.shipments.has(lk(ref))) errors.push(`Shipment ${ref} already exists.`);
+      else if (ref && seenInFile.has(lk(ref))) errors.push(`Shipment ${ref} appears twice in this file.`);
       if (ref) seenInFile.add(lk(ref));
       const nums: Record<string, number | null> = {};
       for (const f of ['pieces', 'weight_kg', 'chargeable_kg', 'cbm']) nums[f] = money(v(f), f, errors);
@@ -413,6 +446,7 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
     } else if (kind === 'charges' || kind === 'costs') {
       const sid = L.shipments.get(lk(v('shipment_ref')));
       if (v('shipment_ref') && !sid) errors.push(`No shipment ${v('shipment_ref')} — import shipments first.`);
+      if (sid && alreadyThere?.has(lk(v('shipment_ref')))) errors.push(`${v('shipment_ref')} was already in the system before this import, so its lines here are skipped (imported before?).`);
       const cur = (v('currency') || 'USD').toUpperCase();
       if (!(cur in L.currencies)) errors.push(`Unknown currency "${cur}".`);
       const qty = money(v('qty'), 'qty', errors);
@@ -423,8 +457,22 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (amount === null) errors.push('Give an amount (or qty and rate).');
       const per = rateFor(v('per_usd'), cur, errors);
       if (kind === 'charges') {
-        data = { shipment_id: sid, description: v('description'), qty, unit: v('unit') || null, rate, amount, currency: cur, per_usd: per };
-        preview = `${v('shipment_ref')} · ${v('description')} · ${amount ?? '?'} ${cur}`;
+        const invNo = v('invoice_no');
+        if (invNo && sid) {
+          const taken = L.invoices.get(lk(invNo));
+          const own = L.invoiceOf.get(sid);
+          const inFile = invoiceInFile.get(lk(invNo));
+          if (taken !== undefined && taken !== sid) errors.push(`Invoice number ${invNo} is already used by another shipment.`);
+          else if (own && lk(own) !== lk(invNo)) errors.push(`${v('shipment_ref')} already has invoice ${own}.`);
+          else if (inFile !== undefined && inFile !== sid) errors.push(`Invoice number ${invNo} is given to two shipments in this file.`);
+          else if (fileInvoiceOf.has(sid) && fileInvoiceOf.get(sid) !== lk(invNo)) errors.push(`${v('shipment_ref')} is given two different invoice numbers in this file.`);
+          else {
+            invoiceInFile.set(lk(invNo), sid);
+            fileInvoiceOf.set(sid, lk(invNo));
+          }
+        }
+        data = { shipment_id: sid, description: v('description'), qty, unit: v('unit') || null, rate, amount, currency: cur, per_usd: per, invoice_no: invNo || null };
+        preview = `${v('shipment_ref')} · ${v('description')} · ${amount ?? '?'} ${cur}${invNo ? ` · invoice ${invNo}` : ''}`;
       } else {
         const category = v('category') ? matchEnum(v('category'), COST_CATEGORIES) : 'other';
         if (!category) errors.push(`Unknown category "${v('category')}".`);
@@ -450,6 +498,8 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
         sid = L.shipments.get(lk(v('shipment_ref'))) ?? null;
         if (!sid) errors.push(`No shipment ${v('shipment_ref')}.`);
       }
+      if (party?.id && acc && date && dir && amount !== null && L.paymentKeys.has(paymentKey({ pay_date: date, direction: dir, party_id: party.id, account_id: acc.id, amount })))
+        errors.push('This payment is already in the system (same date, person, account and amount), so it is skipped. If it really happened twice, enter the second one by hand.');
       data = { direction: dir, pay_date: date, party, account_id: acc?.id, currency: acc?.currency, amount, per_usd: per, method, reference: v('reference') || null, shipment_id: sid, notes: v('notes') || null };
       preview = `${date ?? '?'} · ${dir === 'in' ? 'received from' : 'paid to'} ${v('party_name')} · ${amount ?? '?'} ${acc?.currency ?? ''} · ${v('account_name')}`;
     } else if (kind === 'expenses') {
@@ -464,6 +514,8 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       const per = acc ? rateFor(v('per_usd'), acc.currency, errors) : null;
       const method = v('method') ? matchEnum(v('method'), METHODS) : 'cash';
       if (!method) errors.push(`Unknown method "${v('method')}".`);
+      if (acc && date && amount !== null && L.expenseKeys.has(expenseKey({ exp_date: date, account_id: acc.id, amount, category, description: v('description') || null })))
+        errors.push('This expense is already in the system (same date, account, amount and description), so it is skipped.');
       data = { exp_date: date, category, description: v('description') || null, account_id: acc?.id, currency: acc?.currency, amount, per_usd: per, method, reference: v('reference') || null };
       preview = `${date ?? '?'} · ${category} · ${amount ?? '?'} ${acc?.currency ?? ''}`;
     } else if (kind === 'transfers') {
@@ -505,85 +557,236 @@ export interface ImportOutcome {
   invoices: number;
 }
 
+/** A header problem that stops the whole file (as opposed to a note about ignored columns). */
+export function isBlocking(checked: CheckResult): boolean {
+  return checked.headerProblems.some((p) => p.startsWith('Missing') || p.startsWith('The file'));
+}
+
+/** Insert many rows in a few statements. Returns the RETURNING rows, if asked for. */
+async function insertMany(t: Runner, table: string, cols: string[], rows: unknown[][], returning?: string): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  // Postgres takes at most 65,535 parameters per statement.
+  const per = Math.max(1, Math.floor(30_000 / cols.length));
+  for (let i = 0; i < rows.length; i += per) {
+    const params: unknown[] = [];
+    const values = rows.slice(i, i + per).map((r) => `(${r.map((v) => (params.push(v), `$${params.length}`)).join(', ')})`);
+    out.push(...(await q<Record<string, unknown>>(`INSERT INTO ${table} (${cols.join(', ')}) VALUES ${values.join(', ')}${returning ? ` RETURNING ${returning}` : ''}`, params, t)));
+  }
+  return out;
+}
+
+type PartyRef = { id?: number; name: string } | null;
+
+/** Save the rows of a checked file that have no problems, inside the caller's transaction. */
+async function saveChecked(kind: ImportKind, checked: CheckResult, userId: number, t: Runner): Promise<ImportOutcome> {
+  const ok = checked.rows.filter((r) => r.data).map((r) => r.data!);
+
+  // New clients and partners first, all in one statement.
+  const partyOf = (d: Record<string, unknown>): [PartyRef, string] | null =>
+    kind === 'shipments' ? [d.client as PartyRef, 'client']
+    : kind === 'costs' ? [d.payee as PartyRef, kindForCost(d.category as string)]
+    : kind === 'payments' ? [d.party as PartyRef, d.direction === 'out' ? 'agent' : 'client']
+    : null;
+  const toCreate = new Map<string, [string, string]>();
+  for (const d of ok) {
+    const [p, k] = partyOf(d) ?? [null, ''];
+    if (p && !p.id && !toCreate.has(lk(p.name))) toCreate.set(lk(p.name), [p.name, k]);
+  }
+  const partyIds = new Map<string, number>();
+  if (toCreate.size) {
+    const made = await insertMany(t, 'office_parties', ['name', 'kind', 'created_by', 'notes'], [...toCreate.values()].map(([n, k]) => [n, k, userId, 'Created by import']), 'id, name');
+    for (const m of made) partyIds.set(lk(String(m.name)), Number(m.id));
+  }
+  const pid = (p: PartyRef) => (p ? (p.id ?? partyIds.get(lk(p.name)) ?? null) : null);
+
+  // Next line number on each shipment, for charges and costs added to it.
+  const nextSort = async (table: string) => {
+    const ids = [...new Set(ok.map((d) => d.shipment_id as number))];
+    const have = await q<{ shipment_id: number; n: number }>(`SELECT shipment_id, COUNT(*) AS n FROM ${table} WHERE shipment_id = ANY($1::int[]) GROUP BY shipment_id`, [ids], t);
+    const n = new Map(have.map((h) => [h.shipment_id, h.n]));
+    return (sid: number) => {
+      const v = n.get(sid) ?? 0;
+      n.set(sid, v + 1);
+      return v;
+    };
+  };
+
+  let invoices = 0;
+  if (kind === 'accounts') {
+    await insertMany(t, 'office_accounts', ['name', 'type', 'currency', 'opening_balance', 'opening_date', 'notes'], ok.map((d) => [d.name, d.type, d.currency, d.opening, d.opening_date, 'Imported']));
+  } else if (kind === 'parties') {
+    await insertMany(t, 'office_parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'created_by'], ok.map((d) => [d.name, d.kind, d.phone, d.city, d.country, d.notes, userId]));
+  } else if (kind === 'shipments') {
+    const rows: unknown[][] = [];
+    for (const d of ok) {
+      const ref = (d.ref as string | null) ?? (await nextShipmentRef(Number(String(d.ship_date).slice(0, 4)), t));
+      rows.push([ref, d.service, pid(d.client as PartyRef), d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, userId]);
+    }
+    await insertMany(t, 'office_shipments', ['ref', 'service', 'client_id', 'ship_date', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'created_by'], rows);
+  } else if (kind === 'charges') {
+    const sort = await nextSort('office_charges');
+    await insertMany(
+      t,
+      'office_charges',
+      ['shipment_id', 'description', 'qty', 'unit', 'rate', 'amount', 'currency', 'per_usd', 'usd', 'sort'],
+      ok.map((d) => [d.shipment_id, d.description, d.qty, d.unit, d.rate, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), sort(d.shipment_id as number)]),
+    );
+    // Every shipment that now has charges gets its invoice: under the old number when one was given.
+    const wanted = new Map<number, string | null>();
+    for (const d of ok) wanted.set(d.shipment_id as number, (d.invoice_no as string | null) ?? wanted.get(d.shipment_id as number) ?? null);
+    const have = new Set((await q<{ shipment_id: number }>('SELECT shipment_id FROM office_invoices WHERE shipment_id = ANY($1::int[])', [[...wanted.keys()]], t)).map((r) => r.shipment_id));
+    const numbered = [...wanted].filter(([sid, no]) => no && !have.has(sid)) as [number, string][];
+    if (numbered.length) {
+      const { dueDays } = await getSettings(t);
+      const made = await q<{ id: number; number: string }>(
+        `INSERT INTO office_invoices (number, shipment_id, issue_date, due_date)
+         SELECT x.number, s.id, s.ship_date, s.ship_date + $3::int
+           FROM unnest($1::text[], $2::int[]) AS x(number, sid) JOIN office_shipments s ON s.id = x.sid
+         RETURNING id, number`,
+        [numbered.map((n) => n[1]), numbered.map((n) => n[0]), dueDays],
+        t,
+      );
+      await insertMany(t, 'office_activity', ['user_id', 'action', 'entity', 'entity_id', 'summary'], made.map((m) => [userId, 'invoice_created', 'invoice', m.id, m.number]));
+      invoices += made.length;
+    }
+    for (const [sid, no] of wanted) if (!no && !have.has(sid) && (await ensureInvoice(sid, userId, t))) invoices++;
+  } else if (kind === 'costs') {
+    const sort = await nextSort('office_costs');
+    await insertMany(
+      t,
+      'office_costs',
+      ['shipment_id', 'category', 'payee_id', 'description', 'qty', 'rate', 'amount', 'currency', 'per_usd', 'usd', 'sort'],
+      ok.map((d) => [d.shipment_id, d.category, pid(d.payee as PartyRef), d.description, d.qty, d.rate, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), sort(d.shipment_id as number)]),
+    );
+  } else if (kind === 'payments') {
+    await insertMany(
+      t,
+      'office_payments',
+      ['direction', 'pay_date', 'party_id', 'account_id', 'shipment_id', 'amount', 'currency', 'per_usd', 'usd', 'method', 'reference', 'notes', 'created_by'],
+      ok.map((d) => [d.direction, d.pay_date, pid(d.party as PartyRef), d.account_id, d.shipment_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, d.notes, userId]),
+    );
+  } else if (kind === 'expenses') {
+    await insertMany(
+      t,
+      'office_expenses',
+      ['exp_date', 'category', 'description', 'account_id', 'amount', 'currency', 'per_usd', 'usd', 'method', 'reference', 'created_by'],
+      ok.map((d) => [d.exp_date, d.category, d.description, d.account_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, userId]),
+    );
+  } else if (kind === 'transfers') {
+    await insertMany(
+      t,
+      'office_transfers',
+      ['tr_date', 'from_account', 'to_account', 'amount_out', 'per_usd_out', 'usd_out', 'amount_in', 'per_usd_in', 'usd_in', 'reference', 'notes', 'created_by'],
+      ok.map((d) => [d.tr_date, d.from_account, d.to_account, d.amount_out, d.per_usd_out, toUsd(d.amount_out as number, d.per_usd_out as number), d.amount_in, d.per_usd_in, toUsd(d.amount_in as number, d.per_usd_in as number), d.reference, 'Imported', userId]),
+    );
+  }
+  const skipped = checked.rows.length - ok.length;
+  await logActivity(userId, 'imported', kind, null, `${KINDS[kind].label}: ${ok.length} saved, ${skipped} skipped, ${toCreate.size} new clients/partners`, t);
+  return { saved: ok.length, skipped, createdParties: toCreate.size, invoices };
+}
+
 /** Re-check the file and save every row without problems, all in one transaction. */
 export async function runImport(kind: ImportKind, text: string, createParties: boolean, userId: number): Promise<ImportOutcome> {
   return tx(async (t) => {
     const checked = await checkFile(kind, text, createParties, t);
-    if (checked.headerProblems.some((p) => p.startsWith('Missing') || p.startsWith('The file'))) throw new Error(checked.headerProblems.join(' '));
-    const ok = checked.rows.filter((r) => r.data);
-    const partyIds = new Map<string, number>();
-    let createdParties = 0;
-    const ensureParty = async (p: { id?: number; name: string } | null, kindIfNew: string): Promise<number | null> => {
-      if (!p) return null;
-      if (p.id) return p.id;
-      const key = lk(p.name);
-      if (partyIds.has(key)) return partyIds.get(key)!;
-      const row = await one<{ id: number }>('INSERT INTO office_parties (name, kind, created_by, notes) VALUES ($1, $2, $3, $4) RETURNING id', [p.name, kindIfNew, userId, 'Created by import'], t);
-      partyIds.set(key, row!.id);
-      createdParties++;
-      return row!.id;
-    };
-    const touched = new Set<number>();
-    for (const r of ok) {
-      const d = r.data!;
-      if (kind === 'accounts') {
-        await q('INSERT INTO office_accounts (name, type, currency, opening_balance, opening_date, notes) VALUES ($1,$2,$3,$4,$5,$6)', [d.name, d.type, d.currency, d.opening, d.opening_date, 'Imported'], t);
-      } else if (kind === 'parties') {
-        await q('INSERT INTO office_parties (name, kind, phone, city, country, notes, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)', [d.name, d.kind, d.phone, d.city, d.country, d.notes, userId], t);
-      } else if (kind === 'shipments') {
-        const clientId = await ensureParty(d.client as { id?: number; name: string }, 'client');
-        const ref = (d.ref as string | null) ?? (await nextShipmentRef(Number(String(d.ship_date).slice(0, 4)), t));
-        await q(
-          `INSERT INTO office_shipments (ref, service, client_id, ship_date, origin, destination, goods, pieces, weight_kg, chargeable_kg, cbm, awb_no, tracking_no, status, notes, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-          [ref, d.service, clientId, d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, userId],
-          t,
-        );
-      } else if (kind === 'charges') {
-        const sort = (await one<{ n: number }>('SELECT COUNT(*) AS n FROM office_charges WHERE shipment_id = $1', [d.shipment_id], t))!.n;
-        await q(
-          'INSERT INTO office_charges (shipment_id, description, qty, unit, rate, amount, currency, per_usd, usd, sort) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-          [d.shipment_id, d.description, d.qty, d.unit, d.rate, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), sort],
-          t,
-        );
-        touched.add(d.shipment_id as number);
-      } else if (kind === 'costs') {
-        const payeeId = await ensureParty(d.payee as { id?: number; name: string } | null, kindForCost(d.category as string));
-        const sort = (await one<{ n: number }>('SELECT COUNT(*) AS n FROM office_costs WHERE shipment_id = $1', [d.shipment_id], t))!.n;
-        await q(
-          'INSERT INTO office_costs (shipment_id, category, payee_id, description, qty, rate, amount, currency, per_usd, usd, sort) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
-          [d.shipment_id, d.category, payeeId, d.description, d.qty, d.rate, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), sort],
-          t,
-        );
-      } else if (kind === 'payments') {
-        const partyId = await ensureParty(d.party as { id?: number; name: string }, d.direction === 'out' ? 'agent' : 'client');
-        await q(
-          `INSERT INTO office_payments (direction, pay_date, party_id, account_id, shipment_id, amount, currency, per_usd, usd, method, reference, notes, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-          [d.direction, d.pay_date, partyId, d.account_id, d.shipment_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, d.notes, userId],
-          t,
-        );
-      } else if (kind === 'expenses') {
-        await q(
-          `INSERT INTO office_expenses (exp_date, category, description, account_id, amount, currency, per_usd, usd, method, reference, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [d.exp_date, d.category, d.description, d.account_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, userId],
-          t,
-        );
-      } else if (kind === 'transfers') {
-        await q(
-          `INSERT INTO office_transfers (tr_date, from_account, to_account, amount_out, per_usd_out, usd_out, amount_in, per_usd_in, usd_in, reference, notes, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-          [d.tr_date, d.from_account, d.to_account, d.amount_out, d.per_usd_out, toUsd(d.amount_out as number, d.per_usd_out as number), d.amount_in, d.per_usd_in, toUsd(d.amount_in as number, d.per_usd_in as number), d.reference, 'Imported', userId],
-          t,
-        );
-      }
-    }
-    let invoices = 0;
-    for (const sid of touched) if (await ensureInvoice(sid, userId, t)) invoices++;
-    await logActivity(userId, 'imported', kind, null, `${KINDS[kind].label}: ${ok.length} saved, ${checked.rows.length - ok.length} skipped, ${createdParties} new clients/partners`, t);
-    return { saved: ok.length, skipped: checked.rows.length - ok.length, createdParties, invoices };
+    if (isBlocking(checked)) throw new Error(checked.headerProblems.join(' '));
+    return saveChecked(kind, checked, userId, t);
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Several kinds at once                                               */
+/* ------------------------------------------------------------------ */
+
+export interface BundlePart {
+  kind: ImportKind;
+  text: string;
+  /** Where it came from, for the preview: file name, and section. */
+  source: string;
+}
+
+const csvCell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+/**
+ * A one-file import: each kind's rows follow a line holding only "#" and the
+ * kind ("#accounts", "#shipments", …), then that kind's header row. Returns
+ * null when the file is not laid out like that (an ordinary one-kind file).
+ */
+export function splitBundle(text: string, source: string): { parts: BundlePart[]; problems: string[] } | null {
+  const parts: BundlePart[] = [];
+  const problems: string[] = [];
+  let cur: { kind: ImportKind | null; name: string; rows: string[][] } | null = null;
+  const flush = () => {
+    if (cur?.kind && cur.rows.length) parts.push({ kind: cur.kind, text: cur.rows.map((r) => r.map(csvCell).join(',')).join('\r\n'), source: `${source} · #${cur.name}` });
+  };
+  for (const row of parseCsv(text)) {
+    const m = row[0].trim().match(/^#\s*([a-z_]+)\s*$/i);
+    if (m && row.slice(1).every((c) => !c.trim())) {
+      flush();
+      const name = m[1].toLowerCase();
+      if (!isKind(name)) problems.push(`${source}: "#${m[1]}" is not a kind of record (use ${KIND_ORDER.map((k) => '#' + k).join(', ')}).`);
+      cur = { kind: isKind(name) ? name : null, name, rows: [] };
+    } else if (!cur) return null;
+    else cur.rows.push(row);
+  }
+  flush();
+  return parts.length || problems.length ? { parts, problems } : null;
+}
+
+/** What a one-kind file holds, from its header row (or failing that, its file name). */
+export function detectKind(fileName: string, text: string): ImportKind | null {
+  const header = (parseCsv(text)[0] ?? []).map(norm);
+  const has = (c: string) => header.includes(c);
+  if (has('exp_date')) return 'expenses';
+  if (has('tr_date')) return 'transfers';
+  if (has('pay_date')) return 'payments';
+  if (has('shipment_ref')) return has('payee_name') || has('category') ? 'costs' : 'charges';
+  if (has('ship_date') || has('service')) return 'shipments';
+  if (has('currency') && (has('opening_balance') || has('type'))) return 'accounts';
+  if (has('name') && has('kind')) return 'parties';
+  const base = fileName.toLowerCase();
+  return KIND_ORDER.find((k) => base.includes(k)) ?? null;
+}
+
+export interface BundleStep {
+  part: BundlePart;
+  checked: CheckResult;
+  outcome: ImportOutcome | null;
+}
+
+class DryRun extends Error {
+  constructor(public steps: BundleStep[]) {
+    super('Checked only');
+  }
+}
+
+/**
+ * Check — and with `save`, save — several kinds together, in the import
+ * order, in one transaction. Each kind is saved before the next is checked,
+ * so shipments can be found by the charges after them; a check-only run then
+ * rolls everything back. A file with a blocking header problem stops the save.
+ */
+export async function runBundle(parts: BundlePart[], createParties: boolean, userId: number, save: boolean): Promise<BundleStep[]> {
+  const ordered = [...parts].sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
+  try {
+    return await tx(async (t) => {
+      const steps: BundleStep[] = [];
+      const alreadyThere = new Set<string>();
+      for (const part of ordered) {
+        const checked = await checkFile(part.kind, part.text, createParties, t, alreadyThere);
+        // A shipment refused because it already exists: its charges and costs below must not be added to it again.
+        if (part.kind === 'shipments') for (const r of checked.rows) if (r.errors.some((e) => e.endsWith('already exists.'))) alreadyThere.add(lk(r.values.ref ?? ''));
+        steps.push({ part, checked, outcome: isBlocking(checked) ? null : await saveChecked(part.kind, checked, userId, t) });
+      }
+      if (!save) throw new DryRun(steps);
+      const stopped = steps.find((s) => !s.outcome);
+      if (stopped) throw new Error(`${stopped.part.source}: ${stopped.checked.headerProblems.join(' ')}`);
+      return steps;
+    });
+  } catch (e) {
+    if (e instanceof DryRun) return e.steps;
+    throw e;
+  }
 }
 
 export { rateMap };

@@ -58,6 +58,15 @@ Never compute a balance, profit or due figure in a page. Use:
   `partyStatement(id, from, to)` — balance = billed − received − owed_to_them +
   paid_to_them. > 0 they owe us; < 0 we owe them.
 - `shipmentFigures(ids)`, `shipmentFigure(id)` — revenue, cost, profit, received, due.
+  Received = payments linked to the shipment + `applied`: the client's payments
+  on account (unlinked in − unlinked out to them) handed out over their
+  shipments oldest first. Invoice status, "still due" and aging all use it.
+- Import (`importer.ts`): one CSV per kind, or several kinds at once (several
+  files, or one bundle with a `#kind` line before each part) checked together
+  in a rolled-back transaction and saved in batches. Rows already in the
+  system (same payment, same expense, charges of an existing shipment in the
+  same import) are refused, so importing a file twice adds nothing. Charges
+  take an optional `invoice_no` to keep an old invoice number.
 - `pnl(period, service?)`, `monthlyPnl(period, service?)` — P&L.
 - `accountBalances()` — per account, in its own currency (+ USD estimate).
 - `cashFlow(period)`; `periodFromParams(url.searchParams, today())`.

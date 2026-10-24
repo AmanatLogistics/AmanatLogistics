@@ -189,44 +189,77 @@ export interface ShipmentFigures {
   revenue: number;
   cost: number;
   profit: number;
+  /** Payments linked to the shipment, plus `applied`. */
   received: number;
+  /**
+   * The part of `received` that comes from the client's payments "on account"
+   * — money they paid without naming a shipment. That money pays their
+   * oldest unpaid invoices first, the way a running balance does.
+   */
+  applied: number;
   due: number;
 }
 
 /**
  * Revenue / cost / profit / received / due for a set of shipments, keyed by id.
  * Pass ids, or nothing for all shipments.
+ *
+ * Received = payments linked to the shipment + a share of the client's
+ * payments on account (unlinked money in from them, less unlinked money we
+ * paid back to them). That share is handed out over the client's shipments
+ * oldest first (ship date, then id), each taking what is still due after its
+ * own linked payments, until it runs out. Whatever is left over stays on the
+ * client's balance as money we hold for them.
  */
 export async function shipmentFigures(ids?: number[]): Promise<Map<number, ShipmentFigures>> {
   const params: unknown[] = [];
-  let where = '';
+  let scope = '';
+  let only = '';
   if (ids) {
     if (!ids.length) return new Map();
     params.push(ids);
-    where = 'WHERE s.id = ANY($1::int[])';
+    // The oldest-first share needs every shipment of the same clients, not just these.
+    scope = 'WHERE s.id = ANY($1::int[]) OR s.client_id IN (SELECT client_id FROM office_shipments WHERE id = ANY($1::int[]))';
+    only = 'WHERE f.id = ANY($1::int[])';
   }
-  const rows = await q<{ id: number; revenue: number; cost: number; received: number }>(
-    `SELECT s.id,
-            COALESCE(ch.v, 0) AS revenue,
-            COALESCE(co.v, 0) AS cost,
-            COALESCE(pi.v, 0) AS received
-       FROM office_shipments s
-       LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_charges GROUP BY shipment_id) ch ON ch.shipment_id = s.id
-       LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_costs GROUP BY shipment_id) co ON co.shipment_id = s.id
-       LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_payments WHERE direction = 'in' AND shipment_id IS NOT NULL GROUP BY shipment_id) pi ON pi.shipment_id = s.id
-       ${where}`,
+  const rows = await q<{ id: number; revenue: number; cost: number; linked: number; applied: number }>(
+    `WITH base AS (
+       SELECT s.id, s.client_id, s.ship_date,
+              COALESCE(ch.v, 0) AS revenue,
+              COALESCE(co.v, 0) AS cost,
+              COALESCE(pi.v, 0) AS linked
+         FROM office_shipments s
+         LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_charges GROUP BY shipment_id) ch ON ch.shipment_id = s.id
+         LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_costs GROUP BY shipment_id) co ON co.shipment_id = s.id
+         LEFT JOIN (SELECT shipment_id, SUM(usd) AS v FROM office_payments WHERE direction = 'in' AND shipment_id IS NOT NULL GROUP BY shipment_id) pi ON pi.shipment_id = s.id
+         ${scope}
+     ),
+     on_account AS (
+       SELECT party_id, GREATEST(SUM(CASE WHEN direction = 'in' THEN usd ELSE -usd END), 0) AS v
+         FROM office_payments WHERE shipment_id IS NULL GROUP BY party_id
+     ),
+     f AS (
+       SELECT b.*, GREATEST(b.revenue - b.linked, 0) AS need,
+              SUM(GREATEST(b.revenue - b.linked, 0)) OVER (PARTITION BY b.client_id ORDER BY b.ship_date, b.id) AS upto
+         FROM base b
+     )
+     SELECT f.id, f.revenue, f.cost, f.linked,
+            CASE WHEN f.client_id IS NULL THEN 0
+                 ELSE LEAST(f.need, GREATEST(COALESCE(oa.v, 0) - (f.upto - f.need), 0)) END AS applied
+       FROM f LEFT JOIN on_account oa ON oa.party_id = f.client_id
+       ${only}`,
     params,
   );
   return new Map(
-    rows.map((r) => [
-      r.id,
-      { revenue: r.revenue, cost: r.cost, profit: round2(r.revenue - r.cost), received: r.received, due: round2(r.revenue - r.received) },
-    ]),
+    rows.map((r) => {
+      const received = round2(r.linked + r.applied);
+      return [r.id, { revenue: r.revenue, cost: r.cost, profit: round2(r.revenue - r.cost), received, applied: round2(r.applied), due: round2(r.revenue - received) }];
+    }),
   );
 }
 
 export async function shipmentFigure(id: number): Promise<ShipmentFigures> {
-  return (await shipmentFigures([id])).get(id) ?? { revenue: 0, cost: 0, profit: 0, received: 0, due: 0 };
+  return (await shipmentFigures([id])).get(id) ?? { revenue: 0, cost: 0, profit: 0, received: 0, applied: 0, due: 0 };
 }
 
 /* ------------------------------------------------------------------ */

@@ -96,7 +96,11 @@ const statusSentence = inv
 
         <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
           <Stat label="Billed" value={usd(inv.fig.revenue)} sub={`${inv.charges.length} line${inv.charges.length === 1 ? '' : 's'}`} />
-          <Stat label="Received" value={usd(inv.fig.received)} sub={`${inv.payments.length} payment${inv.payments.length === 1 ? '' : 's'} for this shipment`} />
+          <Stat
+            label="Received"
+            value={usd(inv.fig.received)}
+            sub={`${inv.payments.length} payment${inv.payments.length === 1 ? '' : 's'} for this shipment${inv.fig.applied > 0 ? ` + ${usd(inv.fig.applied)} paid on account` : ''}`}
+          />
           <Stat
             label={inv.fig.due < 0 ? 'Overpaid' : 'Still due'}
             value={usd(Math.abs(inv.fig.due))}
@@ -228,7 +232,7 @@ const statusSentence = inv
               {payLink && <a class="small" href={payLink}>Record a payment →</a>}
             </div>
             {inv.payments.length === 0 ? (
-              <p class="o-empty">No money received for this shipment yet.</p>
+              <p class="o-empty">{inv.fig.applied > 0 ? 'No payment is linked to this shipment itself.' : 'No money received for this shipment yet.'}</p>
             ) : (
               <div class="o-table-wrap">
                 <table class="o-table">
@@ -249,13 +253,16 @@ const statusSentence = inv
                     ))}
                   </tbody>
                   <tfoot>
+                    {inv.fig.applied > 0 && <tr><td colspan="2">Paid on account</td><td class="num">{usd(inv.fig.applied)}</td></tr>}
                     <tr><td colspan="2">Total received</td><td class="num">{usd(inv.fig.received)}</td></tr>
                   </tfoot>
                 </table>
               </div>
             )}
             <p class="small muted" style="margin:12px 0 0">
-              Money the client paid without choosing this shipment still counts on their statement, but not here.
+              {inv.fig.applied > 0
+                ? `${usd(inv.fig.applied)} comes from the client's payments on account — money they paid without choosing a shipment, which pays their oldest invoices first.`
+                : "Money the client pays without choosing a shipment pays their oldest unpaid invoices first."}
             </p>
           </div>
 

@@ -42,7 +42,7 @@ import {
 import { logActivity } from './activity';
 
 export const PER_PAGE = 50;
-const ZERO: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, due: 0 };
+const ZERO: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, applied: 0, due: 0 };
 
 /* ------------------------------------------------------------------ */
 /* Small helpers                                                       */
@@ -742,9 +742,11 @@ export interface AgingRow {
  * with money still due (ledger due = billed − received for that shipment),
  * aged by its invoice date (or ship date if it has no invoice yet).
  *
- * The ledger balance can be lower than those dues — usually money they paid
- * without choosing a shipment, or an overpaid bill. That credit is set against
- * their OLDEST bills first, the way a shopkeeper's book works. If the balance
+ * The ledger balance can be lower than those dues — for example an overpaid
+ * bill, or money we owe them for a cost. (Money they paid without choosing a
+ * shipment is already set against their oldest bills in shipmentFigures.)
+ * That credit is set against their OLDEST bills first, the way a shopkeeper's
+ * book works. If the balance
  * is higher than their bills (it isn't a client's bill at all), the excess is
  * shown as "other". Either way each row adds up to the ledger balance exactly.
  */
