@@ -167,6 +167,11 @@ h1, h2, h3 { font-family: var(--o-font-head); margin: 0; line-height: 1.15; }
 .o-btn.danger { color: var(--o-red); border-color: #f1c4bf; }
 .o-btn.danger:hover { background: var(--o-red); color: #fff; border-color: var(--o-red); }
 .o-btn.sm { padding: 6px 10px; font-size: 13px; }
+.o-delete-form { display: inline-block; margin: 0; }
+/* Row Delete column: pinned to the right edge, so it stays in view when a wide table scrolls sideways. */
+.o-table .o-row-actions { position: sticky; right: 0; width: 1%; white-space: nowrap; text-align: right; box-shadow: -8px 0 8px -8px rgba(40, 10, 20, .18); }
+.o-table td.o-row-actions { background: #fff; vertical-align: middle; }
+.o-table th.o-row-actions { background: #faf7f8; }
 .o-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* ---------- forms ---------- */

@@ -110,9 +110,13 @@ if (Astro.request.method === 'POST') {
 - Roles: `isAdmin(user)`. Staff must NOT see profit, cost totals, margins, P&L,
   reports, users, settings, or delete buttons. Staff MAY see revenue billed,
   received and due (they collect money), and enter costs on a shipment.
-- Deleting money records is admin-only and asks for confirmation
-  (`onsubmit="return confirm('…')"`). Refuse to delete a party, account or
-  shipment that other records point to — say why.
+- Deleting is admin-only and asks for confirmation. Use `DeleteButton`: it
+  posts `action=delete` to the record's own page, which does the checks and
+  the deletion. Admins get it in every record's header and on every list row;
+  list rows pass `back` (their own address, read with `backPath`) so the
+  person returns to the same filtered list. Refuse to delete a party, account
+  or shipment that other records point to — say why; their Delete button
+  links to the record's `#delete` section, which explains.
 - UI: only the classes in `src/styles/office.css` (see its header) and the
   components in `src/components/office/` (`PageHead`, `Flash`, `Stat`). Money
   via `fmtMoney(amount, currency)` / `usd(n)`, dates via `fmtDate`, numbers via

@@ -1,0 +1,24 @@
+---
+/**
+ * Red Delete button. Asks first, then posts `action=delete` to the record's
+ * own page, which does the admin check, the safety checks and the deletion.
+ * Render it for admins only. On a list, pass `back` (the list's address) so
+ * the person lands on the same filtered list afterwards.
+ *   {admin && <DeleteButton action={`/office/payments/${r.id}`} confirm="Delete this payment?" back={here} small />}
+ */
+interface Props {
+  /** The record's page; leave out to post to the current page. */
+  action?: string;
+  confirm: string;
+  back?: string;
+  label?: string;
+  small?: boolean;
+}
+const { action, confirm, back, label = 'Delete', small = false } = Astro.props;
+---
+
+<form method="post" action={action} class="o-delete-form no-print" onsubmit={`return confirm(${JSON.stringify(confirm)})`}>
+  <input type="hidden" name="action" value="delete" />
+  {back && <input type="hidden" name="back" value={back} />}
+  <button type="submit" class:list={['o-btn', 'danger', small && 'sm']}>{label}</button>
+</form>

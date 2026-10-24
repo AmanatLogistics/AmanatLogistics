@@ -10,7 +10,8 @@ import OfficeLayout from '../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import Pager from './_Pager.astro';
-import { guard } from '../../../lib/office/auth';
+import DeleteButton from '../../../components/office/DeleteButton.astro';
+import { guard, isAdmin } from '../../../lib/office/auth';
 import { METHODS, fmtDate, usd, today } from '../../../lib/office/money';
 import {
   paymentFilters,
@@ -31,6 +32,8 @@ import {
 export const prerender = false;
 const user = await guard(Astro);
 if (user instanceof Response) return user;
+const admin = isAdmin(user);
+const here = Astro.url.pathname + Astro.url.search;
 
 const sp = Astro.url.searchParams;
 const f = paymentFilters(sp);
@@ -150,13 +153,14 @@ const title = dir === 'in' ? 'Payments received' : 'Payments made';
           <th>Shipment</th>
           <th>Reference</th>
           <th>Entered by</th>
+          {admin && <th class="o-row-actions"></th>}
         </tr>
       </thead>
       <tbody>
         {
           list.rows.length === 0 && (
             <tr>
-              <td colspan="9" class="o-empty">
+              <td colspan={admin ? 10 : 9} class="o-empty">
                 {filtered ? 'No payments match these filters.' : dir === 'in' ? 'No money received has been recorded yet.' : 'No payments made have been recorded yet.'}
                 <div style="margin-top:10px"><a class="o-btn sm" href={`/office/payments/new?dir=${dir}`}>Record payment</a></div>
               </td>
@@ -175,6 +179,16 @@ const title = dir === 'in' ? 'Payments received' : 'Payments made';
               <td>{r.shipment_id ? <a href={`/office/shipments/${r.shipment_id}`}>{r.shipment_ref}</a> : <span class="muted">—</span>}</td>
               <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
               <td class="small muted">{r.created_by_name ?? '—'}</td>
+              {admin && (
+                <td class="o-row-actions">
+                  <DeleteButton
+                    action={`/office/payments/${r.id}`}
+                    back={here}
+                    small
+                    confirm={`Delete the payment of ${fmtAmount(r.amount, r.currency)} ${dir === 'in' ? 'from' : 'to'} ${r.party_name} on ${fmtDate(r.pay_date)}? Balances will change. This cannot be undone.`}
+                  />
+                </td>
+              )}
             </tr>
           ))
         }
@@ -190,7 +204,7 @@ const title = dir === 'in' ? 'Payments received' : 'Payments made';
               </td>
               <td class="num">{list.byCurrency.map((c, i) => <>{i > 0 && <br />}{fmtAmount(c.amount, c.currency)}</>)}</td>
               <td class="num">{usd(list.totalUsd)}</td>
-              <td colspan="5"></td>
+              <td colspan={admin ? 6 : 5}></td>
             </tr>
           </tfoot>
         )

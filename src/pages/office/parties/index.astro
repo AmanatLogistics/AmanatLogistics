@@ -14,7 +14,8 @@ import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import Stat from '../../../components/office/Stat.astro';
 import Pager from './_Pager.astro';
-import { guard } from '../../../lib/office/auth';
+import DeleteButton from '../../../components/office/DeleteButton.astro';
+import { guard, isAdmin } from '../../../lib/office/auth';
 import { usd, fmtNum, today } from '../../../lib/office/money';
 import { PARTY_KINDS } from '../../../lib/office/services';
 import {
@@ -29,11 +30,13 @@ import {
   withParams,
   csvResponse,
   phoneLinks,
+  referencedParties,
 } from '../../../lib/office/parties';
 
 export const prerender = false;
 const user = await guard(Astro);
 if (user instanceof Response) return user;
+const admin = isAdmin(user);
 
 const sp = Astro.url.searchParams;
 const f = listFilters(sp);
@@ -85,7 +88,10 @@ const noun = isClients ? 'client' : 'partner';
 const nouns = isClients ? 'clients' : 'partners';
 const baseHref = isClients ? '/office/parties?kind=client' : '/office/parties?kind=partners';
 const newHref = isClients ? '/office/parties/new?kind=client' : `/office/parties/new?kind=${f.kind ?? 'partners'}`;
-const cols = isClients ? 4 : 5;
+const cols = (isClients ? 4 : 5) + (admin ? 1 : 0);
+// Only someone nothing points at can be deleted; the rest get a link to their page, which explains.
+const linked = admin ? await referencedParties(shown.map((r) => r.id)) : new Set<number>();
+const here = Astro.url.pathname + Astro.url.search;
 ---
 
 <OfficeLayout title={title} user={user} active={isClients ? 'clients' : 'partners'}>
@@ -172,6 +178,7 @@ const cols = isClients ? 4 : 5;
           {!isClients && <th>Kind</th>}
           <th>Phone</th>
           <th>City</th>
+          {admin && <th class="o-row-actions"></th>}
         </tr>
       </thead>
       <tbody>
@@ -223,6 +230,22 @@ const cols = isClients ? 4 : 5;
                   )}
                 </td>
                 <td>{r.city ?? <span class="muted">—</span>}</td>
+                {admin && (
+                  <td class="o-row-actions">
+                    {linked.has(r.id) ? (
+                      <a
+                        class="o-btn danger sm"
+                        href={`/office/parties/${r.id}#delete`}
+                        data-astro-prefetch="false"
+                        title={`${r.name} has shipments, bills or payments, so they cannot be deleted — open to mark them inactive instead`}
+                      >
+                        Delete
+                      </a>
+                    ) : (
+                      <DeleteButton action={`/office/parties/${r.id}`} back={here} small confirm={`Delete ${r.name}? This cannot be undone.`} />
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })

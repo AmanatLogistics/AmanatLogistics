@@ -66,6 +66,23 @@ export function rows(fd: FormData, prefix: string): Record<string, string>[] {
 }
 
 /** Build a redirect with a one-line message shown by <Flash />. */
+/**
+ * Where to send someone after an action, posted with the form as `back` (a
+ * Delete button on a filtered list sends the list's own address, so they land
+ * back on the same filters and page). Only addresses inside the office are
+ * followed; anything else falls back.
+ */
+export function backPath(fd: FormData, fallback: string): string {
+  const inOffice = (p: string) => /^\/office(\/|\?|$)/.test(p);
+  const v = str(fd, 'back', 1000);
+  if (!v || !inOffice(v) || /[\\\s]/.test(v)) return fallback;
+  const u = new URL(v, 'http://x');
+  if (u.host !== 'x' || !inOffice(u.pathname)) return fallback;
+  u.searchParams.delete('ok');
+  u.searchParams.delete('err');
+  return u.pathname + u.search;
+}
+
 export function withMsg(path: string, msg: string, kind: 'ok' | 'err' = 'ok'): string {
   const u = new URL(path, 'http://x');
   u.searchParams.set(kind, msg);

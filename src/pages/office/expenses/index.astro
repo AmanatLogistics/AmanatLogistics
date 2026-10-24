@@ -11,6 +11,7 @@ import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import Stat from '../../../components/office/Stat.astro';
 import Pager from '../payments/_Pager.astro';
+import DeleteButton from '../../../components/office/DeleteButton.astro';
 import { guard, isAdmin } from '../../../lib/office/auth';
 import { METHODS, fmtDate, usd, today } from '../../../lib/office/money';
 import { EXPENSE_CATEGORIES } from '../../../lib/office/services';
@@ -33,6 +34,7 @@ export const prerender = false;
 const user = await guard(Astro);
 if (user instanceof Response) return user;
 const admin = isAdmin(user);
+const here = Astro.url.pathname + Astro.url.search;
 
 const sp = Astro.url.searchParams;
 const todayStr = today();
@@ -152,13 +154,14 @@ const quick = (set: Record<string, string>) => {
           <th>How</th>
           <th>Reference</th>
           <th>Entered by</th>
+          {admin && <th class="o-row-actions"></th>}
         </tr>
       </thead>
       <tbody>
         {
           list.rows.length === 0 && (
             <tr>
-              <td colspan="10" class="o-empty">
+              <td colspan={admin ? 11 : 10} class="o-empty">
                 {extra ? 'No expenses match these filters.' : `No office expenses recorded for ${f.label.toLowerCase() === 'all dates' ? 'any date' : f.label}.`}
                 <div style="margin-top:10px"><a class="o-btn sm" href="/office/expenses/new">Record expense</a></div>
               </td>
@@ -178,6 +181,16 @@ const quick = (set: Record<string, string>) => {
               <td>{METHODS[r.method] ?? r.method}</td>
               <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
               <td class="small muted">{r.created_by_name ?? '—'}</td>
+              {admin && (
+                <td class="o-row-actions">
+                  <DeleteButton
+                    action={`/office/expenses/${r.id}`}
+                    back={here}
+                    small
+                    confirm={`Delete the ${expenseCategoryLabel(r.category).toLowerCase()} expense of ${fmtAmount(r.amount, r.currency)} on ${fmtDate(r.exp_date)}? This cannot be undone.`}
+                  />
+                </td>
+              )}
             </tr>
           ))
         }
@@ -191,7 +204,7 @@ const quick = (set: Record<string, string>) => {
                 {list.pages > 1 ? ' (all pages)' : ''}
               </td>
               <td class="num">{admin ? usd(list.totalUsd) : ''}</td>
-              <td colspan="6"></td>
+              <td colspan={admin ? 7 : 6}></td>
             </tr>
           </tfoot>
         )

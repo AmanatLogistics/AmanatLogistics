@@ -12,6 +12,7 @@ import OfficeLayout from '../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import Stat from '../../../components/office/Stat.astro';
+import DeleteButton from '../../../components/office/DeleteButton.astro';
 import { guard, isAdmin } from '../../../lib/office/auth';
 import { usd, fmtDate, fmtNum, today } from '../../../lib/office/money';
 import { SERVICES, SERVICE_KEYS, SHIPMENT_STATUS } from '../../../lib/office/services';
@@ -58,7 +59,8 @@ const t = list.totals;
 const filtered = hasFilters(f);
 const firstRow = (list.page - 1) * list.perPage + 1;
 const lastRow = firstRow + list.rows.length - 1;
-const cols = admin ? 10 : 9;
+const cols = admin ? 11 : 9;
+const here = Astro.url.pathname + Astro.url.search;
 const kgText = (r: { weight_kg: number | null; chargeable_kg: number | null }) => {
   const kg = r.chargeable_kg ?? r.weight_kg;
   return kg === null ? null : `${fmtNum(kg)} kg`;
@@ -146,6 +148,7 @@ const kgText = (r: { weight_kg: number | null; chargeable_kg: number | null }) =
           <th class="num">Due</th>
           <th>Invoice</th>
           {admin && <th class="num">Profit / cost</th>}
+          {admin && <th class="o-row-actions"></th>}
         </tr>
       </thead>
       <tbody>
@@ -210,6 +213,27 @@ const kgText = (r: { weight_kg: number | null; chargeable_kg: number | null }) =
                   <div class="small muted">cost {usd(r.fig.cost)}</div>
                 </td>
               )}
+              {admin && (
+                <td class="o-row-actions">
+                  {r.payments === 0 ? (
+                    <DeleteButton
+                      action={`/office/shipments/${r.id}`}
+                      back={here}
+                      small
+                      confirm={`Delete shipment ${r.ref}?${r.invoice_number ? ` Its invoice ${r.invoice_number},` : ''} its charges and its costs will be deleted too. This cannot be undone.`}
+                    />
+                  ) : (
+                    <a
+                      class="o-btn danger sm"
+                      href={`/office/shipments/${r.id}#delete`}
+                      data-astro-prefetch="false"
+                      title={`${r.payments} payment${r.payments === 1 ? ' is' : 's are'} linked — open the shipment to delete ${r.payments === 1 ? 'it' : 'them'} first`}
+                    >
+                      Delete
+                    </a>
+                  )}
+                </td>
+              )}
             </tr>
           ))
         }
@@ -237,6 +261,7 @@ const kgText = (r: { weight_kg: number | null; chargeable_kg: number | null }) =
                   <div class="small">cost {usd(t.cost)}</div>
                 </td>
               )}
+              {admin && <td></td>}
             </tr>
           </tfoot>
         )

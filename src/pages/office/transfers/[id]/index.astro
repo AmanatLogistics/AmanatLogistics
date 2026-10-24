@@ -3,10 +3,11 @@
 import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
+import DeleteButton from '../../../../components/office/DeleteButton.astro';
 import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
 import { q, tx } from '../../../../lib/office/db';
 import { logActivity, recentActivity } from '../../../../lib/office/activity';
-import { str, withMsg } from '../../../../lib/office/form';
+import { str, withMsg, backPath } from '../../../../lib/office/form';
 import { fmtDate, usd } from '../../../../lib/office/money';
 import { getTransfer, transferSummary, idParam, fmtRate, fmtAmount } from '../../../../lib/office/entries';
 
@@ -30,7 +31,7 @@ if (t0 && Astro.request.method === 'POST') {
           await q('DELETE FROM office_transfers WHERE id = $1', [t0.id], t);
           await logActivity(user.id, 'transfer_deleted', 'transfer', t0.id, `Deleted transfer #${t0.id}: ${transferSummary(t0)}`, t);
         });
-        return Astro.redirect(withMsg('/office/transfers', `Transfer from ${t0.from_name} to ${t0.to_name} deleted.`), 303);
+        return Astro.redirect(withMsg(backPath(fd, '/office/transfers'), `Transfer from ${t0.from_name} to ${t0.to_name} deleted.`), 303);
       }
     }
   }
@@ -57,6 +58,7 @@ const r = t0;
           crumbs={[{ label: 'Office', href: '/office' }, { label: 'Transfers', href: '/office/transfers' }]}
         >
           <a class="o-btn" href="/office/transfers/new">New transfer</a>
+          {admin && <DeleteButton confirm="Delete this transfer for good? Both account balances will change. This cannot be undone. If it was entered wrongly, enter it again correctly afterwards." />}
         </PageHead>
         <Flash error={error} />
         <div class="o-grid-2">
@@ -83,14 +85,6 @@ const r = t0;
                   {history.map((h) => <li><span class="muted">{when(h.at)} · {h.user_name ?? '—'}:</span> {h.summary ?? h.action}</li>)}
                 </ul>
               </div>
-            )}
-            {admin && (
-              <form method="post" class="o-card" onsubmit="return confirm('Delete this transfer for good? Both account balances will change. This cannot be undone.')">
-                <div class="o-card-head"><h2>Delete</h2></div>
-                <p class="o-help" style="margin:0 0 10px">Only if it was entered by mistake (then enter it again correctly). The deletion is kept in the activity log.</p>
-                <input type="hidden" name="action" value="delete" />
-                <button type="submit" class="o-btn danger">Delete this transfer</button>
-              </form>
             )}
           </div>
         </div>

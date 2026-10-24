@@ -7,10 +7,11 @@ import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
 import Stat from '../../../../components/office/Stat.astro';
+import DeleteButton from '../../../../components/office/DeleteButton.astro';
 import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
 import { q, tx } from '../../../../lib/office/db';
 import { logActivity, recentActivity } from '../../../../lib/office/activity';
-import { str, withMsg } from '../../../../lib/office/form';
+import { str, withMsg, backPath } from '../../../../lib/office/form';
 import { METHODS, fmtDate, usd } from '../../../../lib/office/money';
 import { partyBalance, shipmentFigure } from '../../../../lib/office/ledger';
 import { getPayment, paymentSummary, idParam, balanceWords, partyKindLabel, fmtRate, moneyWithUsd, fmtAmount } from '../../../../lib/office/entries';
@@ -37,7 +38,7 @@ if (p && Astro.request.method === 'POST') {
           await logActivity(user.id, 'payment_deleted', 'payment', row.id, `Deleted payment #${row.id}: ${paymentSummary({ ...row, account_name: row.account_name })}`, t);
         });
         return Astro.redirect(
-          withMsg(`/office/payments?dir=${row.direction}`, `Payment of ${moneyWithUsd(row.amount, row.currency, row.usd)} ${row.direction === 'in' ? 'from' : 'to'} ${row.party_name} deleted.`),
+          withMsg(backPath(fd, `/office/payments?dir=${row.direction}`), `Payment of ${moneyWithUsd(row.amount, row.currency, row.usd)} ${row.direction === 'in' ? 'from' : 'to'} ${row.party_name} deleted.`),
           303,
         );
       }
@@ -72,6 +73,7 @@ const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asi
         >
           <a class="o-btn" href={`/office/payments/new?dir=${p.direction}`}>Record another</a>
           {admin && <a class="o-btn primary" href={`/office/payments/${p.id}/edit`}>Edit</a>}
+          {admin && <DeleteButton confirm="Delete this payment for good? Balances will change. This cannot be undone. (The deletion is kept in the activity log.)" />}
         </PageHead>
         <Flash error={error} />
         <div class="o-grid-2">
@@ -121,14 +123,6 @@ const when = (s: string) => new Date(s).toLocaleString('en-GB', { timeZone: 'Asi
                   {history.map((h) => <li><span class="muted">{when(h.at)} · {h.user_name ?? '—'}:</span> {h.summary ?? h.action}</li>)}
                 </ul>
               </div>
-            )}
-            {admin && (
-              <form method="post" class="o-card" onsubmit="return confirm('Delete this payment for good? Balances will change. This cannot be undone.')">
-                <div class="o-card-head"><h2>Delete</h2></div>
-                <p class="o-help" style="margin:0 0 10px">Only if it was entered by mistake. The deletion is kept in the activity log.</p>
-                <input type="hidden" name="action" value="delete" />
-                <button type="submit" class="o-btn danger">Delete this payment</button>
-              </form>
             )}
           </div>
         </div>

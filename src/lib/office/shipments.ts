@@ -351,6 +351,8 @@ function whereFor(f: ShipmentFilters): { sql: string; params: unknown[] } {
 export interface ListRow extends Shipment {
   fig: ShipmentFigures;
   invoice_status: InvoiceStatus | null;
+  /** Payments linked to the shipment; while there are any it cannot be deleted. */
+  payments: number;
 }
 
 export interface ListTotals {
@@ -401,11 +403,12 @@ export async function listShipments(f: ShipmentFilters, page: number | null, tod
     pageParams.push(PER_PAGE, (pg - 1) * PER_PAGE);
     limit = `LIMIT $${pageParams.length - 1} OFFSET $${pageParams.length}`;
   }
-  const rows = await q<Shipment>(
+  const rows = await q<Shipment & { payments: number }>(
     `SELECT s.id, s.ref, s.service, s.client_id, p.name AS client_name, s.ship_date, s.origin, s.destination,
             s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes,
             NULL::text AS created_by_name, s.created_at, s.updated_at, ''::text AS version,
-            i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date
+            i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date,
+            (SELECT COUNT(*) FROM office_payments x WHERE x.shipment_id = s.id) AS payments
        ${from} ${where}
       ORDER BY s.ship_date DESC, s.id DESC ${limit}`,
     pageParams,
