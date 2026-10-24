@@ -8,6 +8,7 @@ import OfficeLayout from '../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import Pager from '../payments/_Pager.astro';
+import DeleteButton from '../../../components/office/DeleteButton.astro';
 import { guard, isAdmin } from '../../../lib/office/auth';
 import { fmtDate, usd, today } from '../../../lib/office/money';
 import { transferFilters, listTransfers, exportTransfers, listAccounts, accountLabel, pageParam, withParams, csvResponse, fmtAmount } from '../../../lib/office/entries';
@@ -16,6 +17,7 @@ export const prerender = false;
 const user = await guard(Astro);
 if (user instanceof Response) return user;
 const admin = isAdmin(user);
+const here = Astro.url.pathname + Astro.url.search;
 
 const sp = Astro.url.searchParams;
 const f = transferFilters(sp);
@@ -69,13 +71,14 @@ const filtered = !!(f.from || f.to || f.account || f.q);
           <th class="num">Fee (US$)</th>
           <th>Reference</th>
           <th>Entered by</th>
+          {admin && <th class="o-row-actions"></th>}
         </tr>
       </thead>
       <tbody>
         {
           list.rows.length === 0 && (
             <tr>
-              <td colspan="8" class="o-empty">
+              <td colspan={admin ? 9 : 8} class="o-empty">
                 {filtered ? 'No transfers match these filters.' : 'No transfers recorded yet.'}
                 <div style="margin-top:10px"><a class="o-btn sm" href="/office/transfers/new">New transfer</a></div>
               </td>
@@ -93,6 +96,16 @@ const filtered = !!(f.from || f.to || f.account || f.q);
               <td class:list={['num', r.fee < 0 && 'pos']}>{usd(r.fee)}</td>
               <td class="small">{r.reference ?? <span class="muted">—</span>}</td>
               <td class="small muted">{r.created_by_name ?? '—'}</td>
+              {admin && (
+                <td class="o-row-actions">
+                  <DeleteButton
+                    action={`/office/transfers/${r.id}`}
+                    back={here}
+                    small
+                    confirm={`Delete the transfer of ${fmtAmount(r.amount_out, r.from_currency)} from ${r.from_name} to ${r.to_name} on ${fmtDate(r.tr_date)}? Both account balances will change. This cannot be undone.`}
+                  />
+                </td>
+              )}
             </tr>
           ))
         }
@@ -107,7 +120,7 @@ const filtered = !!(f.from || f.to || f.account || f.q);
                 {admin ? ' · total fees' : ''}
               </td>
               <td class="num">{admin ? usd(list.totalFee) : ''}</td>
-              <td colspan="2"></td>
+              <td colspan={admin ? 3 : 2}></td>
             </tr>
           </tfoot>
         )

@@ -12,6 +12,7 @@ import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
 import Stat from '../../../../components/office/Stat.astro';
+import DeleteButton from '../../../../components/office/DeleteButton.astro';
 import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
 import { q, tx } from '../../../../lib/office/db';
 import { logActivity } from '../../../../lib/office/activity';
@@ -123,6 +124,16 @@ let to = dateParam(sp.get('to'));
 if (from && to && from > to) [from, to] = [to, from];
 const filtered = !!(from || to);
 const [ledger, balances, usage, currencies] = await Promise.all([accountLedger(acc.id, from, to), accountBalances(), accountUsage(acc.id), listCurrencies()]);
+const cantDelete =
+  usage.total > 0
+    ? `It cannot be deleted: ${[
+        usage.payments && `${usage.payments} payment${usage.payments === 1 ? '' : 's'}`,
+        usage.expenses && `${usage.expenses} expense${usage.expenses === 1 ? '' : 's'}`,
+        usage.transfers && `${usage.transfers} transfer${usage.transfers === 1 ? '' : 's'}`,
+      ]
+        .filter(Boolean)
+        .join(', ')} use it.`
+    : '';
 const bal = balances.find((b) => b.id === acc.id)!;
 const L = ledger!;
 // The running balance over every movement must land exactly on the ledger's balance.
@@ -160,6 +171,12 @@ const monthStart = today().slice(0, 8) + '01';
   >
     {acc.active && <a class="o-btn" href="/office/transfers/new">Transfer</a>}
     <a class="o-btn" href={withParams(Astro.url, { format: 'csv' })} data-astro-prefetch="false" download>Download CSV</a>
+    {admin &&
+      (usage.total === 0 ? (
+        <DeleteButton confirm={`Delete the account "${acc.name}" for good? Nothing uses it yet.`} />
+      ) : (
+        <a class="o-btn danger" href="#delete" title="Records use this account, so it can be closed but not deleted">Delete</a>
+      ))}
   </PageHead>
   <Flash error={error} />
   {mismatch && (
@@ -279,28 +296,23 @@ const monthStart = today().slice(0, 8) + '01';
           <p class="o-help" style="margin:0">Changing the opening balance changes every running balance on this page. The change is kept in the activity log.</p>
           <div><button class="o-btn primary" type="submit">Save</button></div>
         </form>
-        <div class="o-stack">
+        <div class="o-stack" id="delete">
           {acc.active ? (
             <form method="post" class="o-card" onsubmit="return confirm('Close this account? It will no longer appear in payment, expense or transfer forms.')">
               <div class="o-card-head"><h2>Close account</h2></div>
-              <p class="o-help" style="margin:0 0 10px">For an account no longer used. Its balance must be zero first; its history stays.</p>
+              <p class="o-help" style="margin:0 0 10px">
+                For an account no longer used. Its balance must be zero first; its history stays.
+                {cantDelete}
+              </p>
               <input type="hidden" name="action" value="deactivate" />
               <button class="o-btn danger" type="submit">Close this account</button>
             </form>
           ) : (
             <form method="post" class="o-card">
               <div class="o-card-head"><h2>Closed</h2></div>
-              <p class="o-help" style="margin:0 0 10px">This account is closed. Re-open it to use it in forms again.</p>
+              <p class="o-help" style="margin:0 0 10px">This account is closed. Re-open it to use it in forms again. {cantDelete}</p>
               <input type="hidden" name="action" value="reactivate" />
               <button class="o-btn" type="submit">Re-open this account</button>
-            </form>
-          )}
-          {usage.total === 0 && (
-            <form method="post" class="o-card" onsubmit="return confirm('Delete this account for good?')">
-              <div class="o-card-head"><h2>Delete</h2></div>
-              <p class="o-help" style="margin:0 0 10px">Nothing uses this account yet, so it can be deleted (e.g. added by mistake).</p>
-              <input type="hidden" name="action" value="delete" />
-              <button class="o-btn danger" type="submit">Delete account</button>
             </form>
           )}
         </div>

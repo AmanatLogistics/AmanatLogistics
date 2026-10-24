@@ -9,9 +9,10 @@ import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
 import Stat from '../../../../components/office/Stat.astro';
+import DeleteButton from '../../../../components/office/DeleteButton.astro';
 import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
 import { recentActivity } from '../../../../lib/office/activity';
-import { str, oneOf, withMsg } from '../../../../lib/office/form';
+import { str, oneOf, withMsg, backPath } from '../../../../lib/office/form';
 import { shipmentFigure, partyBalance } from '../../../../lib/office/ledger';
 import { usd, fmtMoney, fmtDate, fmtNum, today, METHODS } from '../../../../lib/office/money';
 import { invoiceStatus, INVOICE_STATUS_LABEL } from '../../../../lib/office/invoices';
@@ -47,7 +48,7 @@ if (id && Astro.request.method === 'POST') {
         else return Astro.redirect(withMsg(`/office/shipments/${id}`, await setShipmentStatus(id, status, user.id)), 303);
       } else if (action === 'delete') {
         if (!admin) error = 'Only an admin can delete a shipment.';
-        else return Astro.redirect(withMsg('/office/shipments', await deleteShipment(id, user.id)), 303);
+        else return Astro.redirect(withMsg(backPath(fd, '/office/shipments'), await deleteShipment(id, user.id)), 303);
       } else error = 'Nothing to do — unknown action.';
     } catch (e) {
       if (e instanceof ShipmentError) error = e.message;
@@ -115,6 +116,12 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
               Print invoice
             </a>
           )}
+          {admin &&
+            (payments.length === 0 ? (
+              <DeleteButton confirm={deleteMsg} />
+            ) : (
+              <a class="o-btn danger" href="#delete" title="Payments are linked to this shipment — see how to delete it">Delete</a>
+            ))}
         </PageHead>
         <Flash error={error} />
 
@@ -378,6 +385,7 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                     <th>Who</th>
                     <th class="num">Amount</th>
                     <th class="num">In US $</th>
+                    {admin && <th class="o-row-actions"></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -396,6 +404,16 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                       </td>
                       <td class="num">{fmtMoney(p.amount, p.currency)}</td>
                       <td class="num">{usd(p.usd)}</td>
+                      {admin && (
+                        <td class="o-row-actions">
+                          <DeleteButton
+                            action={`/office/payments/${p.id}`}
+                            back={`/office/shipments/${s.id}`}
+                            small
+                            confirm={`Delete the payment of ${fmtMoney(p.amount, p.currency)} ${p.direction === 'in' ? 'from' : 'to'} ${p.party_name} on ${fmtDate(p.pay_date)}? Balances will change. This cannot be undone.`}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -403,11 +421,13 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                   <tr>
                     <td colspan="4">Received for this shipment</td>
                     <td class="num">{usd(fig.received)}</td>
+                    {admin && <td></td>}
                   </tr>
                   {admin && paysOut.length > 0 && (
                     <tr>
                       <td colspan="4">Paid out to partners</td>
                       <td class="num">{usd(sumUsd(paysOut))}</td>
+                      <td></td>
                     </tr>
                   )}
                 </tfoot>
@@ -450,12 +470,12 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
         </div>
 
         {admin && (
-          <div class="o-card">
+          <div class="o-card" id="delete">
             <div class="o-card-head"><h2>Delete this shipment</h2></div>
             {payments.length > 0 ? (
               <p class="muted" style="margin:0">
                 This shipment cannot be deleted while {payments.length} payment{payments.length === 1 ? ' is' : 's are'} linked to it — they are real money
-                records. Delete those payments or link them to another shipment first. To stop a shipment, set its status to Cancelled instead.
+                records. Delete those payments first (the Delete buttons in “Payments for this shipment” above) or link them to another shipment. To stop a shipment, set its status to Cancelled instead.
               </p>
             ) : (
               <form method="post" onsubmit={`return confirm(${JSON.stringify(deleteMsg)})`} class="o-actions" style="justify-content:space-between">

@@ -560,11 +560,11 @@ export interface PartyRefs {
 }
 
 /**
- * Every record that points at this party. The known tables above, plus any
+ * The tables and columns that point at a party: the known ones above, plus any
  * other table with a foreign key to office_parties (found in the database's
  * own catalogue, so a table added later is never missed).
  */
-export async function partyReferences(id: number, runner?: Runner): Promise<PartyRefs> {
+async function referenceTargets(runner?: Runner): Promise<{ table: string; column: string }[]> {
   const fks = await q<{ tbl: string; col: string }>(
     `SELECT cl.relname AS tbl, a.attname AS col
        FROM pg_constraint c
@@ -579,10 +579,16 @@ export async function partyReferences(id: number, runner?: Runner): Promise<Part
   for (const fk of fks) {
     if (!targets.some((t) => t.table === fk.tbl && t.column === fk.col)) targets.push({ table: fk.tbl, column: fk.col });
   }
-  const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  return targets;
+}
+
+// Table and column names come from referenceTargets, never from a request.
+const ident = (s: string) => `"${s.replace(/"/g, '""')}"`;
+
+/** Every record that points at this party, counted per table. */
+export async function partyReferences(id: number, runner?: Runner): Promise<PartyRefs> {
   const items: PartyRefs['items'] = [];
-  for (const t of targets) {
-    // Table and column names come from the list above or the catalogue, never from a request.
+  for (const t of await referenceTargets(runner)) {
     const r = await one<{ n: number }>(`SELECT COUNT(*) AS n FROM ${ident(t.table)} WHERE ${ident(t.column)} = $1`, [id], runner);
     const n = r?.n ?? 0;
     if (!n) continue;
@@ -591,6 +597,17 @@ export async function partyReferences(id: number, runner?: Runner): Promise<Part
     items.push({ ...t, n, words });
   }
   return { items, total: items.reduce((a, i) => a + i.n, 0) };
+}
+
+/** Which of these parties have any record pointing at them, so cannot be deleted (for a list page). */
+export async function referencedParties(ids: number[]): Promise<Set<number>> {
+  const used = new Set<number>();
+  if (ids.length === 0) return used;
+  for (const t of await referenceTargets()) {
+    const rows = await q<{ id: number }>(`SELECT DISTINCT ${ident(t.column)} AS id FROM ${ident(t.table)} WHERE ${ident(t.column)} = ANY($1::int[])`, [ids]);
+    for (const r of rows) used.add(r.id);
+  }
+  return used;
 }
 
 export function joinWords(list: string[]): string {

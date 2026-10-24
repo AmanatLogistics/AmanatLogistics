@@ -17,10 +17,11 @@ import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
 import Stat from '../../../../components/office/Stat.astro';
+import DeleteButton from '../../../../components/office/DeleteButton.astro';
 import Pager from '../_Pager.astro';
 import { guard, sameOrigin, isAdmin } from '../../../../lib/office/auth';
 import { recentActivity } from '../../../../lib/office/activity';
-import { str, withMsg } from '../../../../lib/office/form';
+import { str, withMsg, backPath } from '../../../../lib/office/form';
 import { partyBalance } from '../../../../lib/office/ledger';
 import { usd, fmtMoney, fmtDate, fmtNum, today, METHODS } from '../../../../lib/office/money';
 import { SERVICES, SERVICE_KEYS, SHIPMENT_STATUS, type ShipmentStatus } from '../../../../lib/office/services';
@@ -72,7 +73,7 @@ if (id && Astro.request.method === 'POST') {
       if (!admin) error = 'Only an admin can delete a client or partner.';
       else {
         const r = await deleteParty(id, user.id);
-        if (r.ok) return Astro.redirect(withMsg(listHref(r.kind), `${r.name} deleted.`), 303);
+        if (r.ok) return Astro.redirect(withMsg(backPath(fd, listHref(r.kind)), `${r.name} deleted.`), 303);
         error = r.error;
       }
     } else if (action === 'set_active') {
@@ -210,6 +211,13 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
           )}
           <a class="o-btn" href={printHref} target="_blank" rel="noopener" data-astro-prefetch="false">Print statement</a>
           <a class="o-btn" href={`/office/parties/${party.id}/edit`}>Edit</a>
+          {admin &&
+            refs &&
+            (refs.total === 0 ? (
+              <DeleteButton confirm={`Delete ${party.name}? This cannot be undone.`} />
+            ) : (
+              <a class="o-btn danger" href="#delete" title="They have records, so they cannot be deleted — see the options">Delete</a>
+            ))}
         </PageHead>
         <Flash error={error} />
 
@@ -639,7 +647,7 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
         )}
 
         {admin && refs && (
-          <div class="o-card" style="margin-top:16px">
+          <div class="o-card" style="margin-top:16px" id="delete">
             <div class="o-card-head"><h2>Delete or deactivate</h2></div>
             {refs.total > 0 ? (
               <>
