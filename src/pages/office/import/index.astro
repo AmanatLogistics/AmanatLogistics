@@ -2,12 +2,28 @@
 /**
  * Import old records from spreadsheets (admin only).
  * Upload → every row checked and shown → confirm → the good rows saved together.
+ * Either one kind of record at a time, or everything at once: several CSV
+ * files together, or one bundle file with a "#kind" line before each kind.
  */
 import OfficeLayout from '../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../components/office/PageHead.astro';
 import Flash from '../../../components/office/Flash.astro';
 import { guard, sameOrigin } from '../../../lib/office/auth';
-import { KINDS, KIND_ORDER, isKind, checkFile, runImport, type CheckResult, type ImportKind } from '../../../lib/office/importer';
+import {
+  KINDS,
+  KIND_ORDER,
+  isKind,
+  isBlocking,
+  checkFile,
+  runImport,
+  runBundle,
+  splitBundle,
+  detectKind,
+  type CheckResult,
+  type ImportKind,
+  type BundlePart,
+  type BundleStep,
+} from '../../../lib/office/importer';
 import { withMsg } from '../../../lib/office/form';
 
 export const prerender = false;
@@ -15,7 +31,10 @@ const user = await guard(Astro, { admin: true });
 if (user instanceof Response) return user;
 
 const MAX_BYTES = 2_000_000;
+const MAX_TOTAL = 4_000_000; // the server takes about 4.5 MB per request
 let error: string | null = null;
+let steps: BundleStep[] | null = null;
+let parts: BundlePart[] = [];
 let checked: CheckResult | null = null;
 let fileText = '';
 let kind: ImportKind = 'parties';
@@ -25,35 +44,91 @@ if (Astro.request.method === 'POST') {
   if (!sameOrigin(Astro.request)) error = 'That request looked unsafe, so it was blocked.';
   else {
     const fd = await Astro.request.formData();
-    const k = String(fd.get('kind') ?? '');
-    kind = isKind(k) ? k : 'parties';
-    createParties = fd.get('create_parties') === 'on';
     const action = String(fd.get('action') ?? 'check');
-    const file = fd.get('file');
-    if (file instanceof File && file.size > 0) {
-      if (file.size > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
-      else fileText = await file.text();
-    } else fileText = String(fd.get('csv') ?? '');
-    if (!error && !fileText.trim()) error = 'Choose a CSV file first.';
-    if (!error && fileText.length > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
-    if (!error && action === 'import') {
-      try {
-        const res = await runImport(kind, fileText, createParties, user.id);
-        const parts = [`${res.saved} ${KINDS[kind].label.toLowerCase()} rows saved`];
-        if (res.skipped) parts.push(`${res.skipped} skipped because of problems`);
-        if (res.createdParties) parts.push(`${res.createdParties} new clients/partners created`);
-        if (res.invoices) parts.push(`${res.invoices} invoices ready`);
-        return Astro.redirect(withMsg('/office/import', parts.join(', ') + '.'), 303);
-      } catch (e) {
-        console.error('Import failed:', e);
-        error = `Nothing was saved: ${e instanceof Error ? e.message : String(e)}`;
+    createParties = fd.get('create_parties') === 'on';
+    if (action === 'check_all' || action === 'import_all') {
+      const problems: string[] = [];
+      if (action === 'check_all') {
+        let total = 0;
+        for (const f of fd.getAll('files')) {
+          if (!(f instanceof File) || f.size === 0) continue;
+          total += f.size;
+          if (f.size > MAX_BYTES || total > MAX_TOTAL) {
+            problems.push('The files are too large together (over 4 MB). Import them in two goes.');
+            break;
+          }
+          const text = await f.text();
+          const bundle = splitBundle(text, f.name);
+          if (bundle) {
+            parts.push(...bundle.parts);
+            problems.push(...bundle.problems);
+          } else {
+            const k = detectKind(f.name, text);
+            if (k) parts.push({ kind: k, text, source: f.name });
+            else problems.push(`${f.name}: could not tell what this file holds. Keep the template's first row, or start each part with a line such as #shipments.`);
+          }
+        }
+      } else {
+        const kinds = fd.getAll('part_kind').map(String);
+        const sources = fd.getAll('part_source').map(String);
+        const texts = fd.getAll('part_text').map(String);
+        kinds.forEach((k, i) => {
+          if (isKind(k)) parts.push({ kind: k, text: texts[i] ?? '', source: sources[i] ?? k });
+        });
+        if (texts.reduce((a, x) => a + x.length, 0) > MAX_TOTAL) problems.push('The files are too large together (over 4 MB).');
       }
-    }
-    if (!error || action === 'import') {
-      try {
-        checked = await checkFile(kind, fileText, createParties);
-      } catch (e) {
-        error = `Could not read the file: ${e instanceof Error ? e.message : String(e)}`;
+      if (!parts.length && !problems.length) problems.push('Choose one or more CSV files first.');
+      if (problems.length) error = problems.join(' ');
+      else if (action === 'import_all') {
+        try {
+          const done = await runBundle(parts, createParties, user.id, true);
+          const sum = (f: (s: BundleStep) => number) => done.reduce((a, s) => a + f(s), 0);
+          const msg = [`${sum((s) => s.outcome?.saved ?? 0)} rows saved from ${done.length} part${done.length === 1 ? '' : 's'}`];
+          if (sum((s) => s.outcome?.skipped ?? 0)) msg.push(`${sum((s) => s.outcome?.skipped ?? 0)} skipped because of problems`);
+          if (sum((s) => s.outcome?.createdParties ?? 0)) msg.push(`${sum((s) => s.outcome?.createdParties ?? 0)} new clients/partners created`);
+          if (sum((s) => s.outcome?.invoices ?? 0)) msg.push(`${sum((s) => s.outcome?.invoices ?? 0)} invoices ready`);
+          return Astro.redirect(withMsg('/office/import', msg.join(', ') + '.'), 303);
+        } catch (e) {
+          console.error('Import failed:', e);
+          error = `Nothing was saved: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+      if (parts.length && (!error || action === 'import_all')) {
+        try {
+          steps = await runBundle(parts, createParties, user.id, false);
+        } catch (e) {
+          error = `Could not check the files: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+    } else {
+      const k = String(fd.get('kind') ?? '');
+      kind = isKind(k) ? k : 'parties';
+      const file = fd.get('file');
+      if (file instanceof File && file.size > 0) {
+        if (file.size > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
+        else fileText = await file.text();
+      } else fileText = String(fd.get('csv') ?? '');
+      if (!error && !fileText.trim()) error = 'Choose a CSV file first.';
+      if (!error && fileText.length > MAX_BYTES) error = 'That file is over 2 MB. Split it into smaller files.';
+      if (!error && action === 'import') {
+        try {
+          const res = await runImport(kind, fileText, createParties, user.id);
+          const msg = [`${res.saved} ${KINDS[kind].label.toLowerCase()} rows saved`];
+          if (res.skipped) msg.push(`${res.skipped} skipped because of problems`);
+          if (res.createdParties) msg.push(`${res.createdParties} new clients/partners created`);
+          if (res.invoices) msg.push(`${res.invoices} invoices ready`);
+          return Astro.redirect(withMsg('/office/import', msg.join(', ') + '.'), 303);
+        } catch (e) {
+          console.error('Import failed:', e);
+          error = `Nothing was saved: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      }
+      if (!error || action === 'import') {
+        try {
+          checked = await checkFile(kind, fileText, createParties);
+        } catch (e) {
+          error = `Could not read the file: ${e instanceof Error ? e.message : String(e)}`;
+        }
       }
     }
   }
@@ -61,12 +136,102 @@ if (Astro.request.method === 'POST') {
 
 const okRows = checked ? checked.rows.filter((r) => !r.errors.length).length : 0;
 const badRows = checked ? checked.rows.length - okRows : 0;
-const blocking = checked?.headerProblems.some((p) => p.startsWith('Missing') || p.startsWith('The file')) ?? false;
+const blocking = checked ? isBlocking(checked) : false;
+const stepOk = (st: BundleStep) => st.checked.rows.filter((r) => !r.errors.length).length;
+const allOk = steps ? steps.reduce((a, st) => a + (isBlocking(st.checked) ? 0 : stepOk(st)), 0) : 0;
+const allBad = steps ? steps.reduce((a, st) => a + st.checked.rows.length - stepOk(st), 0) : 0;
+const anyBlocking = steps ? steps.some((st) => isBlocking(st.checked)) : false;
 ---
 
 <OfficeLayout title="Import old data" user={user} active="import">
   <PageHead title="Import old data" sub="Bring in records from your old spreadsheets. Each file is checked first; nothing is saved until you confirm." />
   <Flash error={error} />
+
+  {
+    steps && (
+      <div class="o-card">
+        <div class="o-card-head">
+          <h2>Check: everything together</h2>
+          <span class="muted small">
+            {steps.length} part{steps.length === 1 ? '' : 's'} · <span class="pos">{allOk} rows ready</span>
+            {allBad > 0 && <> · <span class="neg">{allBad} with problems</span></>}
+          </span>
+        </div>
+        <p class="small muted" style="margin-top:0">Checked in this order, each part after the ones above it are in, exactly as they will be saved.</p>
+        <div class="o-table-wrap">
+          <table class="o-table">
+            <thead><tr><th>Part</th><th>From</th><th class="num">Ready</th><th class="num">Problems</th><th>New clients / partners</th></tr></thead>
+            <tbody>
+              {steps.map((st) => (
+                <tr>
+                  <td><strong>{KINDS[st.part.kind].label}</strong></td>
+                  <td class="small muted">{st.part.source}</td>
+                  <td class="num pos">{isBlocking(st.checked) ? 0 : stepOk(st)}</td>
+                  <td class:list={['num', st.checked.rows.length - stepOk(st) > 0 && 'neg']}>{isBlocking(st.checked) ? 'whole part' : st.checked.rows.length - stepOk(st)}</td>
+                  <td class="small">{st.checked.newParties.length ? st.checked.newParties.map((x) => x.name).join(', ') : <span class="muted">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {steps.map((st) => (
+          <>
+            {st.checked.headerProblems.map((p) => <div class:list={['o-flash', p.startsWith('Missing') || p.startsWith('The file') ? 'err' : 'ok']} style="margin-top:10px">{KINDS[st.part.kind].label}: {p}</div>)}
+            {st.checked.rows.some((r) => r.errors.length) && (
+              <details open style="margin-top:12px">
+                <summary class="neg" style="cursor:pointer">{KINDS[st.part.kind].label}: rows with problems (they will be skipped)</summary>
+                <div class="o-table-wrap" style="max-height:320px;overflow:auto;margin-top:8px">
+                  <table class="o-table">
+                    <thead><tr><th>Line</th><th>Row</th><th>Problems</th></tr></thead>
+                    <tbody>
+                      {st.checked.rows.filter((r) => r.errors.length).slice(0, 300).map((r) => (
+                        <tr><td class="muted">{r.line}</td><td>{r.preview}</td><td class="neg small">{r.errors.join(' ')}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+            {stepOk(st) > 0 && (
+              <details style="margin-top:8px">
+                <summary class="muted" style="cursor:pointer">{KINDS[st.part.kind].label}: see the {stepOk(st)} rows that will be saved</summary>
+                <ul class="small" style="max-height:260px;overflow:auto;margin:8px 0;padding-left:18px">
+                  {st.checked.rows.filter((r) => !r.errors.length).slice(0, 500).map((r) => <li>{r.preview}</li>)}
+                </ul>
+              </details>
+            )}
+          </>
+        ))}
+        {!anyBlocking && allOk > 0 && (
+          <form method="post" class="o-actions" style="margin-top:14px">
+            <input type="hidden" name="action" value="import_all" />
+            {createParties && <input type="hidden" name="create_parties" value="on" />}
+            {parts.map((pt) => (
+              <>
+                <input type="hidden" name="part_kind" value={pt.kind} />
+                <input type="hidden" name="part_source" value={pt.source} />
+                <textarea name="part_text" hidden>{pt.text}</textarea>
+              </>
+            ))}
+            <button class="o-btn primary" type="submit" onclick="this.disabled=true;this.form.submit();">Save all {allOk} rows{allBad > 0 ? ` (skip ${allBad})` : ''}</button>
+            <a class="o-btn" href="/office/import">Cancel</a>
+          </form>
+        )}
+        {anyBlocking && <p class="neg small" style="margin-bottom:0">A part above cannot be read, so nothing can be saved yet. Fix that file and check again.</p>}
+      </div>
+    )
+  }
+
+  <form method="post" enctype="multipart/form-data" class="o-card o-form" style="margin-top:16px">
+    <div class="o-card-head"><h2>Import everything at once</h2></div>
+    <input type="hidden" name="action" value="check_all" />
+    <label class="o-field"><span>CSV files — choose them all together, or one combined file</span>
+      <input type="file" name="files" accept=".csv,text/csv,text/plain" multiple required />
+      <span class="o-help">The files are put in the right order for you and checked as a whole; nothing is saved until you confirm. A combined file has a line such as <code>#shipments</code> before each kind's rows.</span>
+    </label>
+    <label class="small"><input type="checkbox" name="create_parties" checked={createParties} /> Create clients and partners that are not in the system yet</label>
+    <div><button class="o-btn primary" type="submit">Check files</button></div>
+  </form>
 
   {
     checked && (
@@ -112,7 +277,7 @@ const blocking = checked?.headerProblems.some((p) => p.startsWith('Missing') || 
 
   <div class="o-grid-2" style="margin-top:16px">
     <form method="post" enctype="multipart/form-data" class="o-card o-form">
-      <div class="o-card-head"><h2>Check a file</h2></div>
+      <div class="o-card-head"><h2>Or one kind at a time</h2></div>
       <input type="hidden" name="action" value="check" />
       <label class="o-field"><span>What is in the file?</span>
         <select name="kind">

@@ -452,7 +452,7 @@ export async function clientShipments(partyId: number): Promise<ClientShipment[]
   );
   if (!ships.length) return [];
   const figs = await shipmentFigures(ships.map((s) => s.id));
-  const zero: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, due: 0 };
+  const zero: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, applied: 0, due: 0 };
   return ships.map((s) => ({ ...s, fig: figs.get(s.id) ?? zero }));
 }
 

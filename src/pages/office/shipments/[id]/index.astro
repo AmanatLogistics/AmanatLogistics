@@ -141,7 +141,17 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
 
         <div class="o-stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
           <Stat label="Billed" value={usd(fig.revenue)} sub={`${data.charges.length} charge line${data.charges.length === 1 ? '' : 's'}`} />
-          <Stat label="Received" value={usd(fig.received)} sub={paysIn.length ? `${paysIn.length} payment${paysIn.length === 1 ? '' : 's'} from the client` : 'Nothing received yet'} />
+          <Stat
+            label="Received"
+            value={usd(fig.received)}
+            sub={
+              fig.applied > 0
+                ? `${paysIn.length ? `${paysIn.length} payment${paysIn.length === 1 ? '' : 's'} + ` : ''}${usd(fig.applied)} paid on account`
+                : paysIn.length
+                  ? `${paysIn.length} payment${paysIn.length === 1 ? '' : 's'} from the client`
+                  : 'Nothing received yet'
+            }
+          />
           <Stat label={dueTile.label} value={dueTile.value} sub={dueTile.sub} tone={dueTile.tone} />
           {admin && <Stat label="Cost" value={usd(fig.cost)} sub={`${data.costs.length} cost line${data.costs.length === 1 ? '' : 's'}`} />}
           {admin && (
@@ -371,8 +381,13 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
         <div class="o-card">
           <div class="o-card-head">
             <h2>Payments for this shipment</h2>
-            {paysIn.length > 0 && <span class="small">Received <strong>{usd(fig.received)}</strong></span>}
+            {(paysIn.length > 0 || fig.applied > 0) && <span class="small">Received <strong>{usd(fig.received)}</strong></span>}
           </div>
+          {fig.applied > 0 && (
+            <p class="o-help" style="margin:0 0 10px">
+              {usd(fig.applied)} of it comes from {s.client_name ?? 'the client'}'s payments on account — money they paid without naming a shipment, which pays their oldest invoices first.
+            </p>
+          )}
           {payments.length === 0 ? (
             <p class="o-empty">No payments linked to this shipment yet.</p>
           ) : (
@@ -418,6 +433,13 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                   ))}
                 </tbody>
                 <tfoot>
+                  {fig.applied > 0 && (
+                    <tr>
+                      <td colspan="4">Paid on account (not linked to a shipment)</td>
+                      <td class="num">{usd(fig.applied)}</td>
+                      {admin && <td></td>}
+                    </tr>
+                  )}
                   <tr>
                     <td colspan="4">Received for this shipment</td>
                     <td class="num">{usd(fig.received)}</td>

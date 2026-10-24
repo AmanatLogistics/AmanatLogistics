@@ -479,9 +479,9 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                 </div>
                 {r2(shipTotals.due) !== r2(bal.balance) && (
                   <p class="o-help" style="margin:10px 0 12px">
-                    “Still due” counts only the payments linked to each shipment. Their balance above ({words(bal.balance).text}) is the full picture: it also counts{' '}
+                    “Still due” counts the payments for each shipment, with money they paid on account set against their oldest shipments first. Their balance above ({words(bal.balance).text}) is the full picture: it also counts{' '}
                     {joinWords([
-                      ...(r2(bal.received) !== r2(shipTotals.received) ? ['money they paid that is not linked to one of these shipments'] : []),
+                      ...(r2(bal.received) !== r2(shipTotals.received) ? ['money they paid beyond what these shipments need, or for someone else\'s shipment'] : []),
                       ...(bal.paid_to_them ? [`money we paid them (${usd(bal.paid_to_them)})`] : []),
                       ...(bal.owed_to_them ? [`their bills to us (${usd(bal.owed_to_them)})`] : []),
                     ]) || 'every payment, linked or not'}.

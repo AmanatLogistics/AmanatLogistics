@@ -116,18 +116,42 @@ for (const [from, to] of [['2000-01-01', '2100-12-31'], [`${year}-01-01`, `${yea
     same('total we owe partners', app.totals.payable, round2(payable));
     same('total we hold for clients', app.totals.clientCredit, round2(credit));
 
-    // Shipments
-    for (const s of shipments) {
+    // Shipments. Received = payments linked to it + its share of the client's
+    // payments on account (unlinked in − unlinked out to them), handed out
+    // over the client's shipments oldest first (ship date, then id).
+    const fig = new Map(shipments.map((s) => {
       const revenue = sum(charges.filter((c) => c.shipment_id === s.id), (c) => N(c.usd));
-      const cost = sum(costs.filter((c) => c.shipment_id === s.id), (c) => N(c.usd));
-      const received = sum(payments.filter((x) => x.direction === 'in' && x.shipment_id === s.id), (x) => N(x.usd));
+      const linked = sum(payments.filter((x) => x.direction === 'in' && x.shipment_id === s.id), (x) => N(x.usd));
+      return [s.id, { revenue, cost: sum(costs.filter((c) => c.shipment_id === s.id), (c) => N(c.usd)), linked, applied: 0 }];
+    }));
+    for (const p of parties) {
+      let pool = sum(payments.filter((x) => x.party_id === p.id && x.shipment_id == null), (x) => (x.direction === 'in' ? N(x.usd) : -N(x.usd)));
+      const theirs = shipments.filter((s) => s.client_id === p.id).sort((x, y) => d(x.ship_date).localeCompare(d(y.ship_date)) || x.id - y.id);
+      for (const s of theirs) {
+        if (pool <= 0) break;
+        const f = fig.get(s.id);
+        const take = Math.min(pool, Math.max(round2(f.revenue - f.linked), 0));
+        f.applied = round2(take);
+        pool = round2(pool - take);
+      }
+    }
+    for (const s of shipments) {
+      const { revenue, cost, linked, applied } = fig.get(s.id);
+      const received = round2(linked + applied);
       const a = app.shipments[s.id];
       if (!a) { problems.push(`shipment ${s.ref} missing from the app`); continue; }
       same(`${s.ref} revenue`, a.revenue, revenue);
       same(`${s.ref} cost`, a.cost, cost);
       same(`${s.ref} profit`, a.profit, round2(revenue - cost));
       same(`${s.ref} received`, a.received, received);
+      same(`${s.ref} paid on account`, a.applied, applied);
       same(`${s.ref} due`, a.due, round2(revenue - received));
+    }
+    // Paid on account can never exceed what each client paid on account.
+    for (const p of parties) {
+      const pool = Math.max(sum(payments.filter((x) => x.party_id === p.id && x.shipment_id == null), (x) => (x.direction === 'in' ? N(x.usd) : -N(x.usd))), 0);
+      const used = sum(shipments.filter((s) => s.client_id === p.id), (s) => N(app.shipments[s.id]?.applied));
+      rule(`party "${p.name}": ${used} applied from ${pool} paid on account`, used <= pool + 0.011);
     }
 
     // Accounts, in their own currency

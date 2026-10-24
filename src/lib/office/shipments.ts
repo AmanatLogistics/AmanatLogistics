@@ -374,7 +374,7 @@ export interface ShipmentList {
   perPage: number;
 }
 
-const ZERO: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, due: 0 };
+const ZERO: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, applied: 0, due: 0 };
 
 /**
  * Shipments matching the filters, newest first. `page` null → every row (CSV).
