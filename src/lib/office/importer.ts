@@ -151,8 +151,9 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'city', help: '' },
       { key: 'country', help: '' },
       { key: 'notes', help: '' },
+      { key: 'address', help: 'printed on their invoices, under their name' },
     ],
-    example: [['Haji Gul Dry Fruit Traders', 'client', '+93 70 123 4567', 'Kandahar', 'Afghanistan', ''], ['Rahim Khan — Kabul agent', 'agent', '+93 79 210 4411', 'Kabul', 'Afghanistan', 'UPS route']],
+    example: [['Haji Gul Dry Fruit Traders', 'client', '+93 70 123 4567', 'Kandahar', 'Afghanistan', '', 'Shop 12, Fruit Market, Kandahar'], ['Rahim Khan — Kabul agent', 'agent', '+93 79 210 4411', 'Kabul', 'Afghanistan', 'UPS route', '']],
   },
   shipments: {
     label: 'Shipments',
@@ -425,7 +426,7 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (!pk) errors.push(`Unknown kind "${v('kind')}".`);
       if (L.parties.has(lk(v('name'))) || seenInFile.has(lk(v('name')))) errors.push(`"${v('name')}" already exists.`);
       seenInFile.add(lk(v('name')));
-      data = { name: v('name'), kind: pk, phone: v('phone') || null, city: v('city') || null, country: v('country') || null, notes: v('notes') || null };
+      data = { name: v('name'), kind: pk, phone: v('phone') || null, city: v('city') || null, country: v('country') || null, notes: v('notes') || null, address: v('address') || null };
       preview = `${v('name')} (${pk})`;
     } else if (kind === 'shipments') {
       const service = matchEnum(v('service'), SVC_LABELS);
@@ -615,7 +616,7 @@ async function saveChecked(kind: ImportKind, checked: CheckResult, userId: numbe
   if (kind === 'accounts') {
     await insertMany(t, 'office_accounts', ['name', 'type', 'currency', 'opening_balance', 'opening_date', 'notes'], ok.map((d) => [d.name, d.type, d.currency, d.opening, d.opening_date, 'Imported']));
   } else if (kind === 'parties') {
-    await insertMany(t, 'office_parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'created_by'], ok.map((d) => [d.name, d.kind, d.phone, d.city, d.country, d.notes, userId]));
+    await insertMany(t, 'office_parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'address', 'created_by'], ok.map((d) => [d.name, d.kind, d.phone, d.city, d.country, d.notes, d.address, userId]));
   } else if (kind === 'shipments') {
     const rows: unknown[][] = [];
     for (const d of ok) {

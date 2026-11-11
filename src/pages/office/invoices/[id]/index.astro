@@ -124,6 +124,11 @@ const statusSentence = inv
               <dl class="o-kv">
                 <dt>Client</dt>
                 <dd><a href={`/office/parties/${inv.client.id}`}>{inv.client.name}</a></dd>
+                <dt>Address</dt>
+                <dd>
+                  {inv.billTo ? <span style="white-space:pre-line">{inv.billTo}</span> : <span class="muted">—</span>}
+                  <div class="small"><a href={`/office/shipments/${s.id}/edit`}>{inv.billTo ? 'Change' : 'Add the address'}</a></div>
+                </dd>
                 <dt>Phone</dt>
                 <dd>{inv.client.phone ?? '—'}</dd>
                 <dt>City</dt>

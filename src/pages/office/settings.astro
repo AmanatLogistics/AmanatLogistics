@@ -85,12 +85,12 @@ const currencies = await listCurrencies();
       <input type="hidden" name="action" value="company" />
       <label class="o-field"><span>Company name</span><input name="companyName" value={s.companyName} required /></label>
       <label class="o-field"><span>Line under the name</span><input name="companyTagline" value={s.companyTagline} /></label>
-      <label class="o-field"><span>Address</span><textarea name="address" rows="2">{s.address}</textarea></label>
+      <label class="o-field"><span>Address</span><textarea name="address" rows="2">{s.address}</textarea><span class="o-help">Printed at the foot of every invoice.</span></label>
       <div class="o-row">
         <label class="o-field"><span>Phone</span><input name="phone" value={s.phone} /></label>
         <label class="o-field"><span>Email</span><input name="email" value={s.email} /></label>
       </div>
-      <label class="o-field"><span>Website</span><input name="website" value={s.website} /></label>
+      <label class="o-field"><span>Website</span><input name="website" value={s.website} /><span class="o-help">Not printed on invoices or statements.</span></label>
       <label class="o-field"><span>Payment instructions (printed under the totals)</span><textarea name="paymentInstructions" rows="3">{s.paymentInstructions}</textarea></label>
       <label class="o-field"><span>Invoice footer</span><input name="invoiceFooter" value={s.invoiceFooter} /></label>
       <div class="o-row">

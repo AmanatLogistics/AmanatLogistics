@@ -22,7 +22,7 @@ import { logActivity } from './activity';
 import { round2, usd } from './money';
 import { partyBalances, partyStatement, shipmentFigures, type PartyBalance, type ShipmentFigures, type StatementLine } from './ledger';
 import { PARTY_KINDS, COST_CATEGORIES, type PartyKind, type ServiceKey } from './services';
-import { str } from './form';
+import { str, cleanAddress } from './form';
 
 export const PAGE_SIZE = 50;
 export const KIND_KEYS = Object.keys(PARTY_KINDS) as PartyKind[];
@@ -215,6 +215,8 @@ export interface Party {
   phone: string | null;
   city: string | null;
   country: string | null;
+  /** Printed on their invoices and statements, under their name. */
+  address: string | null;
   notes: string | null;
   active: boolean;
   created_by: number | null;
@@ -224,7 +226,7 @@ export interface Party {
 
 export async function getParty(id: number, runner?: Runner): Promise<Party | null> {
   return one<Party>(
-    `SELECT p.id, p.name, p.kind, p.phone, p.city, p.country, p.notes, p.active, p.created_by,
+    `SELECT p.id, p.name, p.kind, p.phone, p.city, p.country, p.address, p.notes, p.active, p.created_by,
             u.name AS created_by_name, p.created_at
        FROM office_parties p LEFT JOIN office_users u ON u.id = p.created_by
       WHERE p.id = $1`,
@@ -668,7 +670,7 @@ export async function setPartyActive(id: number, active: boolean, userId: number
 /* The form                                                            */
 /* ------------------------------------------------------------------ */
 
-export const PARTY_FIELDS = ['name', 'kind', 'phone', 'city', 'country', 'notes', 'active', 'confirm_dup'];
+export const PARTY_FIELDS = ['name', 'kind', 'phone', 'city', 'country', 'address', 'notes', 'active', 'confirm_dup'];
 
 export interface PartyInput {
   name: string;
@@ -676,6 +678,7 @@ export interface PartyInput {
   phone: string | null;
   city: string | null;
   country: string | null;
+  address: string | null;
   notes: string | null;
   active: boolean;
 }
@@ -704,6 +707,8 @@ export function readPartyForm(fd: FormData): { ok: true; value: PartyInput } | {
   if (city && city.length > 80) return { ok: false, error: 'The city is too long — keep it under 80 characters.' };
   const country = str(fd, 'country', 200);
   if (country && country.length > 80) return { ok: false, error: 'The country is too long — keep it under 80 characters.' };
+  const address = cleanAddress(fd.get('address'));
+  if (address && address.length > 500) return { ok: false, error: 'The address is too long — keep it under 500 characters.' };
   const notesRaw = fd.get('notes');
   const notes = typeof notesRaw === 'string' && notesRaw.trim() ? notesRaw.trim() : null;
   if (notes && notes.length > 2000) return { ok: false, error: 'The notes are too long — keep them under 2,000 characters.' };
@@ -715,6 +720,7 @@ export function readPartyForm(fd: FormData): { ok: true; value: PartyInput } | {
       phone: phone ? phone.replace(/\s+/g, ' ') : null,
       city: city ? normalizeName(city) : null,
       country: country ? normalizeName(country) : null,
+      address,
       notes,
       active: fd.get('active') === 'on',
     },
@@ -723,9 +729,9 @@ export function readPartyForm(fd: FormData): { ok: true; value: PartyInput } | {
 
 export async function insertParty(v: PartyInput, userId: number, t: Runner): Promise<number> {
   const r = await one<{ id: number }>(
-    `INSERT INTO office_parties (name, kind, phone, city, country, notes, active, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [v.name, v.kind, v.phone, v.city, v.country, v.notes, v.active, userId],
+    `INSERT INTO office_parties (name, kind, phone, city, country, address, notes, active, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+    [v.name, v.kind, v.phone, v.city, v.country, v.address, v.notes, v.active, userId],
     t,
   );
   return r!.id;
@@ -733,9 +739,9 @@ export async function insertParty(v: PartyInput, userId: number, t: Runner): Pro
 
 export async function updateParty(id: number, v: PartyInput, t: Runner): Promise<void> {
   await q(
-    `UPDATE office_parties SET name = $1, kind = $2, phone = $3, city = $4, country = $5, notes = $6, active = $7
-      WHERE id = $8`,
-    [v.name, v.kind, v.phone, v.city, v.country, v.notes, v.active, id],
+    `UPDATE office_parties SET name = $1, kind = $2, phone = $3, city = $4, country = $5, address = $6, notes = $7, active = $8
+      WHERE id = $9`,
+    [v.name, v.kind, v.phone, v.city, v.country, v.address, v.notes, v.active, id],
     t,
   );
 }
@@ -755,6 +761,7 @@ export function partyChanges(old: Party, v: PartyInput): string {
   if ((old.phone ?? null) !== v.phone) out.push(`phone ${show(old.phone)} → ${show(v.phone)}`);
   if ((old.city ?? null) !== v.city) out.push(`city ${show(old.city)} → ${show(v.city)}`);
   if ((old.country ?? null) !== v.country) out.push(`country ${show(old.country)} → ${show(v.country)}`);
+  if ((old.address ?? null) !== v.address) out.push('address changed');
   if ((old.notes ?? null) !== v.notes) out.push('notes changed');
   if (old.active !== v.active) out.push(v.active ? 'marked active again' : 'marked inactive');
   return `${v.name}: ${out.length ? out.join('; ') : 'no changes'}`;

@@ -86,8 +86,14 @@ const kinds = listMode === 'client' ? KIND_KEYS : [...KIND_KEYS.filter((k) => k 
     </div>
 
     <label class="o-field">
+      <span>Address</span>
+      <textarea name="address" rows="3" maxlength="500" placeholder={'Shop / office, street or market\nCity, country'}>{v.address}</textarea>
+      <span class="o-help">Printed on their invoices and statements, under their name. A shipment can use a different address for its own invoice.</span>
+    </label>
+
+    <label class="o-field">
       <span>Notes</span>
-      <textarea name="notes" rows="3" maxlength="2000" placeholder="Shop address, who to ask for, bank or hawala details…">{v.notes}</textarea>
+      <textarea name="notes" rows="3" maxlength="2000" placeholder="Who to ask for, bank or hawala details…">{v.notes}</textarea>
     </label>
 
     <label style="display:flex;gap:8px;align-items:flex-start">

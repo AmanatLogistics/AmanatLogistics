@@ -108,7 +108,7 @@ const isUps = service === 'ups';
           <select name="client_id" data-client-select>
             <option value="">— choose a client —</option>
             {clients.map((c) => (
-              <option value={String(c.id)} selected={form.client_id === String(c.id)}>
+              <option value={String(c.id)} selected={form.client_id === String(c.id)} data-address={c.address ?? ''}>
                 {c.name}{c.city ? ` — ${c.city}` : ''}{c.active ? '' : ' (inactive)'}
               </option>
             ))}
@@ -125,6 +125,11 @@ const isUps = service === 'ups';
           <input name="new_client_phone" value={form.new_client_phone} maxlength="40" inputmode="tel" autocomplete="off" />
         </label>
       </div>
+      <label class="o-field">
+        <span>Bill-to address (on the invoice)</span>
+        <textarea name="bill_address" rows="3" maxlength="600" data-bill-address placeholder={'Shop / office, street or market\nCity, country'}>{form.bill_address}</textarea>
+        <span class="o-help">Printed on the invoice under the client's name. It fills in with the client's saved address; change it if this invoice goes to another address. A client with no saved address keeps this one.</span>
+      </label>
       {
         mode === 'edit' && paymentsLinked > 0 && (
           <p class="o-help" style="margin:-6px 0 0">
@@ -257,7 +262,23 @@ const isUps = service === 'ups';
       }
       if (show && focus) name.focus();
     }
-    sel.addEventListener('change', function () { sync(true); });
+    // The bill-to address follows the chosen client's saved address, unless
+    // someone typed their own.
+    var addr = form.querySelector('[data-bill-address]');
+    var filled = '';
+    function savedAddress() {
+      var o = sel.options[sel.selectedIndex];
+      return (o && o.getAttribute('data-address')) || '';
+    }
+    function fillAddress() {
+      if (!addr) return;
+      if (addr.value.trim() === '' || addr.value === filled) {
+        filled = savedAddress();
+        addr.value = filled;
+      }
+    }
+    sel.addEventListener('change', function () { sync(true); fillAddress(); });
+    if (addr && addr.value.trim() === '') fillAddress();
     name.addEventListener('input', function () {
       if (name.value.trim() !== '' && !/^\d+$/.test(sel.value)) sel.value = '__new';
     });
