@@ -1,9 +1,9 @@
 ---
 /**
  * Settings (admin only): the letterhead printed on invoices, payment terms,
- * numbering prefixes, and today's exchange rates (used to pre-fill forms; each
+ * numbering prefixes, today's exchange rates (used to pre-fill forms; each
  * record keeps the rate it was entered with, so changing a rate never rewrites
- * old figures).
+ * old figures), and who gets the backup and the unpaid-clients reminder.
  */
 import OfficeLayout from '../../layouts/OfficeLayout.astro';
 import PageHead from '../../components/office/PageHead.astro';
@@ -14,10 +14,25 @@ import { getSettings, saveSettings } from '../../lib/office/settings';
 import { listCurrencies } from '../../lib/office/money';
 import { logActivity } from '../../lib/office/activity';
 import { str, int, parseNum, withMsg } from '../../lib/office/form';
+import { fmtDate } from '../../lib/office/money';
+import { buildBackup } from '../../lib/office/backup';
+import { runBackup, backupState, nextDue, channels, normalizePhone, isEmail, showPhone, type SendResult } from '../../lib/office/delivery';
 
 export const prerender = false;
 const user = await guard(Astro, { admin: true });
 if (user instanceof Response) return user;
+
+// Download the backup now, without sending it anywhere.
+const dl = Astro.url.searchParams.get('download');
+if (dl === 'xlsx' || dl === 'restore') {
+  const b = await buildBackup();
+  await logActivity(user.id, 'backup_downloaded', 'backup', null, dl === 'xlsx' ? 'Excel backup downloaded' : 'Restore file downloaded');
+  const [body, type, name] =
+    dl === 'xlsx'
+      ? [new Uint8Array(b.xlsx), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', `amanat-office-backup-${b.date}.xlsx`]
+      : [b.restoreCsv, 'text/csv; charset=utf-8', `amanat-office-restore-${b.date}.csv`];
+  return new Response(body, { headers: { 'content-type': type, 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
+}
 
 let error: string | null = null;
 if (Astro.request.method === 'POST') {
@@ -42,6 +57,44 @@ if (Astro.request.method === 'POST') {
       });
       await logActivity(user.id, 'settings_updated', 'settings', null, 'Company & invoice settings');
       return Astro.redirect(withMsg('/office/settings', 'Settings saved.'), 303);
+    }
+    if (fd.get('action') === 'backup_settings') {
+      const lines = (name: string) => String(fd.get(name) ?? '').split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+      const emails = lines('backupEmails');
+      const badEmails = emails.filter((e) => !isEmail(e));
+      const phones = lines('backupWhatsapp').map((p) => [p, normalizePhone(p)] as const);
+      const reminderRaw = str(fd, 'reminderWhatsapp', 40);
+      const reminder = reminderRaw ? normalizePhone(reminderRaw) : '';
+      const every = int(fd, 'backupEveryDays');
+      const bad = [...badEmails.map((e) => `"${e}" is not an email address`), ...phones.filter(([, n]) => !n).map(([p]) => `"${p}" is not a phone number`)];
+      if (reminderRaw && !reminder) bad.push(`"${reminderRaw}" is not a phone number`);
+      if (every === null || every < 1 || every > 30) bad.push('“Every … days” must be between 1 and 30');
+      if (bad.length) error = `Not saved: ${bad.join('; ')}. Write WhatsApp numbers with the country code, e.g. +93 70 280 0277.`;
+      else {
+        await saveSettings({
+          backupEmails: [...new Set(emails.map((e) => e.toLowerCase()))],
+          backupWhatsapp: [...new Set(phones.map(([, n]) => n!))],
+          reminderWhatsapp: reminder ?? '',
+          backupEveryDays: every!,
+        });
+        await logActivity(user.id, 'settings_updated', 'settings', null, `Backups: ${emails.length} email, ${phones.length} WhatsApp, reminder ${reminder ? 'on' : 'off'}, every ${every} days`);
+        return Astro.redirect(withMsg('/office/settings', 'Backup settings saved.') + '#backups', 303);
+      }
+    }
+    if (fd.get('action') === 'backup_now') {
+      try {
+        const r = await runBackup({ force: true, trigger: 'manual', userId: user.id });
+        if ('skipped' in r) error = r.skipped;
+        else {
+          const all = [...r.report.email, ...r.report.whatsapp, ...(r.report.reminder ? [r.report.reminder] : [])];
+          const ok = all.filter((x) => x.ok).length;
+          const msg = all.length ? `Backup sent: ${ok} of ${all.length} messages went out.${ok < all.length ? ' See below for what did not.' : ''}` : 'Nothing to send to — add email addresses or WhatsApp numbers below.';
+          return Astro.redirect(withMsg('/office/settings', msg, ok === all.length && all.length ? 'ok' : 'err') + '#backups', 303);
+        }
+      } catch (e) {
+        console.error('Backup failed:', e);
+        error = `The backup could not be sent: ${e instanceof Error ? e.message : String(e)}`;
+      }
     }
     if (fd.get('action') === 'rates') {
       const changed: string[] = [];
@@ -74,6 +127,11 @@ if (Astro.request.method === 'POST') {
 
 const s = await getSettings();
 const currencies = await listCurrencies();
+const ch = channels();
+const bs = await backupState();
+const due = nextDue(bs, s);
+const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.to} — ${r.ok ? 'sent' : `not sent: ${r.error ?? 'unknown error'}`}`;
 ---
 
 <OfficeLayout title="Settings" user={user} active="settings">
@@ -125,5 +183,70 @@ const currencies = await listCurrencies();
       </div>
       <div><button class="o-btn primary" type="submit">Save rates</button></div>
     </form>
+  </div>
+  <div class="o-grid-2" style="margin-top:16px" id="backups">
+    <form method="post" class="o-card o-form">
+      <div class="o-card-head"><h2>Backups &amp; reminders</h2></div>
+      <input type="hidden" name="action" value="backup_settings" />
+      <p class="o-help" style="margin:0">
+        Every few days the whole office is sent out as an Excel file, so the records are never only in one place. Each email also carries a restore file: Import → “Import everything at once” rebuilds the office from it.
+      </p>
+      <label class="o-field">
+        <span>Email the backup to (one per line)</span>
+        <textarea name="backupEmails" rows="3" placeholder="info@amanatlogistics.com">{s.backupEmails.join('\n')}</textarea>
+      </label>
+      <label class="o-field">
+        <span>WhatsApp the Excel file to (one number per line)</span>
+        <textarea name="backupWhatsapp" rows="3" placeholder="+93 70 000 0000">{s.backupWhatsapp.map(showPhone).join('\n')}</textarea>
+        <span class="o-help">With the country code, e.g. +93 70 280 0277.</span>
+      </label>
+      <label class="o-field">
+        <span>WhatsApp the list of clients who still owe us to</span>
+        <input name="reminderWhatsapp" value={s.reminderWhatsapp ? showPhone(s.reminderWhatsapp) : ''} placeholder="+93 70 000 0000" />
+        <span class="o-help">Who owes how much, sent with every backup. Leave empty to send no reminder.</span>
+      </label>
+      <label class="o-field" style="max-width:220px">
+        <span>Send every … days</span>
+        <input name="backupEveryDays" type="number" min="1" max="30" value={s.backupEveryDays} />
+      </label>
+      <div><button class="o-btn primary" type="submit">Save</button></div>
+    </form>
+
+    <div class="o-card">
+      <div class="o-card-head"><h2>Backup status</h2></div>
+      <dl class="o-kv">
+        <dt>Email</dt>
+        <dd>{ch.email ? (ch.emailFrom ? <span class="pos">Ready</span> : <span class="neg">Ready, but MAIL_FROM is not set — Resend's test sender only delivers to the Resend account's own address</span>) : <span class="neg">Not set up (RESEND_API_KEY)</span>}</dd>
+        <dt>WhatsApp</dt>
+        <dd>{ch.whatsapp ? <span class="pos">Ready</span> : <span class="neg">Not set up (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID)</span>}</dd>
+        <dt>Every {s.backupEveryDays} days</dt>
+        <dd>{ch.schedule ? <span class="pos">On</span> : <span class="neg">Off until CRON_SECRET is set</span>}</dd>
+        <dt>Last sent</dt>
+        <dd>{bs.lastSentAt ? when(bs.lastSentAt) : <span class="muted">Never</span>}</dd>
+        <dt>Next</dt>
+        <dd>{ch.schedule ? (due ? fmtDate(due.toISOString().slice(0, 10)) : 'At the next daily check (about 6:45 in the morning, Kabul time)') : <span class="muted">—</span>}</dd>
+      </dl>
+      {
+        bs.last && (
+          <div style="margin-top:12px">
+            <div class="small muted">Last attempt, {when(bs.last.at)} ({bs.last.trigger === 'manual' ? 'sent by hand' : 'scheduled'}):</div>
+            <ul class="small" style="margin:6px 0 0;padding-left:18px">
+              {bs.last.email.map((r) => <li class:list={[!r.ok && 'neg']}>Email {result(r)}</li>)}
+              {bs.last.whatsapp.map((r) => <li class:list={[!r.ok && 'neg']}>WhatsApp {result(r, true)}</li>)}
+              {bs.last.reminder && <li class:list={[!bs.last.reminder.ok && 'neg']}>Reminder {result(bs.last.reminder, true)}</li>}
+              {bs.last.notes.map((n) => <li class="muted">{n}</li>)}
+            </ul>
+          </div>
+        )
+      }
+      <div class="o-actions" style="margin-top:14px">
+        <form method="post" onsubmit="this.querySelector('button').disabled=true">
+          <input type="hidden" name="action" value="backup_now" />
+          <button class="o-btn primary" type="submit">Send backup now</button>
+        </form>
+        <a class="o-btn" href="/office/settings?download=xlsx" data-astro-prefetch="false">Download Excel</a>
+        <a class="o-btn" href="/office/settings?download=restore" data-astro-prefetch="false">Download restore file</a>
+      </div>
+    </div>
   </div>
 </OfficeLayout>
