@@ -11,6 +11,16 @@ export function str(fd: FormData, name: string, max = 500): string | null {
   return t === '' ? null : t;
 }
 
+/**
+ * An address as typed in a box: up to a few lines, each trimmed, blank lines
+ * dropped. Null when nothing is left.
+ */
+export function cleanAddress(v: FormDataEntryValue | null): string | null {
+  if (typeof v !== 'string') return null;
+  const lines = v.split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return lines.length ? lines.join('\n') : null;
+}
+
 /** Numbers as people type them: "1,250.50", " 70 ", "12 700". */
 export function parseNum(v: unknown): number | null {
   if (typeof v !== 'string' && typeof v !== 'number') return null;

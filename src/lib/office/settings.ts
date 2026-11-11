@@ -25,7 +25,7 @@ export interface OfficeSettings {
 
 export const DEFAULT_SETTINGS: OfficeSettings = {
   companyName: SITE.name,
-  companyTagline: 'Freight, customs & logistics — Kandahar, Afghanistan',
+  companyTagline: 'Freight, customs & logistics',
   address: CONTACT.location,
   phone: CONTACT.phoneExport,
   email: CONTACT.email,
@@ -44,8 +44,15 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
  */
 export async function getSettings(runner?: Runner): Promise<OfficeSettings> {
   const row = await one<{ value: Partial<OfficeSettings> }>("SELECT value FROM office_settings WHERE key = 'office'", [], runner);
-  return { ...DEFAULT_SETTINGS, ...(row?.value ?? {}) };
+  const saved = { ...(row?.value ?? {}) };
+  // Saving Settings stores every field, so the old default line under the name
+  // (with the city, which now goes at the foot of the invoice) may be saved.
+  if (saved.companyTagline && RETIRED_TAGLINES.includes(saved.companyTagline)) delete saved.companyTagline;
+  return { ...DEFAULT_SETTINGS, ...saved };
 }
+
+/** Earlier defaults of the line under the company name, replaced by today's. */
+const RETIRED_TAGLINES = ['Freight, customs & logistics — Kandahar, Afghanistan'];
 
 export async function saveSettings(patch: Partial<OfficeSettings>): Promise<void> {
   const current = await getSettings();

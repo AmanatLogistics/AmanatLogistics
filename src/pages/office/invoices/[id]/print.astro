@@ -41,7 +41,10 @@ facts.push(['Ship date', fmtDate(s.ship_date)]);
 facts.push(['Shipment ref', s.ref]);
 const stamp = { paid: 'PAID', partial: 'PART PAID', unpaid: 'UNPAID', overdue: 'OVERDUE', credit: 'PAID' }[inv.status];
 const back = `/office/invoices/${inv.id}`;
-const contactLine = [settings.phone, settings.email, settings.website].filter(Boolean);
+// No web address anywhere on the printed invoice: the browser's own header and
+// footer (which print this page's address) are switched off by @page below.
+const contactLine = [settings.phone, settings.email].filter(Boolean);
+const billTo = inv.billTo;
 ---
 
 <!doctype html>
@@ -56,7 +59,10 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet" />
     <style is:inline>
-      @page { size: A4; margin: 14mm; }
+      /* margin 0 leaves the browser no room for its own header and footer, which
+         would print this page's address and title on the PDF; the sheet's
+         padding gives the real margins instead. */
+      @page { size: A4; margin: 0; }
       * { box-sizing: border-box; }
       html, body { margin: 0; }
       body {
@@ -90,12 +96,12 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
       @media print {
         body { background: #fff; font-size: 12px; }
         .no-print { display: none !important; }
-        .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+        .sheet { width: auto; min-height: 0; margin: 0; padding: 14mm; box-shadow: none; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
       }
 
       /* letterhead */
-      .head { display: flex; align-items: center; gap: 14px; }
-      .head img { width: 64px; height: auto; flex: none; }
+      .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; }
+      .head img { display: block; width: 78px; height: auto; margin-bottom: 6px; }
       .co { flex: 1; min-width: 0; }
       .co .name { font-family: 'Barlow Semi Condensed', 'Barlow', 'Arial Narrow', Arial, sans-serif; font-size: 25px; font-weight: 700; color: #7e2e47; line-height: 1.05; letter-spacing: 0.01em; }
       .co .tag { color: #6c5f65; font-size: 12.5px; margin-top: 2px; }
@@ -123,6 +129,7 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
       .box { border: 1px solid #e6dde1; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
       .box h2 { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #7e2e47; margin: 0 0 6px; font-weight: 700; }
       .box .who { font-size: 15px; font-weight: 700; }
+      .box .addr { color: #463a40; white-space: pre-line; margin: 2px 0 3px; }
       .box .line { color: #463a40; }
       .box .svc { font-weight: 700; }
       .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; margin-top: 6px; font-size: 12px; }
@@ -183,15 +190,12 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
 
     <main class="sheet">
       <header class="head">
-        <img src="/images/brand-logo-maroon.png" alt={settings.companyName} width="64" height="61" />
         <div class="co">
+          <img src="/images/brand-logo-maroon.png" alt={settings.companyName} width="78" height="74" />
           <div class="name">{settings.companyName}</div>
           {settings.companyTagline && <div class="tag">{settings.companyTagline}</div>}
         </div>
-        <div class="contact">
-          {settings.address}
-          {contactLine.length > 0 && `\n${contactLine.join(' · ')}`}
-        </div>
+        {contactLine.length > 0 && <div class="contact">{contactLine.join('\n')}</div>}
       </header>
       <div class="rule"></div>
       <div class="rule2"></div>
@@ -218,8 +222,9 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
             inv.client ? (
               <>
                 <div class="who">{inv.client.name}</div>
+                {billTo && <div class="addr">{billTo}</div>}
+                {!billTo && (inv.client.city || inv.client.country) && <div class="line">{[inv.client.city, inv.client.country].filter(Boolean).join(', ')}</div>}
                 {inv.client.phone && <div class="line">{inv.client.phone}</div>}
-                {(inv.client.city || inv.client.country) && <div class="line">{[inv.client.city, inv.client.country].filter(Boolean).join(', ')}</div>}
               </>
             ) : (
               <div class="muted">—</div>
@@ -335,7 +340,7 @@ const contactLine = [settings.phone, settings.email, settings.website].filter(Bo
 
       <footer class="foot">
         {settings.invoiceFooter && <div><strong>{settings.invoiceFooter}</strong></div>}
-        <div>{[settings.companyName, settings.website].filter(Boolean).join(' · ')}</div>
+        <div>{[settings.companyName, settings.address.replace(/\s*\n\s*/g, ', ')].filter(Boolean).join(' · ')}</div>
       </footer>
     </main>
 

@@ -231,4 +231,13 @@ CREATE TABLE office_activity (
 CREATE INDEX office_activity_at ON office_activity (at);
 `,
   },
+  {
+    // Addresses for the invoice: a client's saved address, and the address a
+    // shipment's invoice is billed to (printed under the client's name).
+    id: 2,
+    sql: `
+ALTER TABLE office_parties ADD COLUMN address TEXT;
+ALTER TABLE office_shipments ADD COLUMN bill_address TEXT;
+`,
+  },
 ];

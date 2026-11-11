@@ -20,7 +20,7 @@ import { nextShipmentRef } from './settings';
 import { ensureInvoice, invoiceStatus, INVOICE_STATUS_LABEL, type InvoiceStatus } from './invoices';
 import { shipmentFigures, type ShipmentFigures } from './ledger';
 import { round2, toUsd, usd, fmtNum, rateMap } from './money';
-import { parseNum, rows as formRows } from './form';
+import { parseNum, cleanAddress, rows as formRows } from './form';
 import {
   SERVICES,
   SHIPMENT_STATUS,
@@ -118,6 +118,8 @@ export interface Shipment {
   tracking_no: string | null;
   status: ShipmentStatus;
   notes: string | null;
+  /** The address its invoice is billed to; empty means the client's saved address. */
+  bill_address: string | null;
   created_by_name: string | null;
   created_at: string;
   updated_at: string;
@@ -159,7 +161,7 @@ export interface CostLine {
 
 const SHIPMENT_SELECT = `
   SELECT s.id, s.ref, s.service, s.client_id, p.name AS client_name, s.ship_date, s.origin, s.destination,
-         s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes,
+         s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
          u.name AS created_by_name, s.created_at, s.updated_at,
          (extract(epoch FROM s.updated_at) * 1000000)::bigint::text AS version,
          i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date
@@ -231,12 +233,14 @@ export interface PartyOption {
   kind: string;
   city: string | null;
   active: boolean;
+  /** clients only: their saved address, to fill the invoice address on the form */
+  address?: string | null;
 }
 
 /** Clients for the form's select: active ones, plus any ids passed (the current client). */
 export async function clientOptions(includeIds: number[] = []): Promise<PartyOption[]> {
   return q<PartyOption>(
-    `SELECT id, name, kind, city, active FROM office_parties
+    `SELECT id, name, kind, city, active, address FROM office_parties
       WHERE kind = 'client' AND (active OR id = ANY($1::int[]))
       ORDER BY lower(name), id`,
     [includeIds],
@@ -405,7 +409,7 @@ export async function listShipments(f: ShipmentFilters, page: number | null, tod
   }
   const rows = await q<Shipment & { payments: number }>(
     `SELECT s.id, s.ref, s.service, s.client_id, p.name AS client_name, s.ship_date, s.origin, s.destination,
-            s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes,
+            s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
             NULL::text AS created_by_name, s.created_at, s.updated_at, ''::text AS version,
             i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date,
             (SELECT COUNT(*) FROM office_payments x WHERE x.shipment_id = s.id) AS payments
@@ -515,6 +519,7 @@ export interface ShipmentForm {
   tracking_no: string;
   status: string;
   notes: string;
+  bill_address: string;
   version: string;
 }
 
@@ -543,7 +548,7 @@ export interface FormState {
 
 const FORM_KEYS: (keyof ShipmentForm)[] = [
   'service', 'ship_date', 'client_id', 'new_client', 'new_client_phone', 'origin', 'destination', 'goods', 'pieces',
-  'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'version',
+  'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'version',
 ];
 const LINE_KEYS: (keyof LineForm)[] = [
   'description', 'qty', 'unit', 'rate', 'amount', 'currency', 'per_usd', 'category', 'payee_id', 'new_payee', 'new_payee_kind', 'per',
@@ -587,6 +592,7 @@ export function newForm(service: ServiceKey, todayStr: string, clientId: number 
     tracking_no: '',
     status: 'booked',
     notes: '',
+    bill_address: '',
     version: '',
   };
   const qtyFor = (per: string) => (per === 'fixed' ? '1' : '');
@@ -640,6 +646,7 @@ export function formFromShipment(s: Shipment, charges: ChargeLine[], costs: Cost
       tracking_no: s.tracking_no ?? '',
       status: s.status,
       notes: s.notes ?? '',
+      bill_address: s.bill_address ?? '',
       version: s.version,
     },
     charges: charges.map((c) => ({
@@ -685,7 +692,7 @@ export function readForm(fd: FormData): FormState {
     return typeof v === 'string' ? v.trim().slice(0, max) : '';
   };
   const form = {} as ShipmentForm;
-  for (const k of FORM_KEYS) form[k] = s(k, k === 'notes' ? 2000 : k === 'goods' ? 500 : 200);
+  for (const k of FORM_KEYS) form[k] = s(k, k === 'notes' ? 2000 : k === 'goods' || k === 'bill_address' ? 600 : 200);
   const line = (r: Record<string, string>): LineForm => {
     const l = {} as LineForm;
     for (const k of LINE_KEYS) l[k] = (r[k] ?? '').slice(0, k === 'description' ? 300 : 120);
@@ -730,6 +737,7 @@ export interface ParsedShipment {
   tracking_no: string | null;
   status: ShipmentStatus;
   notes: string | null;
+  bill_address: string | null;
   version: string | null;
   charges: ParsedLine[];
   costs: ParsedLine[];
@@ -936,6 +944,7 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
       tracking_no: orNull(form.tracking_no.slice(0, 60)),
       status,
       notes: orNull(form.notes.slice(0, 2000)),
+      bill_address: cleanAddress(form.bill_address),
       version: orNull(form.version),
       charges,
       costs,
@@ -1087,7 +1096,7 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
 
     const fields = [
       d.service, clientId, d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg,
-      d.cbm, d.awb_no, d.tracking_no, d.status, d.notes,
+      d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address,
     ];
     let id: number;
     let ref: string;
@@ -1095,8 +1104,8 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
       ref = await nextShipmentRef(Number(d.ship_date.slice(0, 4)), t);
       const row = await one<{ id: number }>(
         `INSERT INTO office_shipments (service, client_id, ship_date, origin, destination, goods, pieces, weight_kg,
-                                       chargeable_kg, cbm, awb_no, tracking_no, status, notes, ref, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id`,
+                                       chargeable_kg, cbm, awb_no, tracking_no, status, notes, bill_address, ref, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
         [...fields, ref, userId],
         t,
       );
@@ -1107,8 +1116,8 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
       await q(
         `UPDATE office_shipments SET service = $1, client_id = $2, ship_date = $3, origin = $4, destination = $5, goods = $6,
                 pieces = $7, weight_kg = $8, chargeable_kg = $9, cbm = $10, awb_no = $11, tracking_no = $12, status = $13,
-                notes = $14, updated_at = now()
-          WHERE id = $15`,
+                notes = $14, bill_address = $15, updated_at = now()
+          WHERE id = $16`,
         [...fields, id],
         t,
       );
@@ -1116,6 +1125,15 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
       await q('DELETE FROM office_costs WHERE shipment_id = $1', [id], t);
     }
     await insertLines(id, d, userId, t);
+    // A client with no saved address keeps this one for their next invoices.
+    if (d.bill_address) {
+      const saved = await one<{ id: number }>(
+        "UPDATE office_parties SET address = $1 WHERE id = $2 AND COALESCE(address, '') = '' RETURNING id",
+        [d.bill_address, clientId],
+        t,
+      );
+      if (saved) notes.push(`The address was also saved for ${clientName}, for their next invoices.`);
+    }
 
     const hadInvoice = await one<{ number: string }>('SELECT number FROM office_invoices WHERE shipment_id = $1', [id], t);
     const inv = await ensureInvoice(id, userId, t);

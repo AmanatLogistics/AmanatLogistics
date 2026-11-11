@@ -272,6 +272,8 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
               <dd>{party.city ?? <span class="muted">—</span>}</dd>
               <dt>Country</dt>
               <dd>{party.country ?? <span class="muted">—</span>}</dd>
+              <dt>Address</dt>
+              <dd style="white-space:pre-line">{party.address ?? <span class="muted">—</span>}</dd>
               {party.notes && (
                 <>
                   <dt>Notes</dt>

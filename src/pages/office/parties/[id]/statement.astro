@@ -89,13 +89,14 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
     <title>Statement — {party.name} — {company}</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <style is:global>
-      @page { size: A4; margin: 14mm; }
+      /* margin 0 leaves the browser no room for its own header and footer (this
+         page's address and title); the sheet's padding gives the margins. */
+      @page { size: A4; margin: 0; }
       body.st-body { background: #ecebec; color: #1f1419; font-family: var(--o-font); font-size: 13px; line-height: 1.4; margin: 0; }
       .st-bar { max-width: 210mm; margin: 0 auto; padding: 14px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
       .st-sheet { background: #fff; max-width: 210mm; margin: 0 auto 32px; padding: 14mm; box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12); }
-      .st-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; border-bottom: 3px solid var(--o-maroon); padding-bottom: 12px; }
-      .st-brand { display: flex; gap: 12px; align-items: center; }
-      .st-brand img { width: 64px; height: auto; }
+      .st-head { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; border-bottom: 3px solid var(--o-maroon); padding-bottom: 12px; }
+      .st-brand img { display: block; width: 78px; height: auto; margin-bottom: 6px; }
       .st-brand strong { display: block; font-family: var(--o-font-head); font-size: 22px; color: var(--o-maroon); line-height: 1.1; }
       .st-brand span { display: block; color: var(--o-muted); font-size: 12px; }
       .st-contact { text-align: right; font-size: 12px; color: #463a40; white-space: pre-line; }
@@ -136,7 +137,7 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
       @media print {
         body.st-body { background: #fff; font-size: 12px; }
         .no-print { display: none !important; }
-        .st-sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+        .st-sheet { box-shadow: none; margin: 0; padding: 14mm; max-width: none; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
         .st-warn { display: none; }
         a { color: inherit; text-decoration: none; }
       }
@@ -156,14 +157,12 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
     <main class="st-sheet">
       <header class="st-head">
         <div class="st-brand">
-          <img src="/images/brand-logo-maroon.png" alt="" width="64" height="61" />
-          <div>
-            <strong>{company}</strong>
-            {settings.companyTagline && <span>{settings.companyTagline}</span>}
-          </div>
+          <img src="/images/brand-logo-maroon.png" alt="" width="78" height="74" />
+          <strong>{company}</strong>
+          {settings.companyTagline && <span>{settings.companyTagline}</span>}
         </div>
         <div class="st-contact">
-          {[settings.address, settings.phone, settings.email, settings.website].filter(Boolean).join('\n')}
+          {[settings.phone, settings.email].filter(Boolean).join('\n')}
         </div>
       </header>
 
@@ -179,8 +178,8 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
         <div class="st-box">
           <div class="lbl">{mode === 'client' ? 'Client' : kindLabel(party.kind)}</div>
           <div class="name">{party.name}</div>
+          {party.address ? <div style="white-space:pre-line">{party.address}</div> : place && <div>{place}</div>}
           {party.phone && <div>{party.phone}</div>}
-          {place && <div>{place}</div>}
         </div>
         <div class="st-box sum">
           <div class="lbl">Balance on {fmtDate(asOf)}</div>
@@ -259,7 +258,7 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
       </p>
 
       <footer class="st-foot">
-        <span>{company} · Statement for {party.name}</span>
+        <span>{[company, settings.address.replace(/\s*\n\s*/g, ', ')].filter(Boolean).join(' · ')} · Statement for {party.name}</span>
         <span>Generated {generated} (Kabul time) by {user.name}</span>
       </footer>
     </main>

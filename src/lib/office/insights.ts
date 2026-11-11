@@ -445,7 +445,9 @@ export interface InvoiceDetail {
     tracking_no: string | null;
     status: ShipmentStatus;
   };
-  client: { id: number; name: string; phone: string | null; city: string | null; country: string | null } | null;
+  client: { id: number; name: string; phone: string | null; city: string | null; country: string | null; address: string | null } | null;
+  /** The address printed under the client's name: the shipment's bill-to address, else the client's saved one. */
+  billTo: string | null;
   charges: {
     id: number;
     description: string;
@@ -469,8 +471,8 @@ export async function getInvoice(id: number, todayStr: string): Promise<InvoiceD
   const r = await one<any>(
     `SELECT i.id, i.number, i.issue_date, i.due_date, i.notes, i.created_at,
             s.id AS s_id, s.ref, s.service, s.ship_date, s.origin, s.destination, s.goods, s.pieces,
-            s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status,
-            p.id AS c_id, p.name AS c_name, p.phone AS c_phone, p.city AS c_city, p.country AS c_country
+            s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.bill_address,
+            p.id AS c_id, p.name AS c_name, p.phone AS c_phone, p.city AS c_city, p.country AS c_country, p.address AS c_address
        FROM office_invoices i
        JOIN office_shipments s ON s.id = i.shipment_id
        LEFT JOIN office_parties p ON p.id = s.client_id
@@ -523,7 +525,8 @@ export async function getInvoice(id: number, todayStr: string): Promise<InvoiceD
       tracking_no: r.tracking_no,
       status: r.status,
     },
-    client: r.c_id ? { id: r.c_id, name: r.c_name, phone: r.c_phone, city: r.c_city, country: r.c_country } : null,
+    client: r.c_id ? { id: r.c_id, name: r.c_name, phone: r.c_phone, city: r.c_city, country: r.c_country, address: r.c_address } : null,
+    billTo: r.bill_address || r.c_address || null,
     charges,
     byCurrency,
     fig,
