@@ -20,6 +20,8 @@ import { pnl, monthlyPnl, balanceTotals, accountBalances } from '../../lib/offic
 import { usd, fmtMoney, fmtDate, fmtNum, today } from '../../lib/office/money';
 import { SERVICES, SERVICE_KEYS } from '../../lib/office/services';
 import { INVOICE_STATUS_LABEL } from '../../lib/office/invoices';
+import { getSettings } from '../../lib/office/settings';
+import { backupState } from '../../lib/office/delivery';
 import {
   balanceGroups,
   listInvoices,
@@ -79,6 +81,14 @@ if (admin) {
   ]);
 }
 const officeCosts = p ? Math.round((p.officeExpenses + p.transferFees) * 100) / 100 : 0;
+// Tell an admin when the backup has stopped going out, so it is never silently off.
+let backupLate: string | null = null;
+if (admin) {
+  const [bs, st] = await Promise.all([backupState(), getSettings()]);
+  const days = bs.lastSentAt ? Math.floor((Date.now() - new Date(bs.lastSentAt).getTime()) / 86_400_000) : null;
+  if (days === null) backupLate = 'No backup of the office has been sent yet.';
+  else if (days > st.backupEveryDays + 1) backupLate = `The last backup went out ${days} days ago (it should go every ${st.backupEveryDays} days).`;
+}
 // "Owed to us" is mostly clients, but also partners we paid ahead of their bills.
 const clientsOwe = groups ? Math.round(groups.owesUs.filter((r) => r.kind === 'client').reduce((a, r) => a + r.balance, 0) * 100) / 100 : 0;
 const paidAhead = totals ? Math.round((totals.receivable - clientsOwe) * 100) / 100 : 0;
@@ -102,6 +112,13 @@ const TILES = 'grid-template-columns:repeat(auto-fit,minmax(150px,1fr))';
     <a class="o-btn" href="/office/expenses/new">Add expense</a>
   </PageHead>
   <Flash />
+  {
+    backupLate && (
+      <div class="o-flash err" role="alert">
+        {backupLate} <a href="/office/settings#backups">Check Backups &amp; reminders in Settings</a>.
+      </div>
+    )
+  }
   <PeriodPicker period={period} action="/office" />
 
   {

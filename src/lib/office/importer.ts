@@ -152,6 +152,7 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'country', help: '' },
       { key: 'notes', help: '' },
       { key: 'address', help: 'printed on their invoices, under their name' },
+      { key: 'active', help: 'yes or no (default yes)' },
     ],
     example: [['Haji Gul Dry Fruit Traders', 'client', '+93 70 123 4567', 'Kandahar', 'Afghanistan', '', 'Shop 12, Fruit Market, Kandahar'], ['Rahim Khan — Kabul agent', 'agent', '+93 79 210 4411', 'Kabul', 'Afghanistan', 'UPS route', '']],
   },
@@ -174,6 +175,7 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'tracking_no', help: 'UPS tracking number' },
       { key: 'status', help: 'booked, in_transit, arrived, delivered, cancelled (default delivered)' },
       { key: 'notes', help: '' },
+      { key: 'bill_address', help: 'address printed on its invoice (default: the client\'s)' },
     ],
     example: [['AML-OLD-101', 'tashkent', '12/03/2026', 'Haji Gul Dry Fruit Traders', 'Kandahar', 'Tashkent → Delhi', 'Dried figs', '40', '1000', '1000', '', '157-12345678', '', 'delivered', '']],
   },
@@ -238,8 +240,9 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'per_usd', help: 'default from Settings' },
       { key: 'method', help: 'default cash' },
       { key: 'reference', help: '' },
+      { key: 'payee_name', help: 'who was paid (optional), matched by name' },
     ],
-    example: [['02/03/2026', 'rent', 'Office rent March', 'Cash box Kandahar (USD)', '600', '1', 'cash', '']],
+    example: [['02/03/2026', 'rent', 'Office rent March', 'Cash box Kandahar (USD)', '600', '1', 'cash', '', '']],
   },
   transfers: {
     label: 'Transfers between accounts',
@@ -426,7 +429,8 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (!pk) errors.push(`Unknown kind "${v('kind')}".`);
       if (L.parties.has(lk(v('name'))) || seenInFile.has(lk(v('name')))) errors.push(`"${v('name')}" already exists.`);
       seenInFile.add(lk(v('name')));
-      data = { name: v('name'), kind: pk, phone: v('phone') || null, city: v('city') || null, country: v('country') || null, notes: v('notes') || null, address: v('address') || null };
+      const active = !/^(no|n|false|0|inactive)$/i.test(v('active'));
+      data = { name: v('name'), kind: pk, phone: v('phone') || null, city: v('city') || null, country: v('country') || null, notes: v('notes') || null, address: v('address') || null, active };
       preview = `${v('name')} (${pk})`;
     } else if (kind === 'shipments') {
       const service = matchEnum(v('service'), SVC_LABELS);
@@ -442,7 +446,7 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (ref) seenInFile.add(lk(ref));
       const nums: Record<string, number | null> = {};
       for (const f of ['pieces', 'weight_kg', 'chargeable_kg', 'cbm']) nums[f] = money(v(f), f, errors);
-      data = { ref: ref || null, service, ship_date: date, client, origin: v('origin') || null, destination: v('destination') || null, goods: v('goods') || null, ...nums, pieces: nums.pieces === null ? null : Math.round(nums.pieces), awb_no: v('awb_no') || null, tracking_no: v('tracking_no') || null, status, notes: v('notes') || null };
+      data = { bill_address: v('bill_address') || null, ref: ref || null, service, ship_date: date, client, origin: v('origin') || null, destination: v('destination') || null, goods: v('goods') || null, ...nums, pieces: nums.pieces === null ? null : Math.round(nums.pieces), awb_no: v('awb_no') || null, tracking_no: v('tracking_no') || null, status, notes: v('notes') || null };
       preview = `${ref || '(new number)'} · ${service ? SERVICES[service as keyof typeof SERVICES].short : '?'} · ${date ?? '?'} · ${v('client_name')}`;
     } else if (kind === 'charges' || kind === 'costs') {
       const sid = L.shipments.get(lk(v('shipment_ref')));
@@ -515,9 +519,10 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       const per = acc ? rateFor(v('per_usd'), acc.currency, errors) : null;
       const method = v('method') ? matchEnum(v('method'), METHODS) : 'cash';
       if (!method) errors.push(`Unknown method "${v('method')}".`);
+      const payee = partyFor(v('payee_name'), 'other', errors);
       if (acc && date && amount !== null && L.expenseKeys.has(expenseKey({ exp_date: date, account_id: acc.id, amount, category, description: v('description') || null })))
         errors.push('This expense is already in the system (same date, account, amount and description), so it is skipped.');
-      data = { exp_date: date, category, description: v('description') || null, account_id: acc?.id, currency: acc?.currency, amount, per_usd: per, method, reference: v('reference') || null };
+      data = { exp_date: date, category, description: v('description') || null, payee, account_id: acc?.id, currency: acc?.currency, amount, per_usd: per, method, reference: v('reference') || null };
       preview = `${date ?? '?'} · ${category} · ${amount ?? '?'} ${acc?.currency ?? ''}`;
     } else if (kind === 'transfers') {
       const date = parseDate(v('tr_date'));
@@ -587,6 +592,7 @@ async function saveChecked(kind: ImportKind, checked: CheckResult, userId: numbe
     kind === 'shipments' ? [d.client as PartyRef, 'client']
     : kind === 'costs' ? [d.payee as PartyRef, kindForCost(d.category as string)]
     : kind === 'payments' ? [d.party as PartyRef, d.direction === 'out' ? 'agent' : 'client']
+    : kind === 'expenses' ? [d.payee as PartyRef, 'other']
     : null;
   const toCreate = new Map<string, [string, string]>();
   for (const d of ok) {
@@ -616,14 +622,14 @@ async function saveChecked(kind: ImportKind, checked: CheckResult, userId: numbe
   if (kind === 'accounts') {
     await insertMany(t, 'office_accounts', ['name', 'type', 'currency', 'opening_balance', 'opening_date', 'notes'], ok.map((d) => [d.name, d.type, d.currency, d.opening, d.opening_date, 'Imported']));
   } else if (kind === 'parties') {
-    await insertMany(t, 'office_parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'address', 'created_by'], ok.map((d) => [d.name, d.kind, d.phone, d.city, d.country, d.notes, d.address, userId]));
+    await insertMany(t, 'office_parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'address', 'active', 'created_by'], ok.map((d) => [d.name, d.kind, d.phone, d.city, d.country, d.notes, d.address, d.active, userId]));
   } else if (kind === 'shipments') {
     const rows: unknown[][] = [];
     for (const d of ok) {
       const ref = (d.ref as string | null) ?? (await nextShipmentRef(Number(String(d.ship_date).slice(0, 4)), t));
-      rows.push([ref, d.service, pid(d.client as PartyRef), d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, userId]);
+      rows.push([ref, d.service, pid(d.client as PartyRef), d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address, userId]);
     }
-    await insertMany(t, 'office_shipments', ['ref', 'service', 'client_id', 'ship_date', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'created_by'], rows);
+    await insertMany(t, 'office_shipments', ['ref', 'service', 'client_id', 'ship_date', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'created_by'], rows);
   } else if (kind === 'charges') {
     const sort = await nextSort('office_charges');
     await insertMany(
@@ -670,8 +676,8 @@ async function saveChecked(kind: ImportKind, checked: CheckResult, userId: numbe
     await insertMany(
       t,
       'office_expenses',
-      ['exp_date', 'category', 'description', 'account_id', 'amount', 'currency', 'per_usd', 'usd', 'method', 'reference', 'created_by'],
-      ok.map((d) => [d.exp_date, d.category, d.description, d.account_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, userId]),
+      ['exp_date', 'category', 'description', 'payee_id', 'account_id', 'amount', 'currency', 'per_usd', 'usd', 'method', 'reference', 'created_by'],
+      ok.map((d) => [d.exp_date, d.category, d.description, pid(d.payee as PartyRef), d.account_id, d.amount, d.currency, d.per_usd, toUsd(d.amount as number, d.per_usd as number), d.method, d.reference, userId]),
     );
   } else if (kind === 'transfers') {
     await insertMany(

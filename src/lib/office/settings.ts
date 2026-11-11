@@ -21,6 +21,14 @@ export interface OfficeSettings {
   shipmentPrefix: string;
   /** Days from issue to due date. */
   dueDays: number;
+  /** Who gets the backup by email (the Excel file and the restore file). */
+  backupEmails: string[];
+  /** WhatsApp numbers (digits, with country code) that get the Excel file. */
+  backupWhatsapp: string[];
+  /** WhatsApp number that gets the list of clients who still owe us. */
+  reminderWhatsapp: string;
+  /** How often the backup goes out. */
+  backupEveryDays: number;
 }
 
 export const DEFAULT_SETTINGS: OfficeSettings = {
@@ -35,6 +43,12 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   invoicePrefix: 'INV',
   shipmentPrefix: 'AML',
   dueDays: 15,
+  // Only the public contact details from the website; staff add the rest in
+  // Settings, so private numbers never sit in this (public) source code.
+  backupEmails: [CONTACT.email],
+  backupWhatsapp: [CONTACT.phoneExport.replace(/\D/g, '')],
+  reminderWhatsapp: CONTACT.phoneExport.replace(/\D/g, ''),
+  backupEveryDays: 3,
 };
 
 /**

@@ -61,6 +61,12 @@ Never compute a balance, profit or due figure in a page. Use:
   Received = payments linked to the shipment + `applied`: the client's payments
   on account (unlinked in − unlinked out to them) handed out over their
   shipments oldest first. Invoice status, "still due" and aging all use it.
+- Backups (`backup.ts`, `delivery.ts`, `xlsx.ts`, `pages/office/api/backup.ts`):
+  the whole office as an Excel workbook plus a restore file in the import
+  bundle format, sent every `backupEveryDays` by email (Resend) and WhatsApp
+  (Cloud API templates), with the unpaid-clients list to the reminder number.
+  Vercel's daily cron calls the endpoint with `CRON_SECRET`; recipients live
+  in Settings (never in this public code). Users and passwords are never in it.
 - Import (`importer.ts`): one CSV per kind, or several kinds at once (several
   files, or one bundle with a `#kind` line before each part) checked together
   in a rolled-back transaction and saved in batches. Rows already in the
