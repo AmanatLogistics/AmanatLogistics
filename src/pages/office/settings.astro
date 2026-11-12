@@ -79,9 +79,11 @@ if (Astro.request.method === 'POST') {
       const reminderRaw = str(fd, 'reminderWhatsapp', 40);
       const reminder = reminderRaw ? normalizePhone(reminderRaw) : '';
       const every = int(fd, 'backupEveryDays');
+      const from = (str(fd, 'backupFrom', 120) ?? '').toLowerCase();
       const bad = [...badEmails.map((e) => `"${e}" is not an email address`), ...phones.filter(([, n]) => !n).map(([p]) => `"${p}" is not a phone number`)];
       if (reminderRaw && !reminder) bad.push(`"${reminderRaw}" is not a phone number`);
       if (every === null || every < 1 || every > 30) bad.push('“Every … days” must be between 1 and 30');
+      if (!isEmail(from)) bad.push(`"${from}" is not an email address to send from`);
       if (bad.length) error = `Not saved: ${bad.join('; ')}. Write WhatsApp numbers with the country code, e.g. +93 70 280 0277.`;
       else {
         await saveSettings({
@@ -89,6 +91,7 @@ if (Astro.request.method === 'POST') {
           backupWhatsapp: [...new Set(phones.map(([, n]) => n!))],
           reminderWhatsapp: reminder ?? '',
           backupEveryDays: every!,
+          backupFrom: from,
         });
         await logActivity(user.id, 'settings_updated', 'settings', null, `Backups: ${emails.length} email, ${phones.length} WhatsApp, reminder ${reminder ? 'on' : 'off'}, every ${every} days`);
         return Astro.redirect(withMsg('/office/settings', 'Backup settings saved.') + '#backups', 303);
@@ -106,7 +109,7 @@ if (Astro.request.method === 'POST') {
         const check = await checkWhatsapp(candidate);
         if (!check.ok) error = `WhatsApp did not accept these details, so they were not saved: ${check.error}`;
         else {
-          await saveWhatsapp({ ...candidate, token });
+          await saveWhatsapp({ ...candidate, token, senderNumber: normalizePhone(check.number) ?? '' });
           await logActivity(user.id, 'settings_updated', 'settings', null, `WhatsApp connected: ${check.number}${check.name ? ` (${check.name})` : ''}`);
           return Astro.redirect(withMsg('/office/settings', `WhatsApp connected — messages will come from ${check.number}${check.name ? ` (${check.name})` : ''}.`) + '#whatsapp', 303);
         }
@@ -228,6 +231,11 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
         Every few days the whole office is sent out as an Excel file, so the records are never only in one place. Each email also carries a restore file: Import → “Import everything at once” rebuilds the office from it.
       </p>
       <label class="o-field">
+        <span>Send the emails from</span>
+        <input name="backupFrom" type="email" value={s.backupFrom} placeholder="info@amanatlogistics.com" />
+        <span class="o-help">Replies come back to this address too. It must be on a domain verified in Resend (resend.com → Domains).</span>
+      </label>
+      <label class="o-field">
         <span>Email the backup to (one per line)</span>
         <textarea name="backupEmails" rows="3" placeholder="info@amanatlogistics.com">{s.backupEmails.join('\n')}</textarea>
       </label>
@@ -239,7 +247,7 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
       <label class="o-field">
         <span>WhatsApp the list of clients who still owe us to</span>
         <input name="reminderWhatsapp" value={s.reminderWhatsapp ? showPhone(s.reminderWhatsapp) : ''} placeholder="+93 70 000 0000" />
-        <span class="o-help">Who owes how much, sent with every backup. Leave empty to send no reminder.</span>
+        <span class="o-help">Who owes how much, sent with every backup. Leave empty to send no reminder. Not the number the messages are sent from: WhatsApp cannot message itself.</span>
       </label>
       <label class="o-field" style="max-width:220px">
         <span>Send every … days</span>
@@ -317,7 +325,7 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
       <ol class="small" style="margin:0;padding-left:18px;display:grid;gap:8px">
         <li>Go to <strong>business.facebook.com</strong> and sign in with Facebook. Create a business account for Amanat Logistics if there is none.</li>
         <li>Go to <strong>developers.facebook.com</strong> → My Apps → <strong>Create app</strong> → choose <strong>Business</strong>, then add the <strong>WhatsApp</strong> product.</li>
-        <li>In WhatsApp → <strong>API Setup</strong>, add the phone number that will <em>send</em> the messages. It must be a number that is <strong>not</strong> used in the WhatsApp app and is not one of the numbers you send to — a new SIM works. Copy its <strong>Phone number ID</strong>.</li>
+        <li>In WhatsApp → <strong>API Setup</strong>, add the phone number that will <em>send</em> the messages, and copy its <strong>Phone number ID</strong>. A new SIM works. To send from the number you already use in the <strong>WhatsApp Business app</strong>, choose Meta's option to connect your existing WhatsApp Business app if it is offered (Meta calls it coexistence; you scan a code in the app and keep using it). The sending number cannot also be one of the numbers it sends to.</li>
         <li>In Business settings → Users → <strong>System users</strong>, add a system user (Admin), give it the app with full control, then <strong>Generate new token</strong> with <em>whatsapp_business_messaging</em> and <em>whatsapp_business_management</em>, set to never expire. Copy the token.</li>
         <li>In <strong>WhatsApp Manager</strong> → Message templates, create these two, both category <strong>Utility</strong>, language <strong>English</strong>:
           <div style="margin-top:6px"><code>office_backup</code> — Header: <strong>Document</strong>. Body:<br /><span class="muted">Amanat Office backup for &#123;&#123;1&#125;&#125;: &#123;&#123;2&#125;&#125;. The Excel file has every shipment, invoice, payment and expense.</span></div>
