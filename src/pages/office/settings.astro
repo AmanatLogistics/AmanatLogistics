@@ -28,6 +28,9 @@ import {
   forgetWhatsapp,
   whatsappConfig,
   checkWhatsapp,
+  checkMailbox,
+  saveMailbox,
+  forgetMailbox,
   type SendResult,
 } from '../../lib/office/delivery';
 
@@ -114,6 +117,28 @@ if (Astro.request.method === 'POST') {
           return Astro.redirect(withMsg('/office/settings', `WhatsApp connected — messages will come from ${check.number}${check.name ? ` (${check.name})` : ''}.`) + '#whatsapp', 303);
         }
       }
+    }
+    if (fd.get('action') === 'mailbox') {
+      const userAddr = (str(fd, 'mailboxUser', 120) ?? '').toLowerCase();
+      // Google shows app passwords in groups of four ("abcd efgh ijkl mnop").
+      const pass = (str(fd, 'mailboxPass', 200) ?? '').replace(/\s+/g, '');
+      if (!isEmail(userAddr)) error = 'Type the email address of the mailbox, e.g. info@amanatlogistics.com.';
+      else if (!pass) error = 'Paste the app password from Google.';
+      else {
+        const check = await checkMailbox({ user: userAddr, pass });
+        if (!check.ok) error = `Not saved: ${check.error}`;
+        else {
+          await saveMailbox({ user: userAddr, pass });
+          await saveSettings({ backupFrom: userAddr });
+          await logActivity(user.id, 'settings_updated', 'settings', null, `Backup email now sent through the ${userAddr} mailbox`);
+          return Astro.redirect(withMsg('/office/settings', `Connected: backup emails now go out from ${userAddr} itself.`) + '#mailbox', 303);
+        }
+      }
+    }
+    if (fd.get('action') === 'mailbox_forget') {
+      await forgetMailbox();
+      await logActivity(user.id, 'settings_updated', 'settings', null, 'Backup email mailbox disconnected');
+      return Astro.redirect(withMsg('/office/settings', 'Mailbox disconnected. Its app password was deleted from the office.') + '#mailbox', 303);
     }
     if (fd.get('action') === 'whatsapp_forget') {
       await forgetWhatsapp();
@@ -260,7 +285,15 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
       <div class="o-card-head"><h2>Backup status</h2></div>
       <dl class="o-kv">
         <dt>Email</dt>
-        <dd>{ch.email ? <span class="pos">Ready</span> : <span class="neg">Not set up — the website's email key (RESEND_API_KEY) is missing on Vercel</span>}</dd>
+        <dd>
+          {ch.mailbox ? (
+            <span class="pos">Sent from {ch.mailbox} itself</span>
+          ) : ch.email ? (
+            <span>Through Resend — to reach every address, connect the info@ mailbox below</span>
+          ) : (
+            <span class="neg">Not set up — connect the info@ mailbox below</span>
+          )}
+        </dd>
         <dt>WhatsApp</dt>
         <dd>{ch.whatsapp ? <span class="pos">Connected</span> : <span class="neg">Not connected yet — see “Connect WhatsApp” below</span>}</dd>
         <dt>Every {s.backupEveryDays} days</dt>
@@ -293,6 +326,44 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
       </div>
     </div>
   </div>
+  <div class="o-grid-2" style="margin-top:16px" id="mailbox">
+    <form method="post" class="o-card o-form" autocomplete="off">
+      <div class="o-card-head"><h2>Send email from the info@ mailbox</h2>{ch.mailbox && <span class="o-badge paid">Connected</span>}</div>
+      <input type="hidden" name="action" value="mailbox" />
+      <p class="o-help" style="margin:0">The backup is sent by the mailbox itself, so it reaches any address and a copy stays in its Sent folder. No website or DNS changes are needed. Checked with Google before it is saved.</p>
+      <label class="o-field">
+        <span>Mailbox address</span>
+        <input name="mailboxUser" type="email" value={ch.mailbox ?? s.backupFrom} />
+      </label>
+      <label class="o-field">
+        <span>Google app password</span>
+        <input name="mailboxPass" type="password" value="" placeholder={ch.mailbox ? 'Saved — paste a new one to change it' : 'abcd efgh ijkl mnop'} />
+        <span class="o-help">Kept in the office database only; never shown again, and never part of a backup.</span>
+      </label>
+      <div class="o-actions">
+        <button class="o-btn primary" type="submit">{ch.mailbox ? 'Save' : 'Connect mailbox'}</button>
+      </div>
+    </form>
+    <div class="o-card">
+      <div class="o-card-head"><h2>How to get the app password (5 minutes, once)</h2></div>
+      <ol class="small" style="margin:0;padding-left:18px;display:grid;gap:8px">
+        <li>Go to <strong>myaccount.google.com</strong> and sign in as <strong>{ch.mailbox ?? s.backupFrom}</strong>.</li>
+        <li>Open <strong>Security</strong> and turn on <strong>2-Step Verification</strong> (Google texts a code to your phone).</li>
+        <li>In the search box at the top, type <strong>App passwords</strong>. Name it <em>Amanat Office</em> and press <strong>Create</strong>.</li>
+        <li>Google shows a 16-letter code. Paste it on the left and press <strong>Connect mailbox</strong>. Then press <strong>Send backup now</strong> above to test.</li>
+      </ol>
+      <p class="o-help" style="margin:12px 0 0">No “App passwords” option? It only appears once 2-Step Verification is on. On a company (Google Workspace) mailbox, the administrator may first have to allow 2-Step Verification in admin.google.com → Security → Authentication.</p>
+      {
+        ch.mailbox && (
+          <form method="post" style="margin-top:14px" onsubmit="return confirm('Disconnect the mailbox? Its app password is deleted from the office.')">
+            <input type="hidden" name="action" value="mailbox_forget" />
+            <button class="o-btn danger sm" type="submit">Disconnect mailbox</button>
+          </form>
+        )
+      }
+    </div>
+  </div>
+
   <div class="o-grid-2" style="margin-top:16px" id="whatsapp">
     <form method="post" class="o-card o-form" autocomplete="off">
       <div class="o-card-head"><h2>Connect WhatsApp</h2>{ch.whatsapp && <span class="o-badge paid">Connected</span>}</div>
