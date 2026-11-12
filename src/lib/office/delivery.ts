@@ -4,18 +4,22 @@
  * backup WhatsApp number, and the reminder number gets the list of clients
  * who still owe us.
  *
- *   Email     Resend, the same account as the website's quote form:
- *             RESEND_API_KEY, and MAIL_FROM from a verified domain.
- *   WhatsApp  The WhatsApp Business Cloud API (Meta): WHATSAPP_TOKEN and
- *             WHATSAPP_PHONE_NUMBER_ID, plus two approved message templates
- *             (WHATSAPP_BACKUP_TEMPLATE, WHATSAPP_REMINDER_TEMPLATE). A
- *             business may only start a WhatsApp conversation with an
- *             approved template, so both messages are templates.
- *   Schedule  Vercel calls /office/api/backup once a day (vercel.json) with
- *             CRON_SECRET; it sends when the last backup is old enough.
+ *   Email     Resend, the same account as the website's quote form
+ *             (RESEND_API_KEY). The sender is MAIL_FROM when set; otherwise
+ *             the site's own domain is tried and, if Resend has not verified
+ *             it, Resend's test sender (which only reaches the Resend
+ *             account's own address).
+ *   WhatsApp  The WhatsApp Business Cloud API (Meta): an access token and the
+ *             sending number's ID, saved in Settings (or WHATSAPP_TOKEN and
+ *             WHATSAPP_PHONE_NUMBER_ID on Vercel), plus two approved message
+ *             templates. A business may only start a WhatsApp conversation
+ *             with an approved template, so both messages are templates.
+ *   Schedule  Vercel calls /office/api/backup once a day (vercel.json); it
+ *             sends when the last backup is old enough.
  */
 import { Resend } from 'resend';
 import { env } from '../store';
+import { SITE } from '../../consts';
 import { one, q } from './db';
 import { getSettings, type OfficeSettings } from './settings';
 import { logActivity } from './activity';
@@ -65,15 +69,48 @@ export function showPhone(d: string): string {
 
 /* ---------- which services are set up ---------- */
 
-export function channels() {
+/**
+ * The WhatsApp connection. Saved from Settings into its own row (so the token
+ * is not carried around with the ordinary settings, and is never part of a
+ * backup); the Vercel variables are used for anything not saved there.
+ */
+export interface WhatsappConfig {
+  token: string;
+  phoneId: string;
+  backupTemplate: string;
+  reminderTemplate: string;
+  lang: string;
+}
+
+export async function whatsappConfig(): Promise<WhatsappConfig> {
+  const row = await one<{ value: Partial<WhatsappConfig> }>("SELECT value FROM office_settings WHERE key = 'whatsapp'");
+  const v = row?.value ?? {};
   return {
-    email: Boolean(env('RESEND_API_KEY')),
-    emailFrom: env('MAIL_FROM') || null,
-    whatsapp: Boolean(env('WHATSAPP_TOKEN') && env('WHATSAPP_PHONE_NUMBER_ID')),
-    schedule: Boolean(env('CRON_SECRET')),
-    backupTemplate: env('WHATSAPP_BACKUP_TEMPLATE') || 'office_backup',
-    reminderTemplate: env('WHATSAPP_REMINDER_TEMPLATE') || 'unpaid_reminder',
+    token: v.token || env('WHATSAPP_TOKEN') || '',
+    phoneId: v.phoneId || env('WHATSAPP_PHONE_NUMBER_ID') || '',
+    backupTemplate: v.backupTemplate || env('WHATSAPP_BACKUP_TEMPLATE') || 'office_backup',
+    reminderTemplate: v.reminderTemplate || env('WHATSAPP_REMINDER_TEMPLATE') || 'unpaid_reminder',
+    lang: v.lang || env('WHATSAPP_TEMPLATE_LANG') || 'en',
   };
+}
+
+/** Save the connection. An empty token keeps the one already saved. */
+export async function saveWhatsapp(patch: Partial<WhatsappConfig>): Promise<void> {
+  const clean = Object.fromEntries(Object.entries(patch).filter(([k, v]) => !(k === 'token' && !v)));
+  await q(
+    `INSERT INTO office_settings (key, value) VALUES ('whatsapp', $1::jsonb)
+     ON CONFLICT (key) DO UPDATE SET value = office_settings.value || EXCLUDED.value`,
+    [JSON.stringify(clean)],
+  );
+}
+
+export async function forgetWhatsapp(): Promise<void> {
+  await q("DELETE FROM office_settings WHERE key = 'whatsapp'");
+}
+
+export async function channels() {
+  const wa = await whatsappConfig();
+  return { email: Boolean(env('RESEND_API_KEY')), whatsapp: Boolean(wa.token && wa.phoneId), wa };
 }
 
 /* ---------- state ---------- */
@@ -137,28 +174,48 @@ function emailHtml(b: Backup, s: OfficeSettings): string {
 </div>`;
 }
 
+/**
+ * Who the email is from. MAIL_FROM when it is set; otherwise the site's own
+ * domain first and, when Resend answers that the domain is not verified,
+ * Resend's test sender — which delivers only to the Resend account's own
+ * address, but that is better than nothing going out.
+ */
+function senders(s: OfficeSettings): string[] {
+  const set = env('MAIL_FROM');
+  if (set) return [set];
+  const name = s.companyName.replace(/[<>"\r\n]/g, '').trim() || SITE.name;
+  return [`${name} <backup@${new URL(SITE.domain).hostname}>`, `${name} <onboarding@resend.dev>`];
+}
+
+const TEST_SENDER_HINT = ' (Email can reach other addresses once amanatlogistics.com is verified in Resend → Domains.)';
+
 async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: string; csvName: string }): Promise<SendResult[]> {
   const to = s.backupEmails.filter(isEmail);
   if (!to.length) return [];
   const key = env('RESEND_API_KEY');
   if (!key) return to.map((t) => ({ to: t, ok: false, error: 'Email is not set up (RESEND_API_KEY missing on Vercel).' }));
   const resend = new Resend(key);
-  const from = env('MAIL_FROM') || 'Amanat Logistics <onboarding@resend.dev>';
+  const from = senders(s);
+  const mail = {
+    subject: `${s.companyName} — office backup ${fmtDate(b.date)}`,
+    html: emailHtml(b, s),
+    attachments: [
+      { filename: files.xlsxName, content: b.xlsx },
+      { filename: files.csvName, content: Buffer.from(b.restoreCsv, 'utf8') },
+    ],
+  };
   // One email each, so one bad address does not stop the others.
   const results: SendResult[] = [];
   for (const t of to) {
     try {
-      const { error } = await resend.emails.send({
-        from,
-        to: [t],
-        subject: `${s.companyName} — office backup ${fmtDate(b.date)}`,
-        html: emailHtml(b, s),
-        attachments: [
-          { filename: files.xlsxName, content: b.xlsx },
-          { filename: files.csvName, content: Buffer.from(b.restoreCsv, 'utf8') },
-        ],
-      });
-      results.push(error ? { to: t, ok: false, error: error.message } : { to: t, ok: true });
+      let { error } = await resend.emails.send({ ...mail, from: from[0], to: [t] });
+      // The domain is not verified in Resend: use the test sender from here on.
+      if (error && from.length > 1 && /domain/i.test(error.message) && /verif/i.test(error.message)) {
+        from.shift();
+        ({ error } = await resend.emails.send({ ...mail, from: from[0], to: [t] }));
+      }
+      if (!error) results.push({ to: t, ok: true });
+      else results.push({ to: t, ok: false, error: error.message + (/testing emails|verify a domain/i.test(error.message) ? TEST_SENDER_HINT : '') });
     } catch (e) {
       results.push({ to: t, ok: false, error: e instanceof Error ? e.message : String(e) });
     }
@@ -169,12 +226,40 @@ async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: strin
 /* ---------- WhatsApp (Cloud API) ---------- */
 
 // WHATSAPP_GRAPH_URL only points the office at a test server instead of Meta's.
-const graph = () => `${env('WHATSAPP_GRAPH_URL') || 'https://graph.facebook.com'}/${env('WHATSAPP_API_VERSION') || 'v23.0'}/${env('WHATSAPP_PHONE_NUMBER_ID')}`;
-const auth = () => ({ Authorization: `Bearer ${env('WHATSAPP_TOKEN')}` });
+const graph = (wa: WhatsappConfig) => `${env('WHATSAPP_GRAPH_URL') || 'https://graph.facebook.com'}/${env('WHATSAPP_API_VERSION') || 'v23.0'}/${encodeURIComponent(wa.phoneId)}`;
+const auth = (wa: WhatsappConfig) => ({ Authorization: `Bearer ${wa.token}` });
+
+/** What Meta's commonest refusals mean, in plain words. */
+const GRAPH_HINTS: Record<number, string> = {
+  190: 'The WhatsApp access token is wrong or has expired — paste a new permanent token in Settings.',
+  100: 'WhatsApp did not accept the request — check the Phone number ID in Settings.',
+  131026: 'This number cannot receive the message (not on WhatsApp, or it has not accepted WhatsApp\'s latest terms).',
+  131030: 'This number is not on the test list — add it in Meta\'s API Setup, or finish registering your own sending number.',
+  131047: 'More than 24 hours since this number last wrote to us, and the message was not sent as a template.',
+  132000: 'The message template expects a different number of values — recreate it with the text shown in Settings.',
+  132001: 'The message template was not found in this language — check its name and language in WhatsApp Manager.',
+  132012: 'The message template is not set up as the office expects — recreate it with the text shown in Settings.',
+  132015: 'The message template is paused by WhatsApp for low quality.',
+};
 
 async function graphError(r: Response): Promise<string> {
-  const j = (await r.json().catch(() => null)) as { error?: { message?: string; error_data?: { details?: string } } } | null;
-  return j?.error?.error_data?.details || j?.error?.message || `HTTP ${r.status}`;
+  const j = (await r.json().catch(() => null)) as { error?: { code?: number; message?: string; error_data?: { details?: string } } } | null;
+  const raw = j?.error?.error_data?.details || j?.error?.message || `HTTP ${r.status}`;
+  const hint = j?.error?.code !== undefined ? GRAPH_HINTS[j.error.code] : undefined;
+  return hint ? `${hint} (${raw})` : raw;
+}
+
+/** Ask Meta whether the saved token and number work. Used right after saving them. */
+export async function checkWhatsapp(wa: WhatsappConfig): Promise<{ ok: true; number: string; name: string } | { ok: false; error: string }> {
+  if (!wa.token || !wa.phoneId) return { ok: false, error: 'The access token and the Phone number ID are both needed.' };
+  try {
+    const r = await fetch(`${graph(wa)}?fields=display_phone_number,verified_name`, { headers: auth(wa) });
+    if (!r.ok) return { ok: false, error: await graphError(r) };
+    const j = (await r.json()) as { display_phone_number?: string; verified_name?: string };
+    return { ok: true, number: j.display_phone_number ?? '', name: j.verified_name ?? '' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 /** A template text value: one line, no tabs, no runs of spaces, at most `max` characters. */
@@ -183,26 +268,26 @@ const oneLine = (s: string, max = 900) => {
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 };
 
-async function uploadMedia(file: Buffer, filename: string, mime: string): Promise<string> {
+async function uploadMedia(wa: WhatsappConfig, file: Buffer, filename: string, mime: string): Promise<string> {
   const fd = new FormData();
   fd.append('messaging_product', 'whatsapp');
   fd.append('type', mime);
   fd.append('file', new Blob([new Uint8Array(file)], { type: mime }), filename);
-  const r = await fetch(`${graph()}/media`, { method: 'POST', headers: auth(), body: fd });
+  const r = await fetch(`${graph(wa)}/media`, { method: 'POST', headers: auth(wa), body: fd });
   if (!r.ok) throw new Error(`Could not upload the file to WhatsApp: ${await graphError(r)}`);
   return ((await r.json()) as { id: string }).id;
 }
 
-async function sendTemplate(to: string, name: string, components: unknown[]): Promise<SendResult> {
+async function sendTemplate(wa: WhatsappConfig, to: string, name: string, components: unknown[]): Promise<SendResult> {
   try {
-    const r = await fetch(`${graph()}/messages`, {
+    const r = await fetch(`${graph(wa)}/messages`, {
       method: 'POST',
-      headers: { ...auth(), 'content-type': 'application/json' },
+      headers: { ...auth(wa), 'content-type': 'application/json' },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to,
         type: 'template',
-        template: { name, language: { code: env('WHATSAPP_TEMPLATE_LANG') || 'en' }, components },
+        template: { name, language: { code: wa.lang }, components },
       }),
     });
     return r.ok ? { to, ok: true } : { to, ok: false, error: await graphError(r) };
@@ -229,6 +314,8 @@ export function debtorLine(b: Backup, max = 700): string {
 
 /* ---------- the run ---------- */
 
+const RETRY_AFTER_HOURS = 6;
+
 /**
  * Build the backup and send it. `force` sends even if the last one is recent
  * (the "Send backup now" button); the daily schedule passes false.
@@ -239,7 +326,10 @@ export async function runBackup(opts: { force: boolean; trigger: 'schedule' | 'm
   if (!opts.force) {
     const due = nextDue(state, s);
     // Three hours early is still on time: the daily schedule fires at about the same hour.
-    if (due && due.getTime() - Date.now() > 3 * 3_600_000) return { skipped: `Not due until ${due.toISOString()}.` };
+    if (due && due.getTime() - Date.now() > 3 * 3_600_000) return { skipped: 'Not due yet.' };
+    // After a try (whatever came of it), the schedule waits before trying again,
+    // so calling the address over and over cannot make the office work or send.
+    if (state.lastAttemptAt && Date.now() - new Date(state.lastAttemptAt).getTime() < RETRY_AFTER_HOURS * 3_600_000) return { skipped: 'Tried a short while ago.' };
   }
   if (!(await claim())) return { skipped: 'A backup is being sent right now.' };
   const at = new Date().toISOString();
@@ -253,20 +343,21 @@ export async function runBackup(opts: { force: boolean; trigger: 'schedule' | 'm
 
     let whatsapp: SendResult[] = [];
     let reminder: SendResult | null = null;
-    const ch = channels();
+    const ch = await channels();
+    const wa = ch.wa;
     const waTo = s.backupWhatsapp;
     if ((waTo.length || s.reminderWhatsapp) && !ch.whatsapp) {
-      notes.push('WhatsApp is not set up (WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID missing on Vercel).');
-      whatsapp = waTo.map((t) => ({ to: t, ok: false, error: 'WhatsApp is not set up.' }));
-      if (s.reminderWhatsapp) reminder = { to: s.reminderWhatsapp, ok: false, error: 'WhatsApp is not set up.' };
+      notes.push('WhatsApp is not connected yet — see “Connect WhatsApp” in Settings.');
+      whatsapp = waTo.map((t) => ({ to: t, ok: false, error: 'WhatsApp is not connected yet.' }));
+      if (s.reminderWhatsapp) reminder = { to: s.reminderWhatsapp, ok: false, error: 'WhatsApp is not connected yet.' };
     } else if (ch.whatsapp) {
       if (waTo.length) {
         try {
-          const media = await uploadMedia(b.xlsx, xlsxName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          const media = await uploadMedia(wa, b.xlsx, xlsxName, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
           const summary = oneLine(`${b.counts.shipments} shipments, ${b.counts.payments} payments; clients owe us ${usd(b.debtors.reduce((a, d) => a + d.owes, 0))}`);
           for (const t of waTo) {
             whatsapp.push(
-              await sendTemplate(t, ch.backupTemplate, [
+              await sendTemplate(wa, t, wa.backupTemplate, [
                 { type: 'header', parameters: [{ type: 'document', document: { id: media, filename: xlsxName } }] },
                 { type: 'body', parameters: [{ type: 'text', text: fmtDate(b.date) }, { type: 'text', text: summary }] },
               ]),
@@ -279,7 +370,7 @@ export async function runBackup(opts: { force: boolean; trigger: 'schedule' | 'm
       }
       if (s.reminderWhatsapp) {
         const total = b.debtors.reduce((a, d) => a + d.owes, 0);
-        reminder = await sendTemplate(s.reminderWhatsapp, ch.reminderTemplate, [
+        reminder = await sendTemplate(wa, s.reminderWhatsapp, wa.reminderTemplate, [
           {
             type: 'body',
             parameters: [

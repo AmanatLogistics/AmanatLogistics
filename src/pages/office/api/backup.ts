@@ -2,9 +2,11 @@
  * Called once a day by Vercel's scheduler (vercel.json → crons). Sends the
  * backup when the last one is older than Settings → "Every … days".
  *
- * Only Vercel's scheduler can call it: it sends "Authorization: Bearer
- * <CRON_SECRET>", and without CRON_SECRET set nothing runs. The answer says
- * what happened, never any of the data.
+ * Safe to leave open: a call can only send a backup that is already due, to
+ * the recipients saved in Settings, at most once every few hours, and the
+ * answer says what happened, never any of the data. When CRON_SECRET is set
+ * on Vercel, Vercel's scheduler sends it ("Authorization: Bearer …") and any
+ * other caller is refused.
  */
 import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
@@ -14,11 +16,11 @@ import { runBackup } from '../../../lib/office/delivery';
 export const prerender = false;
 
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
 
 function allowed(request: Request): boolean {
   const secret = env('CRON_SECRET');
-  if (!secret || secret.length < 16) return false;
+  if (!secret) return true;
   const got = Buffer.from(request.headers.get('authorization') ?? '');
   const want = Buffer.from(`Bearer ${secret}`);
   return got.length === want.length && timingSafeEqual(got, want);
@@ -35,7 +37,6 @@ export const GET: APIRoute = async ({ request }) => {
       email: `${sent(r.report.email)}/${r.report.email.length}`,
       whatsapp: `${sent(r.report.whatsapp)}/${r.report.whatsapp.length}`,
       reminder: r.report.reminder ? r.report.reminder.ok : null,
-      notes: r.report.notes,
     });
   } catch (e) {
     console.error('Backup failed:', e);

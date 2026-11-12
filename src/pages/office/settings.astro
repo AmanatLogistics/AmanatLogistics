@@ -16,7 +16,20 @@ import { logActivity } from '../../lib/office/activity';
 import { str, int, parseNum, withMsg } from '../../lib/office/form';
 import { fmtDate } from '../../lib/office/money';
 import { buildBackup } from '../../lib/office/backup';
-import { runBackup, backupState, nextDue, channels, normalizePhone, isEmail, showPhone, type SendResult } from '../../lib/office/delivery';
+import {
+  runBackup,
+  backupState,
+  nextDue,
+  channels,
+  normalizePhone,
+  isEmail,
+  showPhone,
+  saveWhatsapp,
+  forgetWhatsapp,
+  whatsappConfig,
+  checkWhatsapp,
+  type SendResult,
+} from '../../lib/office/delivery';
 
 export const prerender = false;
 const user = await guard(Astro, { admin: true });
@@ -81,6 +94,29 @@ if (Astro.request.method === 'POST') {
         return Astro.redirect(withMsg('/office/settings', 'Backup settings saved.') + '#backups', 303);
       }
     }
+    if (fd.get('action') === 'whatsapp') {
+      const phoneId = (str(fd, 'phoneId', 40) ?? '').replace(/\s+/g, '');
+      const token = (str(fd, 'token', 1000) ?? '').replace(/\s+/g, '');
+      const name = (k: string, d: string) => (str(fd, k, 60) ?? d).toLowerCase().replace(/[^a-z0-9_]/g, '') || d;
+      const lang = (str(fd, 'lang', 10) ?? 'en').replace(/[^A-Za-z_]/g, '') || 'en';
+      if (!/^\d{5,25}$/.test(phoneId)) error = 'The Phone number ID is the long number on Meta’s “API Setup” page (only digits).';
+      else {
+        const saved = await whatsappConfig();
+        const candidate = { token: token || saved.token, phoneId, backupTemplate: name('backupTemplate', 'office_backup'), reminderTemplate: name('reminderTemplate', 'unpaid_reminder'), lang };
+        const check = await checkWhatsapp(candidate);
+        if (!check.ok) error = `WhatsApp did not accept these details, so they were not saved: ${check.error}`;
+        else {
+          await saveWhatsapp({ ...candidate, token });
+          await logActivity(user.id, 'settings_updated', 'settings', null, `WhatsApp connected: ${check.number}${check.name ? ` (${check.name})` : ''}`);
+          return Astro.redirect(withMsg('/office/settings', `WhatsApp connected — messages will come from ${check.number}${check.name ? ` (${check.name})` : ''}.`) + '#whatsapp', 303);
+        }
+      }
+    }
+    if (fd.get('action') === 'whatsapp_forget') {
+      await forgetWhatsapp();
+      await logActivity(user.id, 'settings_updated', 'settings', null, 'WhatsApp disconnected');
+      return Astro.redirect(withMsg('/office/settings', 'WhatsApp disconnected. Its access token was deleted from the office.') + '#whatsapp', 303);
+    }
     if (fd.get('action') === 'backup_now') {
       try {
         const r = await runBackup({ force: true, trigger: 'manual', userId: user.id });
@@ -127,7 +163,7 @@ if (Astro.request.method === 'POST') {
 
 const s = await getSettings();
 const currencies = await listCurrencies();
-const ch = channels();
+const ch = await channels();
 const bs = await backupState();
 const due = nextDue(bs, s);
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -216,15 +252,15 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
       <div class="o-card-head"><h2>Backup status</h2></div>
       <dl class="o-kv">
         <dt>Email</dt>
-        <dd>{ch.email ? (ch.emailFrom ? <span class="pos">Ready</span> : <span class="neg">Ready, but MAIL_FROM is not set — Resend's test sender only delivers to the Resend account's own address</span>) : <span class="neg">Not set up (RESEND_API_KEY)</span>}</dd>
+        <dd>{ch.email ? <span class="pos">Ready</span> : <span class="neg">Not set up — the website's email key (RESEND_API_KEY) is missing on Vercel</span>}</dd>
         <dt>WhatsApp</dt>
-        <dd>{ch.whatsapp ? <span class="pos">Ready</span> : <span class="neg">Not set up (WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID)</span>}</dd>
+        <dd>{ch.whatsapp ? <span class="pos">Connected</span> : <span class="neg">Not connected yet — see “Connect WhatsApp” below</span>}</dd>
         <dt>Every {s.backupEveryDays} days</dt>
-        <dd>{ch.schedule ? <span class="pos">On</span> : <span class="neg">Off until CRON_SECRET is set</span>}</dd>
+        <dd><span class="pos">On</span></dd>
         <dt>Last sent</dt>
         <dd>{bs.lastSentAt ? when(bs.lastSentAt) : <span class="muted">Never</span>}</dd>
         <dt>Next</dt>
-        <dd>{ch.schedule ? (due ? fmtDate(due.toISOString().slice(0, 10)) : 'At the next daily check (about 6:45 in the morning, Kabul time)') : <span class="muted">—</span>}</dd>
+        <dd>{due && due.getTime() > Date.now() ? fmtDate(due.toISOString().slice(0, 10)) : 'At the next daily check (about 6:45 in the morning, Kabul time)'}</dd>
       </dl>
       {
         bs.last && (
@@ -247,6 +283,56 @@ const result = (r: SendResult, phone = false) => `${phone ? showPhone(r.to) : r.
         <a class="o-btn" href="/office/settings?download=xlsx" data-astro-prefetch="false">Download Excel</a>
         <a class="o-btn" href="/office/settings?download=restore" data-astro-prefetch="false">Download restore file</a>
       </div>
+    </div>
+  </div>
+  <div class="o-grid-2" style="margin-top:16px" id="whatsapp">
+    <form method="post" class="o-card o-form" autocomplete="off">
+      <div class="o-card-head"><h2>Connect WhatsApp</h2>{ch.whatsapp && <span class="o-badge paid">Connected</span>}</div>
+      <input type="hidden" name="action" value="whatsapp" />
+      <p class="o-help" style="margin:0">Paste the two codes from Meta (steps on the right). They are checked with WhatsApp before they are saved.</p>
+      <label class="o-field">
+        <span>Phone number ID</span>
+        <input name="phoneId" value={ch.wa.phoneId} inputmode="numeric" placeholder="e.g. 106540352242922" />
+      </label>
+      <label class="o-field">
+        <span>Permanent access token</span>
+        <input name="token" type="password" value="" placeholder={ch.wa.token ? 'Saved — leave empty to keep it' : 'EAAG…'} />
+        <span class="o-help">Kept in the office database only; never shown again, and never part of a backup.</span>
+      </label>
+      <details>
+        <summary class="small muted" style="cursor:pointer">Template names and language (only if you named them differently)</summary>
+        <div class="o-row" style="margin-top:8px">
+          <label class="o-field"><span>Backup template</span><input name="backupTemplate" value={ch.wa.backupTemplate} /></label>
+          <label class="o-field"><span>Reminder template</span><input name="reminderTemplate" value={ch.wa.reminderTemplate} /></label>
+          <label class="o-field" style="max-width:120px"><span>Language</span><input name="lang" value={ch.wa.lang} /></label>
+        </div>
+      </details>
+      <div class="o-actions">
+        <button class="o-btn primary" type="submit">{ch.whatsapp ? 'Save changes' : 'Connect WhatsApp'}</button>
+      </div>
+    </form>
+
+    <div class="o-card">
+      <div class="o-card-head"><h2>How to get the codes (about 20 minutes, once)</h2></div>
+      <ol class="small" style="margin:0;padding-left:18px;display:grid;gap:8px">
+        <li>Go to <strong>business.facebook.com</strong> and sign in with Facebook. Create a business account for Amanat Logistics if there is none.</li>
+        <li>Go to <strong>developers.facebook.com</strong> → My Apps → <strong>Create app</strong> → choose <strong>Business</strong>, then add the <strong>WhatsApp</strong> product.</li>
+        <li>In WhatsApp → <strong>API Setup</strong>, add the phone number that will <em>send</em> the messages. It must be a number that is <strong>not</strong> used in the WhatsApp app and is not one of the numbers you send to — a new SIM works. Copy its <strong>Phone number ID</strong>.</li>
+        <li>In Business settings → Users → <strong>System users</strong>, add a system user (Admin), give it the app with full control, then <strong>Generate new token</strong> with <em>whatsapp_business_messaging</em> and <em>whatsapp_business_management</em>, set to never expire. Copy the token.</li>
+        <li>In <strong>WhatsApp Manager</strong> → Message templates, create these two, both category <strong>Utility</strong>, language <strong>English</strong>:
+          <div style="margin-top:6px"><code>office_backup</code> — Header: <strong>Document</strong>. Body:<br /><span class="muted">Amanat Office backup for &#123;&#123;1&#125;&#125;: &#123;&#123;2&#125;&#125;. The Excel file has every shipment, invoice, payment and expense.</span></div>
+          <div style="margin-top:6px"><code>unpaid_reminder</code> — Body:<br /><span class="muted">Payment reminder: &#123;&#123;1&#125;&#125; clients still owe Amanat Logistics &#123;&#123;2&#125;&#125; in total. &#123;&#123;3&#125;&#125;. The full list is in the latest backup.</span></div>
+        </li>
+        <li>Paste the Phone number ID and the token on the left and press <strong>Connect WhatsApp</strong>. When Meta has approved the templates (minutes to a day), press <strong>Send backup now</strong> above to test.</li>
+      </ol>
+      {
+        ch.whatsapp && (
+          <form method="post" style="margin-top:14px" onsubmit="return confirm('Disconnect WhatsApp? The access token is deleted from the office.')">
+            <input type="hidden" name="action" value="whatsapp_forget" />
+            <button class="o-btn danger sm" type="submit">Disconnect WhatsApp</button>
+          </form>
+        )
+      }
     </div>
   </div>
 </OfficeLayout>

@@ -65,8 +65,10 @@ Never compute a balance, profit or due figure in a page. Use:
   the whole office as an Excel workbook plus a restore file in the import
   bundle format, sent every `backupEveryDays` by email (Resend) and WhatsApp
   (Cloud API templates), with the unpaid-clients list to the reminder number.
-  Vercel's daily cron calls the endpoint with `CRON_SECRET`; recipients live
-  in Settings (never in this public code). Users and passwords are never in it.
+  Vercel's daily cron calls the endpoint, which only sends a backup that is
+  due (`CRON_SECRET` optional). Recipients and the WhatsApp connection live in
+  Settings (never in this public code). Users, passwords and the WhatsApp
+  token are never in a backup.
 - Import (`importer.ts`): one CSV per kind, or several kinds at once (several
   files, or one bundle with a `#kind` line before each part) checked together
   in a rolled-back transaction and saved in batches. Rows already in the
