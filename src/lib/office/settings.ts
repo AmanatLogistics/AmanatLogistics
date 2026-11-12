@@ -29,6 +29,8 @@ export interface OfficeSettings {
   reminderWhatsapp: string;
   /** How often the backup goes out. */
   backupEveryDays: number;
+  /** The address backup emails come from (and replies go to). */
+  backupFrom: string;
 }
 
 export const DEFAULT_SETTINGS: OfficeSettings = {
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   backupWhatsapp: [CONTACT.phoneExport.replace(/\D/g, '')],
   reminderWhatsapp: CONTACT.phoneExport.replace(/\D/g, ''),
   backupEveryDays: 3,
+  backupFrom: CONTACT.email,
 };
 
 /**

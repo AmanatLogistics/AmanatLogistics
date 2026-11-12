@@ -5,10 +5,10 @@
  * who still owe us.
  *
  *   Email     Resend, the same account as the website's quote form
- *             (RESEND_API_KEY). The sender is MAIL_FROM when set; otherwise
- *             the site's own domain is tried and, if Resend has not verified
- *             it, Resend's test sender (which only reaches the Resend
- *             account's own address).
+ *             (RESEND_API_KEY), sent from Settings → "Send from"
+ *             (info@amanatlogistics.com). If Resend has not verified that
+ *             domain, MAIL_FROM and then Resend's test sender are tried (the
+ *             test sender only reaches the Resend account's own address).
  *   WhatsApp  The WhatsApp Business Cloud API (Meta): an access token and the
  *             sending number's ID, saved in Settings (or WHATSAPP_TOKEN and
  *             WHATSAPP_PHONE_NUMBER_ID on Vercel), plus two approved message
@@ -80,6 +80,8 @@ export interface WhatsappConfig {
   backupTemplate: string;
   reminderTemplate: string;
   lang: string;
+  /** The connected sending number (digits), as WhatsApp reported it. */
+  senderNumber?: string;
 }
 
 export async function whatsappConfig(): Promise<WhatsappConfig> {
@@ -91,6 +93,7 @@ export async function whatsappConfig(): Promise<WhatsappConfig> {
     backupTemplate: v.backupTemplate || env('WHATSAPP_BACKUP_TEMPLATE') || 'office_backup',
     reminderTemplate: v.reminderTemplate || env('WHATSAPP_REMINDER_TEMPLATE') || 'unpaid_reminder',
     lang: v.lang || env('WHATSAPP_TEMPLATE_LANG') || 'en',
+    senderNumber: v.senderNumber || '',
   };
 }
 
@@ -175,16 +178,17 @@ function emailHtml(b: Backup, s: OfficeSettings): string {
 }
 
 /**
- * Who the email is from. MAIL_FROM when it is set; otherwise the site's own
- * domain first and, when Resend answers that the domain is not verified,
- * Resend's test sender — which delivers only to the Resend account's own
- * address, but that is better than nothing going out.
+ * Who the email is from, in the order tried: the "Send from" address in
+ * Settings (info@amanatlogistics.com); the quote form's MAIL_FROM; Resend's
+ * test sender. The next one is only tried when Resend answers that the
+ * domain is not verified — the test sender reaches only the Resend account's
+ * own address, but that is better than nothing going out.
  */
 function senders(s: OfficeSettings): string[] {
-  const set = env('MAIL_FROM');
-  if (set) return [set];
   const name = s.companyName.replace(/[<>"\r\n]/g, '').trim() || SITE.name;
-  return [`${name} <backup@${new URL(SITE.domain).hostname}>`, `${name} <onboarding@resend.dev>`];
+  const own = isEmail(s.backupFrom) ? `${name} <${s.backupFrom}>` : null;
+  const set = env('MAIL_FROM');
+  return [...new Set([own, set, `${name} <onboarding@resend.dev>`].filter((x): x is string => Boolean(x)))];
 }
 
 const TEST_SENDER_HINT = ' (Email can reach other addresses once amanatlogistics.com is verified in Resend → Domains.)';
@@ -197,6 +201,7 @@ async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: strin
   const resend = new Resend(key);
   const from = senders(s);
   const mail = {
+    ...(isEmail(s.backupFrom) ? { replyTo: s.backupFrom } : {}),
     subject: `${s.companyName} — office backup ${fmtDate(b.date)}`,
     html: emailHtml(b, s),
     attachments: [
@@ -209,8 +214,8 @@ async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: strin
   for (const t of to) {
     try {
       let { error } = await resend.emails.send({ ...mail, from: from[0], to: [t] });
-      // The domain is not verified in Resend: use the test sender from here on.
-      if (error && from.length > 1 && /domain/i.test(error.message) && /verif/i.test(error.message)) {
+      // The domain is not verified in Resend: use the next sender from here on.
+      while (error && from.length > 1 && /domain/i.test(error.message) && /verif/i.test(error.message)) {
         from.shift();
         ({ error } = await resend.emails.send({ ...mail, from: from[0], to: [t] }));
       }
@@ -345,7 +350,11 @@ export async function runBackup(opts: { force: boolean; trigger: 'schedule' | 'm
     let reminder: SendResult | null = null;
     const ch = await channels();
     const wa = ch.wa;
-    const waTo = s.backupWhatsapp;
+    // A WhatsApp number cannot send messages to itself.
+    const self = (n: string): SendResult | null =>
+      wa.senderNumber && n === wa.senderNumber ? { to: n, ok: false, error: 'This is the number the messages are sent from, and WhatsApp cannot send a number messages from itself. Choose another number for this in Settings.' } : null;
+    const waTo = s.backupWhatsapp.filter((n) => !self(n));
+    const selfSkipped = s.backupWhatsapp.filter((n) => self(n)).map((n) => self(n)!);
     if ((waTo.length || s.reminderWhatsapp) && !ch.whatsapp) {
       notes.push('WhatsApp is not connected yet — see “Connect WhatsApp” in Settings.');
       whatsapp = waTo.map((t) => ({ to: t, ok: false, error: 'WhatsApp is not connected yet.' }));
@@ -368,7 +377,9 @@ export async function runBackup(opts: { force: boolean; trigger: 'schedule' | 'm
           whatsapp = waTo.map((t) => ({ to: t, ok: false, error }));
         }
       }
-      if (s.reminderWhatsapp) {
+      whatsapp.push(...selfSkipped);
+      if (s.reminderWhatsapp && self(s.reminderWhatsapp)) reminder = self(s.reminderWhatsapp);
+      else if (s.reminderWhatsapp) {
         const total = b.debtors.reduce((a, d) => a + d.owes, 0);
         reminder = await sendTemplate(wa, s.reminderWhatsapp, wa.reminderTemplate, [
           {
