@@ -63,7 +63,8 @@ Never compute a balance, profit or due figure in a page. Use:
   shipments oldest first. Invoice status, "still due" and aging all use it.
 - Backups (`backup.ts`, `delivery.ts`, `xlsx.ts`, `pages/office/api/backup.ts`):
   the whole office as an Excel workbook plus a restore file in the import
-  bundle format, sent every `backupEveryDays` by email (Resend) and WhatsApp
+  bundle format, sent every `backupEveryDays` by email (the info@ Google
+  mailbox over SMTP with an app password, else Resend) and WhatsApp
   (Cloud API templates), with the unpaid-clients list to the reminder number.
   Vercel's daily cron calls the endpoint, which only sends a backup that is
   due (`CRON_SECRET` optional). Recipients and the WhatsApp connection live in

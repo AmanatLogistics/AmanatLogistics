@@ -4,11 +4,13 @@
  * backup WhatsApp number, and the reminder number gets the list of clients
  * who still owe us.
  *
- *   Email     Resend, the same account as the website's quote form
- *             (RESEND_API_KEY), sent from Settings → "Send from"
- *             (info@amanatlogistics.com). If Resend has not verified that
- *             domain, MAIL_FROM and then Resend's test sender are tried (the
- *             test sender only reaches the Resend account's own address).
+ *   Email     Through the info@ mailbox itself (Google, with an app
+ *             password saved in Settings) when that is connected; otherwise
+ *             through Resend, the same account as the website's quote form
+ *             (RESEND_API_KEY), from Settings → "Send from". If Resend has
+ *             not verified that domain, MAIL_FROM and then Resend's test
+ *             sender are tried (the test sender only reaches the Resend
+ *             account's own address).
  *   WhatsApp  The WhatsApp Business Cloud API (Meta): an access token and the
  *             sending number's ID, saved in Settings (or WHATSAPP_TOKEN and
  *             WHATSAPP_PHONE_NUMBER_ID on Vercel), plus two approved message
@@ -18,6 +20,7 @@
  *             sends when the last backup is old enough.
  */
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { env } from '../store';
 import { SITE } from '../../consts';
 import { one, q } from './db';
@@ -111,9 +114,67 @@ export async function forgetWhatsapp(): Promise<void> {
   await q("DELETE FROM office_settings WHERE key = 'whatsapp'");
 }
 
+/**
+ * The info@ mailbox, for sending as itself: the address and a Google app
+ * password, in their own row (never shown again, never in a backup).
+ */
+export interface MailboxConfig {
+  user: string;
+  pass: string;
+}
+
+export async function mailboxConfig(): Promise<MailboxConfig | null> {
+  const row = await one<{ value: Partial<MailboxConfig> }>("SELECT value FROM office_settings WHERE key = 'mailbox'");
+  return row?.value?.user && row.value.pass ? { user: row.value.user, pass: row.value.pass } : null;
+}
+
+export async function saveMailbox(m: MailboxConfig): Promise<void> {
+  await q(
+    `INSERT INTO office_settings (key, value) VALUES ('mailbox', $1::jsonb)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [JSON.stringify(m)],
+  );
+}
+
+export async function forgetMailbox(): Promise<void> {
+  await q("DELETE FROM office_settings WHERE key = 'mailbox'");
+}
+
+// Google's mail server; SMTP_HOST / SMTP_PORT only point the office at another (or a test) server.
+function smtp(m: MailboxConfig) {
+  const port = Number(env('SMTP_PORT') || 465);
+  return nodemailer.createTransport({
+    host: env('SMTP_HOST') || 'smtp.gmail.com',
+    port,
+    secure: port === 465,
+    auth: { user: m.user, pass: m.pass },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 30_000,
+  });
+}
+
+/** What Google's commonest refusals mean, in plain words. */
+function mailboxError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/535|534|Username and Password not accepted|Invalid login|BadCredentials|Application-specific password required/i.test(msg))
+    return `Google did not accept the address and app password. Make sure 2-Step Verification is on for this address and paste a new app password. (${msg})`;
+  return msg;
+}
+
+/** Ask Google whether the address and app password work. Used right before saving them. */
+export async function checkMailbox(m: MailboxConfig): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await smtp(m).verify();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: mailboxError(e) };
+  }
+}
+
 export async function channels() {
-  const wa = await whatsappConfig();
-  return { email: Boolean(env('RESEND_API_KEY')), whatsapp: Boolean(wa.token && wa.phoneId), wa };
+  const [wa, mailbox] = await Promise.all([whatsappConfig(), mailboxConfig()]);
+  return { email: Boolean(mailbox || env('RESEND_API_KEY')), mailbox: mailbox?.user ?? null, whatsapp: Boolean(wa.token && wa.phoneId), wa };
 }
 
 /* ---------- state ---------- */
@@ -196,6 +257,8 @@ const TEST_SENDER_HINT = ' (Email can reach other addresses once amanatlogistics
 async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: string; csvName: string }): Promise<SendResult[]> {
   const to = s.backupEmails.filter(isEmail);
   if (!to.length) return [];
+  const mailbox = await mailboxConfig();
+  if (mailbox) return sendFromMailbox(b, s, files, mailbox, to);
   const key = env('RESEND_API_KEY');
   if (!key) return to.map((t) => ({ to: t, ok: false, error: 'Email is not set up (RESEND_API_KEY missing on Vercel).' }));
   const resend = new Resend(key);
@@ -224,6 +287,35 @@ async function sendEmails(b: Backup, s: OfficeSettings, files: { xlsxName: strin
     } catch (e) {
       results.push({ to: t, ok: false, error: e instanceof Error ? e.message : String(e) });
     }
+  }
+  return results;
+}
+
+/** Send as the info@ mailbox itself, so the email is really from it and sits in its Sent folder. */
+async function sendFromMailbox(b: Backup, s: OfficeSettings, files: { xlsxName: string; csvName: string }, m: MailboxConfig, to: string[]): Promise<SendResult[]> {
+  const name = s.companyName.replace(/[<>"\r\n]/g, '').trim() || SITE.name;
+  const transport = smtp(m);
+  const results: SendResult[] = [];
+  try {
+    for (const t of to) {
+      try {
+        await transport.sendMail({
+          from: { name, address: m.user },
+          to: t,
+          subject: `${s.companyName} — office backup ${fmtDate(b.date)}`,
+          html: emailHtml(b, s),
+          attachments: [
+            { filename: files.xlsxName, content: b.xlsx, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+            { filename: files.csvName, content: Buffer.from(b.restoreCsv, 'utf8'), contentType: 'text/csv; charset=utf-8' },
+          ],
+        });
+        results.push({ to: t, ok: true });
+      } catch (e) {
+        results.push({ to: t, ok: false, error: mailboxError(e) });
+      }
+    }
+  } finally {
+    transport.close();
   }
   return results;
 }
