@@ -364,6 +364,12 @@ export interface StatementRow extends StatementLine {
    */
   bill: number | null;
   pay: number | null;
+  /**
+   * Show the shipment's pieces and weight on this row: true on one row per
+   * shipment (its first bill line, or its first line if it has no bill in
+   * the period), so the totals count each shipment once.
+   */
+  showLoad: boolean;
 }
 
 export interface StatementView {
@@ -372,6 +378,9 @@ export interface StatementView {
   rows: StatementRow[];
   totalBill: number;
   totalPay: number;
+  /** pieces and weight of the shipments on this statement, each counted once */
+  totalPieces: number;
+  totalWeight: number;
   /** true when the column totals and the ledger's opening/closing agree to the cent */
   consistent: boolean;
 }
@@ -401,12 +410,25 @@ export async function statementView(partyId: number, mode: Mode, from?: string |
       detail,
       bill: isBill ? round2(sign * l.delta) : null,
       pay: isBill ? null : round2(-sign * l.delta),
+      showLoad: false,
     };
   });
+  // Each shipment's pieces and weight once: on its first bill line, else its first line.
+  const shown = new Set<number>();
+  for (const pass of ['bill', 'any'] as const) {
+    for (const r of rows) {
+      if (r.shipment_id === null || shown.has(r.shipment_id) || (pass === 'bill' && r.bill === null)) continue;
+      r.showLoad = true;
+      shown.add(r.shipment_id);
+    }
+  }
+  const loads = rows.filter((r) => r.showLoad);
+  const totalPieces = loads.reduce((a, r) => a + (r.pieces ?? 0), 0);
+  const totalWeight = round2(loads.reduce((a, r) => a + (r.weight_kg ?? 0), 0));
   const totalBill = round2(rows.reduce((a, r) => a + (r.bill ?? 0), 0));
   const totalPay = round2(rows.reduce((a, r) => a + (r.pay ?? 0), 0));
   const consistent = round2(st.opening + sign * (totalBill - totalPay)) === round2(st.closing);
-  return { opening: st.opening, closing: st.closing, rows, totalBill, totalPay, consistent };
+  return { opening: st.opening, closing: st.closing, rows, totalBill, totalPay, totalPieces, totalWeight, consistent };
 }
 
 /** Column headings for the statement, for our screen and for the printed copy. */
