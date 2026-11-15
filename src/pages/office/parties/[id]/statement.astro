@@ -14,7 +14,7 @@ import '../../../../styles/office.css';
 import { guard } from '../../../../lib/office/auth';
 import { getSettings } from '../../../../lib/office/settings';
 import { partyBalance } from '../../../../lib/office/ledger';
-import { usd, fmtMoney, fmtDate, today } from '../../../../lib/office/money';
+import { usd, fmtMoney, fmtDate, fmtNum, today } from '../../../../lib/office/money';
 import {
   idParam,
   getParty,
@@ -108,10 +108,13 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
       .st-box .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--o-muted); margin-bottom: 4px; }
       .st-box .name { font-size: 16px; font-weight: 700; }
       .st-box.sum .value { font-family: var(--o-font-head); font-size: 22px; font-weight: 700; color: var(--o-maroon); }
-      table.st-lines { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-      table.st-lines th { text-align: left; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1.5px solid #bbb; padding: 6px 6px; }
-      table.st-lines td { border-bottom: 1px solid #e7e1e3; padding: 6px 6px; vertical-align: top; }
+      table.st-lines { width: 100%; border-collapse: collapse; font-size: 12px; }
+      table.st-lines th { text-align: left; font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--o-muted); border-bottom: 1.5px solid #bbb; padding: 6px 4px; vertical-align: bottom; }
+      table.st-lines td { border-bottom: 1px solid #e7e1e3; padding: 6px 4px; vertical-align: top; }
       table.st-lines .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+      /* "You owe" over the amount, so the eight columns fit the page */
+      table.st-lines .bal { white-space: normal; min-width: 72px; }
+      table.st-lines td.desc { min-width: 120px; }
       table.st-lines .sub { display: block; color: var(--o-muted); font-size: 11px; }
       table.st-lines tr.open td, table.st-lines tr.close td { background: #f7f3f5; font-weight: 700; }
       table.st-lines tfoot td { border-top: 1.5px solid #bbb; font-weight: 700; border-bottom: none; }
@@ -132,7 +135,7 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
         .st-to { grid-template-columns: 1fr; }
         .st-due > div { min-width: 0; width: 100%; }
         .st-scroll { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
-        table.st-lines { min-width: 560px; }
+        table.st-lines { min-width: 680px; }
       }
       @media print {
         body.st-body { background: #fff; font-size: 12px; }
@@ -194,51 +197,60 @@ const place = [party.city, party.country].filter(Boolean).join(', ');
             <tr>
               <th>Date</th>
               <th>Shipment</th>
+              <th class="num">Pieces</th>
+              <th class="num">Weight (kg)</th>
               <th>Description</th>
               <th class="num">{heads.printBill}</th>
               <th class="num">{heads.printPay}</th>
-              <th class="num">Balance</th>
+              <th class="num bal">Balance</th>
             </tr>
           </thead>
           <tbody>
             <tr class="open">
               <td>{range.from ? fmtDate(range.from) : ''}</td>
               <td></td>
-              <td>Opening balance{range.from ? '' : ' (start of account)'}</td>
               <td></td>
               <td></td>
-              <td class="num">{readerWords(st.opening)}</td>
+              <td class="desc">Opening balance{range.from ? '' : ' (start of account)'}</td>
+              <td></td>
+              <td></td>
+              <td class="num bal">{readerWords(st.opening)}</td>
             </tr>
             {st.rows.length === 0 && (
               <tr>
-                <td colspan="6" style="text-align:center;color:var(--o-muted);padding:16px">No transactions in this period.</td>
+                <td colspan="8" style="text-align:center;color:var(--o-muted);padding:16px">No transactions in this period.</td>
               </tr>
             )}
             {st.rows.map((r) => (
               <tr>
                 <td style="white-space:nowrap">{fmtDate(r.date)}</td>
                 <td style="white-space:nowrap">{r.ref ?? ''}</td>
-                <td>
+                <td class="num">{r.showLoad && r.pieces !== null ? fmtNum(r.pieces, 0) : ''}</td>
+                <td class="num">{r.showLoad && r.weight_kg !== null ? fmtNum(r.weight_kg) : ''}</td>
+                <td class="desc">
                   {printDescription(r, mode).text}
                   {printDescription(r, mode).note && <span class="sub">({printDescription(r, mode).note})</span>}
                   {r.currency !== 'USD' && <span class="sub">{fmtMoney(r.amount, r.currency)}</span>}
                 </td>
                 <td class:list={['num', r.bill !== null && r.bill < 0 && 'neg']}>{r.bill !== null ? usd(r.bill) : ''}</td>
                 <td class:list={['num', r.pay !== null && r.pay < 0 && 'neg']}>{r.pay !== null ? usd(r.pay) : ''}</td>
-                <td class="num">{readerWords(r.balance)}</td>
+                <td class="num bal">{readerWords(r.balance)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="3">Totals for the period</td>
+              <td colspan="2">Totals for the period</td>
+              <td class="num">{st.totalPieces ? fmtNum(st.totalPieces, 0) : ''}</td>
+              <td class="num">{st.totalWeight ? fmtNum(st.totalWeight) : ''}</td>
+              <td></td>
               <td class="num">{usd(st.totalBill)}</td>
               <td class="num">{usd(st.totalPay)}</td>
               <td></td>
             </tr>
             <tr class="close">
-              <td colspan="5">Closing balance on {fmtDate(asOf)}</td>
-              <td class="num">{readerWords(st.closing)}</td>
+              <td colspan="7">Closing balance on {fmtDate(asOf)}</td>
+              <td class="num bal">{readerWords(st.closing)}</td>
             </tr>
           </tfoot>
         </table>

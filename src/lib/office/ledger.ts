@@ -130,6 +130,9 @@ export interface StatementLine {
   /** original currency figure, for display */
   amount: number;
   currency: string;
+  /** the shipment's pieces and weight (real weight, else chargeable), when the line has a shipment */
+  pieces: number | null;
+  weight_kg: number | null;
 }
 
 export async function partyStatement(partyId: number, from?: string, to?: string): Promise<{ opening: number; lines: StatementLine[]; closing: number }> {
@@ -137,24 +140,25 @@ export async function partyStatement(partyId: number, from?: string, to?: string
     `SELECT * FROM (
        SELECT s.ship_date AS date, 'charge' AS kind, s.ref, s.id AS shipment_id,
               COALESCE(ch.description, 'Charge') AS description, ch.usd AS delta, ch.amount, ch.currency,
-              s.created_at AS sort_ts, ch.id
+              s.created_at AS sort_ts, ch.id, s.pieces, COALESCE(s.weight_kg, s.chargeable_kg) AS weight_kg
          FROM office_charges ch JOIN office_shipments s ON s.id = ch.shipment_id
         WHERE s.client_id = $1
        UNION ALL
        SELECT p.pay_date, 'received', s.ref, p.shipment_id,
               CONCAT('Payment received', CASE WHEN p.reference IS NOT NULL AND p.reference <> '' THEN ' — ' || p.reference ELSE '' END),
-              -p.usd, p.amount, p.currency, p.created_at, p.id
+              -p.usd, p.amount, p.currency, p.created_at, p.id, s.pieces, COALESCE(s.weight_kg, s.chargeable_kg)
          FROM office_payments p LEFT JOIN office_shipments s ON s.id = p.shipment_id
         WHERE p.party_id = $1 AND p.direction = 'in'
        UNION ALL
        SELECT s.ship_date, 'cost', s.ref, s.id,
-              COALESCE(NULLIF(c.description, ''), c.category), -c.usd, c.amount, c.currency, s.created_at, c.id
+              COALESCE(NULLIF(c.description, ''), c.category), -c.usd, c.amount, c.currency, s.created_at, c.id,
+              s.pieces, COALESCE(s.weight_kg, s.chargeable_kg)
          FROM office_costs c JOIN office_shipments s ON s.id = c.shipment_id
         WHERE c.payee_id = $1
        UNION ALL
        SELECT p.pay_date, 'paid', s.ref, p.shipment_id,
               CONCAT('Payment made', CASE WHEN p.reference IS NOT NULL AND p.reference <> '' THEN ' — ' || p.reference ELSE '' END),
-              p.usd, p.amount, p.currency, p.created_at, p.id
+              p.usd, p.amount, p.currency, p.created_at, p.id, s.pieces, COALESCE(s.weight_kg, s.chargeable_kg)
          FROM office_payments p LEFT JOIN office_shipments s ON s.id = p.shipment_id
         WHERE p.party_id = $1 AND p.direction = 'out'
      ) x
@@ -175,7 +179,7 @@ export async function partyStatement(partyId: number, from?: string, to?: string
     const description = r.kind === 'cost' && r.description in COST_CATEGORIES
       ? COST_CATEGORIES[r.description as keyof typeof COST_CATEGORIES]
       : r.description;
-    lines.push({ date: r.date, kind: r.kind, ref: r.ref, shipment_id: r.shipment_id, description, delta: r.delta, balance: running, amount: r.amount, currency: r.currency });
+    lines.push({ date: r.date, kind: r.kind, ref: r.ref, shipment_id: r.shipment_id, description, delta: r.delta, balance: running, amount: r.amount, currency: r.currency, pieces: r.pieces, weight_kg: r.weight_kg });
   }
   const closing = lines.length ? lines[lines.length - 1].balance : opening;
   return { opening, lines, closing };

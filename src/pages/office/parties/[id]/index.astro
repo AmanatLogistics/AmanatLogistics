@@ -135,11 +135,11 @@ const closingDate = range.to ?? (lastLine && lastLine > todayStr ? lastLine : to
 if (party && st && sp.get('format') === 'csv') {
   return csvResponse(
     `statement-${party.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}-${todayStr}.csv`,
-    ['Date', 'Shipment', 'What', 'Description', `${heads.bill} (USD)`, `${heads.pay} (USD)`, 'Original amount', 'Currency', 'Balance (USD, + they owe us, − we owe them)', 'Balance in words'],
+    ['Date', 'Shipment', 'Pieces', 'Weight (kg)', 'What', 'Description', `${heads.bill} (USD)`, `${heads.pay} (USD)`, 'Original amount', 'Currency', 'Balance (USD, + they owe us, − we owe them)', 'Balance in words'],
     [
-      [range.from ?? '', '', 'Opening balance', range.from ? `Everything before ${range.from}` : 'Start of account', '', '', '', '', st.opening, words(st.opening).text],
-      ...st.rows.map((r) => [r.date, r.ref, r.what, r.detail, r.bill, r.pay, r.amount, r.currency, r.balance, words(r.balance).text]),
-      [closingDate, '', 'Closing balance', '', st.totalBill, st.totalPay, '', '', st.closing, words(st.closing).text],
+      [range.from ?? '', '', '', '', 'Opening balance', range.from ? `Everything before ${range.from}` : 'Start of account', '', '', '', '', st.opening, words(st.opening).text],
+      ...st.rows.map((r) => [r.date, r.ref, r.showLoad ? r.pieces : null, r.showLoad ? r.weight_kg : null, r.what, r.detail, r.bill, r.pay, r.amount, r.currency, r.balance, words(r.balance).text]),
+      [closingDate, '', st.totalPieces || '', st.totalWeight || '', 'Closing balance', '', st.totalBill, st.totalPay, '', '', st.closing, words(st.closing).text],
     ],
   );
 }
@@ -341,6 +341,8 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                   <thead>
                     <tr>
                       <th>Date</th>
+                      <th class="num">Pieces</th>
+                      <th class="num">Weight (kg)</th>
                       <th>Description</th>
                       <th class="num">{heads.bill}</th>
                       <th class="num">{heads.pay}</th>
@@ -350,6 +352,8 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                   <tbody>
                     <tr>
                       <td style="white-space:nowrap">{range.from ? fmtDate(range.from) : <span class="muted">Start</span>}</td>
+                      <td></td>
+                      <td></td>
                       <td style="min-width:110px">
                         <strong>Opening balance</strong>
                         <div class="small muted">{range.from ? `Everything before ${fmtDate(range.from)}` : 'Before their first shipment or payment'}</div>
@@ -360,7 +364,7 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                     </tr>
                     {st.rows.length === 0 && (
                       <tr>
-                        <td colspan="5" class="o-empty">Nothing was billed or paid in this period.</td>
+                        <td colspan="7" class="o-empty">Nothing was billed or paid in this period.</td>
                       </tr>
                     )}
                     {st.rows.map((r) => {
@@ -371,6 +375,8 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                             {fmtDate(r.date)}
                             {r.shipment_id && r.ref && <div class="small"><a href={`/office/shipments/${r.shipment_id}`}>{r.ref}</a></div>}
                           </td>
+                          <td class="num">{r.showLoad && r.pieces !== null ? fmtNum(r.pieces, 0) : ''}</td>
+                          <td class="num">{r.showLoad && r.weight_kg !== null ? fmtNum(r.weight_kg) : ''}</td>
                           <td style="min-width:110px">
                             {r.detail}
                             <div class="small muted">{r.what}</div>
@@ -398,13 +404,16 @@ const place = [party?.city, party?.country].filter(Boolean).join(', ');
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colspan="2">Totals for this period</td>
+                      <td>Totals for this period</td>
+                      <td class="num">{st.totalPieces ? fmtNum(st.totalPieces, 0) : ''}</td>
+                      <td class="num">{st.totalWeight ? fmtNum(st.totalWeight) : ''}</td>
+                      <td></td>
                       <td class="num">{usd(st.totalBill)}</td>
                       <td class="num">{usd(st.totalPay)}</td>
                       <td></td>
                     </tr>
                     <tr>
-                      <td colspan="2">Closing balance on {fmtDate(closingDate)}</td>
+                      <td colspan="4">Closing balance on {fmtDate(closingDate)}</td>
                       <td></td>
                       <td></td>
                       <td class:list={['num', words(st.closing).tone === 'neg' && 'neg']}>{words(st.closing).text}</td>
