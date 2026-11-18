@@ -35,7 +35,7 @@ if (!data) Astro.response.status = 404;
 const currencies = await listCurrencies();
 const rates = Object.fromEntries(currencies.map((c) => [c.code, c.per_usd]));
 let errors: string[] = [];
-let state: FormState | null = data ? formFromShipment(data.shipment, data.charges, data.costs) : null;
+let state: FormState | null = data ? formFromShipment(data.shipment, data.charges, data.costs, data.items) : null;
 
 if (data && Astro.request.method === 'POST') {
   if (!sameOrigin(Astro.request)) errors = ['That request looked unsafe, so it was blocked. Reload the page and try again.'];

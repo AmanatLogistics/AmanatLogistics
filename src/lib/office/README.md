@@ -32,6 +32,14 @@ Office expenses (rent, salaries, internet…) are separate from shipments.
   us). ONE currency per account.
 - `office_shipments` — one consignment. `office_charges` = what the client is
   billed (revenue). `office_costs` = what it costs us, each with a `payee_id`.
+  `office_shipment_items` = what is in the cargo (clothes, shoes, dry fruit…,
+  pieces, kg), printed on the invoice; `consignee_*` = who receives it.
+- Customer page: `office_shipments.public_token` is the code in `/t/<code>`
+  (`pages/t/[token].astro`, `lib/office/publicpage.ts`), the page the QR code
+  on a UPS invoice opens — status, contents, shipper, receiver, weights,
+  charges and balance; never costs, partners, profit or notes. 128 random bits,
+  made on the first print; "Make a new link" replaces it, `public_off` turns it
+  off (and keeps a print from making a new one).
 - `office_invoices` — one per shipment, created automatically (`invoices.ts →
   ensureInvoice`) once it has a charge. Its lines ARE the shipment's charges.
 - `office_payments` — `direction` `in` (received) or `out` (paid), always from/to
@@ -167,7 +175,7 @@ if (Astro.request.method === 'POST') {
 | module | files |
 |---|---|
 | foundation | `lib/office/{db,schema,auth,activity,money,services,form,ledger,settings,invoices}.ts`, `layouts/OfficeLayout.astro`, `styles/office.css`, `components/office/{PageHead,Flash,Stat}.astro`, `pages/office/{login,logout,account,users,settings,activity}`, `pages/office/api/summary.ts` |
-| shipments | `lib/office/shipments.ts`, `components/office/LineItems.astro`, `pages/office/shipments/**` |
+| shipments | `lib/office/{shipments,publicpage}.ts`, `components/office/LineItems.astro`, `pages/office/shipments/**`, `pages/t/[token].astro` |
 | money | `lib/office/entries.ts`, `pages/office/{payments,expenses,accounts,transfers}/**` |
 | parties | `lib/office/parties.ts`, `pages/office/parties/**` |
 | insights | `lib/office/insights.ts`, `components/office/{BarChart,PeriodPicker}.astro`, `pages/office/index.astro`, `pages/office/{invoices,sections,reports}/**` |

@@ -5,13 +5,22 @@
  * sent to the client. Letterhead and terms come from Settings; the lines are
  * the shipment's charges; paid-to-date and balance due come from the ledger.
  * A normal invoice (up to ~10 lines) fits on one page.
+ *
+ * It also lists what is in the cargo (item, pieces, kg) and who receives it.
+ * A UPS invoice carries a QR code: the phone's camera opens the shipment's
+ * customer page (/t/<code>) with its status, contents, shipper, receiver,
+ * weight and charges. The code is made the first time the invoice is printed,
+ * unless an admin turned that page off. The address itself is not printed.
  */
+import QRCode from 'qrcode';
 import { guard } from '../../../../lib/office/auth';
 import { getSettings } from '../../../../lib/office/settings';
 import { usd, fmtMoney, fmtDate, fmtNum, today } from '../../../../lib/office/money';
 import { SERVICES } from '../../../../lib/office/services';
 import { INVOICE_STATUS_LABEL } from '../../../../lib/office/invoices';
 import { getInvoice, idParam, fmtRateMoney, unitText } from '../../../../lib/office/insights';
+import { ensurePublicToken } from '../../../../lib/office/shipments';
+import { publicShipmentUrl } from '../../../../lib/office/publicpage';
 
 export const prerender = false;
 const user = await guard(Astro);
@@ -45,6 +54,17 @@ const back = `/office/invoices/${inv.id}`;
 // footer (which print this page's address) are switched off by @page below.
 const contactLine = [settings.phone, settings.email].filter(Boolean);
 const billTo = inv.billTo;
+const items = inv.items;
+const itemPieces = items.reduce((a, i) => a + (i.pieces ?? 0), 0);
+const itemKg = Math.round(items.reduce((a, i) => a + (i.kg ?? 0), 0) * 1000) / 1000;
+const anyPieces = items.some((i) => i.pieces !== null);
+const anyKg = items.some((i) => i.kg !== null);
+const consignee = inv.consignee;
+// The QR code, on UPS invoices only.
+const token = s.service === 'ups' && !s.public_off ? (s.public_token ?? (await ensurePublicToken(s.id))) : null;
+const qr = token
+  ? await QRCode.toString(publicShipmentUrl(token, Astro.url), { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#2a1019', light: '#ffffff' } })
+  : null;
 ---
 
 <!doctype html>
@@ -110,7 +130,7 @@ const billTo = inv.billTo;
       .rule2 { height: 1px; background: #e6dde1; margin: 0 0 16px; }
 
       /* title */
-      .title { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+      .title { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
       h1 { font-family: 'Barlow Semi Condensed', 'Barlow', 'Arial Narrow', Arial, sans-serif; font-size: 34px; letter-spacing: 0.08em; margin: 0; color: #2a1019; line-height: 1; }
       .stamp {
         display: inline-block; margin-top: 8px; padding: 3px 10px; border: 2px solid currentColor; border-radius: 4px;
@@ -123,9 +143,14 @@ const billTo = inv.billTo;
       table.meta { border-collapse: collapse; font-size: 12.5px; }
       table.meta th { text-align: left; font-weight: 500; color: #6c5f65; padding: 2px 14px 2px 0; white-space: nowrap; }
       table.meta td { text-align: right; font-weight: 700; padding: 2px 0; white-space: nowrap; }
+      .title-right { display: flex; align-items: flex-start; gap: 14px; }
+      .qr { width: 27mm; text-align: center; break-inside: avoid; }
+      .qr svg { display: block; width: 27mm; height: 27mm; }
+      .qr div { font-size: 9px; line-height: 1.2; color: #463a40; margin-top: 3px; }
 
       /* bill to + shipment */
-      .boxes { display: grid; grid-template-columns: 1fr 1.45fr; gap: 12px; margin-bottom: 16px; }
+      .boxes { display: grid; grid-template-columns: 1fr 1.45fr; gap: 10px; margin-bottom: 14px; }
+      .stackbox { display: grid; gap: 10px; align-content: start; }
       .box { border: 1px solid #e6dde1; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
       .box h2 { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #7e2e47; margin: 0 0 6px; font-weight: 700; }
       .box .who { font-size: 15px; font-weight: 700; }
@@ -139,6 +164,15 @@ const billTo = inv.billTo;
       .goods { margin-top: 6px; font-size: 12px; }
       .goods span { color: #6c5f65; }
 
+      /* contents */
+      .contents { margin-bottom: 12px; break-inside: avoid; }
+      .contents h2 { font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #7e2e47; margin: 0 0 4px; font-weight: 700; }
+      table.items { width: 100%; border-collapse: collapse; font-size: 12px; }
+      table.items th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #6c5f65; font-weight: 700; padding: 4px 8px; border-bottom: 1.5px solid #7e2e47; }
+      table.items td { padding: 3px 8px; border-bottom: 1px solid #efe7eb; }
+      table.items tfoot td { font-weight: 700; border-bottom: 0; border-top: 1.5px solid #2a1019; }
+      table.items .n { width: 26px; color: #6c5f65; }
+
       /* lines */
       table.lines { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
       table.lines thead tr { background: #7e2e47; }
@@ -146,7 +180,7 @@ const billTo = inv.billTo;
         color: #fff; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
         text-align: left; padding: 7px 8px; font-weight: 700;
       }
-      table.lines td { padding: 7px 8px; border-bottom: 1px solid #efe7eb; vertical-align: top; }
+      table.lines td { padding: 6px 8px; border-bottom: 1px solid #efe7eb; vertical-align: top; }
       table.lines tr { break-inside: avoid; }
       .num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
       .muted { color: #6c5f65; }
@@ -167,14 +201,16 @@ const billTo = inv.billTo;
       .notes p { margin: 0 0 12px; white-space: pre-line; font-size: 12px; color: #2a1019; }
 
       /* signatures & footer */
-      .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 34px; break-inside: avoid; }
+      .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 28px; break-inside: avoid; }
       .sign div { border-top: 1px solid #2a1019; padding-top: 5px; font-size: 11.5px; color: #463a40; }
-      .foot { margin-top: 22px; padding-top: 8px; border-top: 1px solid #e6dde1; text-align: center; font-size: 11.5px; color: #6c5f65; }
+      .foot { margin-top: 16px; padding-top: 6px; border-top: 1px solid #e6dde1; text-align: center; font-size: 11.5px; color: #6c5f65; }
       .foot strong { color: #7e2e47; }
+      .end { break-inside: avoid; }
       @media (max-width: 640px) {
         .head { flex-wrap: wrap; }
         .contact { text-align: left; max-width: none; width: 100%; }
         .title { flex-direction: column; }
+        .title-right { width: 100%; justify-content: space-between; }
         .boxes, .bottom { grid-template-columns: 1fr; }
         .facts { grid-template-columns: 1fr; }
         .lines-wrap { overflow-x: auto; }
@@ -205,19 +241,30 @@ const billTo = inv.billTo;
           <h1>INVOICE</h1>
           <div class:list={['stamp', inv.status]} title={INVOICE_STATUS_LABEL[inv.status]}>{stamp}</div>
         </div>
-        <table class="meta">
-          <tbody>
-            <tr><th>Invoice no.</th><td>{inv.number}</td></tr>
-            <tr><th>Invoice date</th><td>{fmtDate(inv.issue_date)}</td></tr>
-            <tr><th>Due date</th><td>{inv.due_date ? fmtDate(inv.due_date) : 'On receipt'}</td></tr>
-            <tr><th>Shipment</th><td>{s.ref}</td></tr>
-          </tbody>
-        </table>
+        <div class="title-right">
+          <table class="meta">
+            <tbody>
+              <tr><th>Invoice no.</th><td>{inv.number}</td></tr>
+              <tr><th>Invoice date</th><td>{fmtDate(inv.issue_date)}</td></tr>
+              <tr><th>Due date</th><td>{inv.due_date ? fmtDate(inv.due_date) : 'On receipt'}</td></tr>
+              <tr><th>Shipment</th><td>{s.ref}</td></tr>
+            </tbody>
+          </table>
+          {
+            qr && (
+              <div class="qr">
+                <Fragment set:html={qr} />
+                <div>Scan with your phone for status &amp; details</div>
+              </div>
+            )
+          }
+        </div>
       </section>
 
       <section class="boxes">
+        <div class="stackbox">
         <div class="box">
-          <h2>Bill to</h2>
+          <h2>{consignee ? 'Shipper — bill to' : 'Bill to'}</h2>
           {
             inv.client ? (
               <>
@@ -231,6 +278,17 @@ const billTo = inv.billTo;
             )
           }
         </div>
+        {
+          consignee && (
+            <div class="box">
+              <h2>Consignee — receiver</h2>
+              {consignee.name && <div class="who">{consignee.name}</div>}
+              {consignee.address && <div class="addr">{consignee.address}</div>}
+              {consignee.phone && <div class="line">{consignee.phone}</div>}
+            </div>
+          )
+        }
+        </div>
         <div class="box">
           <h2>Shipment</h2>
           <div class="svc">{svc?.label ?? s.service}</div>
@@ -243,6 +301,44 @@ const billTo = inv.billTo;
           {s.goods && <div class="goods"><span>Goods:</span> {s.goods}</div>}
         </div>
       </section>
+
+      {
+        items.length > 0 && (
+          <section class="contents lines-wrap">
+            <h2>Contents</h2>
+            <table class="items">
+              <thead>
+                <tr>
+                  <th class="n">#</th>
+                  <th>Item</th>
+                  {anyPieces && <th class="num">Pieces</th>}
+                  {anyKg && <th class="num">Weight (kg)</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((i, n) => (
+                  <tr>
+                    <td class="n">{n + 1}</td>
+                    <td>{i.description}</td>
+                    {anyPieces && <td class="num">{i.pieces === null ? '—' : fmtNum(i.pieces, 0)}</td>}
+                    {anyKg && <td class="num">{i.kg === null ? '—' : fmtNum(i.kg, 3)}</td>}
+                  </tr>
+                ))}
+              </tbody>
+              {items.length > 1 && (
+                <tfoot>
+                  <tr>
+                    <td></td>
+                    <td>Total</td>
+                    {anyPieces && <td class="num">{fmtNum(itemPieces, 0)}</td>}
+                    {anyKg && <td class="num">{fmtNum(itemKg, 3)}</td>}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </section>
+        )
+      }
 
       <div class="lines-wrap">
         <table class="lines">
@@ -333,6 +429,7 @@ const billTo = inv.billTo;
         </table>
       </section>
 
+      <div class="end">
       <section class="sign">
         <div>Authorised signature &amp; stamp — {settings.companyName}</div>
         <div>Received by (client) — name, signature &amp; date</div>
@@ -342,6 +439,7 @@ const billTo = inv.billTo;
         {settings.invoiceFooter && <div><strong>{settings.invoiceFooter}</strong></div>}
         <div>{[settings.companyName, settings.address.replace(/\s*\n\s*/g, ', ')].filter(Boolean).join(' · ')}</div>
       </footer>
+      </div>
     </main>
 
     <script is:inline>

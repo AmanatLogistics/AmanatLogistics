@@ -51,14 +51,21 @@ export async function buildBackup(): Promise<Backup> {
     id: number; ref: string; service: string; ship_date: string; client_name: string | null; origin: string | null; destination: string | null;
     goods: string | null; pieces: number | null; weight_kg: number | null; chargeable_kg: number | null; cbm: number | null; awb_no: string | null;
     tracking_no: string | null; status: string; notes: string | null; bill_address: string | null; invoice_number: string | null; due_date: string | null; issue_date: string | null;
+    consignee_name: string | null; consignee_phone: string | null; consignee_address: string | null; public_token: string | null; public_off: boolean;
   }>(
     `SELECT s.id, s.ref, s.service, s.ship_date, p.name AS client_name, s.origin, s.destination, s.goods, s.pieces, s.weight_kg,
             s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
+            s.consignee_name, s.consignee_phone, s.consignee_address, s.public_token, s.public_off,
             i.number AS invoice_number, i.due_date, i.issue_date
        FROM office_shipments s
        LEFT JOIN office_parties p ON p.id = s.client_id
        LEFT JOIN office_invoices i ON i.shipment_id = s.id
       ORDER BY s.ship_date, s.id`,
+  );
+  const items = await q<{ ref: string; description: string; pieces: number | null; kg: number | null }>(
+    `SELECT s.ref, it.description, it.pieces, it.kg
+       FROM office_shipment_items it JOIN office_shipments s ON s.id = it.shipment_id
+      ORDER BY s.ship_date, s.id, it.sort, it.id`,
   );
   const charges = await q<{ ref: string; invoice_number: string | null; description: string; qty: number | null; unit: string | null; rate: number | null; amount: number; currency: string; per_usd: number; usd: number }>(
     `SELECT s.ref, i.number AS invoice_number, c.description, c.qty, c.unit, c.rate, c.amount, c.currency, c.per_usd, c.usd
@@ -133,17 +140,21 @@ export async function buildBackup(): Promise<Backup> {
   sheets.push({
     name: 'Shipments',
     rows: [
-      ['Ref', 'Section', 'Ship date', 'Client', 'From', 'To', 'Goods', 'Pieces', 'Weight kg', 'Chargeable kg', 'CBM', 'AWB', 'Tracking', 'Status', 'Invoice', 'Billed', 'Cost', 'Profit', 'Received', 'Due', 'Bill-to address', 'Notes'],
+      ['Ref', 'Section', 'Ship date', 'Client', 'From', 'To', 'Goods', 'Pieces', 'Weight kg', 'Chargeable kg', 'CBM', 'AWB', 'Tracking', 'Status', 'Invoice', 'Billed', 'Cost', 'Profit', 'Received', 'Due', 'Bill-to address', 'Receiver', 'Receiver phone', 'Receiver address', 'Notes'],
       ...shipments.map((s): Cell[] => {
         const f = figs.get(s.id);
         return [
           s.ref, svcLabel(s.service), s.ship_date, s.client_name, s.origin, s.destination, s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm,
           s.awb_no, s.tracking_no, label(SHIPMENT_STATUS, s.status), s.invoice_number, f?.revenue ?? 0, f?.cost ?? 0, f?.profit ?? 0, f?.received ?? 0, f?.due ?? 0,
-          s.bill_address, s.notes,
+          s.bill_address, s.consignee_name, s.consignee_phone, s.consignee_address, s.notes,
         ];
       }),
     ],
     money: [15, 16, 17, 18, 19],
+  });
+  sheets.push({
+    name: 'Contents',
+    rows: [['Shipment', 'Item', 'Pieces', 'Kg'], ...items.map((i): Cell[] => [i.ref, i.description, i.pieces, i.kg])],
   });
   sheets.push({
     name: 'Invoices',
@@ -233,9 +244,14 @@ export async function buildBackup(): Promise<Backup> {
       section('parties', ['name', 'kind', 'phone', 'city', 'country', 'notes', 'address', 'active'], partyRows.map((p) => [p.name, p.kind, p.phone, p.city, p.country, p.notes, p.address, p.active ? 'yes' : 'no'])),
       section(
         'shipments',
-        ['ref', 'service', 'ship_date', 'client_name', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address'],
-        shipments.map((s) => [s.ref, s.service, s.ship_date, s.client_name, s.origin, s.destination, s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address]),
+        ['ref', 'service', 'ship_date', 'client_name', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'consignee_name', 'consignee_phone', 'consignee_address', 'public_token'],
+        shipments.map((s) => [
+          s.ref, s.service, s.ship_date, s.client_name, s.origin, s.destination, s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
+          // "off": the customer page was turned off, and stays off after a restore.
+          s.consignee_name, s.consignee_phone, s.consignee_address, s.public_off ? 'off' : s.public_token,
+        ]),
       ),
+      section('items', ['shipment_ref', 'description', 'pieces', 'kg'], items.map((i) => [i.ref, i.description, i.pieces, i.kg])),
       section(
         'charges',
         ['shipment_ref', 'description', 'qty', 'unit', 'rate', 'amount', 'currency', 'per_usd', 'invoice_no'],

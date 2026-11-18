@@ -240,4 +240,28 @@ ALTER TABLE office_parties ADD COLUMN address TEXT;
 ALTER TABLE office_shipments ADD COLUMN bill_address TEXT;
 `,
   },
+  {
+    // Who receives the cargo, what is inside it (printed on the invoice), and
+    // the unguessable code of the public page the invoice's QR code opens.
+    id: 3,
+    sql: `
+ALTER TABLE office_shipments ADD COLUMN consignee_name TEXT;
+ALTER TABLE office_shipments ADD COLUMN consignee_phone TEXT;
+ALTER TABLE office_shipments ADD COLUMN consignee_address TEXT;
+-- The code in the shipment's public page address (/t/<code>), which the QR
+-- code on its invoice opens. NULL until first needed. public_off: an admin
+-- turned the page off, so printing the invoice must not make a new code.
+ALTER TABLE office_shipments ADD COLUMN public_token TEXT UNIQUE;
+ALTER TABLE office_shipments ADD COLUMN public_off BOOLEAN NOT NULL DEFAULT false;
+CREATE TABLE office_shipment_items (
+  id          SERIAL PRIMARY KEY,
+  shipment_id INT NOT NULL REFERENCES office_shipments(id) ON DELETE CASCADE,
+  description TEXT NOT NULL,
+  pieces      INT CHECK (pieces >= 0),
+  kg          NUMERIC(12,3) CHECK (kg >= 0),
+  sort        INT NOT NULL DEFAULT 0
+);
+CREATE INDEX office_shipment_items_shipment ON office_shipment_items (shipment_id, sort);
+`,
+  },
 ];

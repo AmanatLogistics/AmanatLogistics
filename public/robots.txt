@@ -6,5 +6,6 @@ Disallow: /orders
 Disallow: /tracking/orders
 Disallow: /api/
 Disallow: /office
+Disallow: /t/
 
 Sitemap: https://amanatlogistics.com/sitemap.xml

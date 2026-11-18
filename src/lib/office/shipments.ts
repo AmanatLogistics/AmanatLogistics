@@ -14,6 +14,7 @@
  * on its own except the per-line `usd` written at save time (money.ts toUsd)
  * and sums of those ledger figures for a totals row.
  */
+import { randomBytes } from 'node:crypto';
 import { q, one, tx, type Runner } from './db';
 import { logActivity } from './activity';
 import { nextShipmentRef } from './settings';
@@ -120,6 +121,13 @@ export interface Shipment {
   notes: string | null;
   /** The address its invoice is billed to; empty means the client's saved address. */
   bill_address: string | null;
+  /** Who receives the cargo. */
+  consignee_name: string | null;
+  consignee_phone: string | null;
+  consignee_address: string | null;
+  /** The code of the public page the invoice's QR code opens (null: no page yet, or turned off). */
+  public_token: string | null;
+  public_off: boolean;
   created_by_name: string | null;
   created_at: string;
   updated_at: string;
@@ -143,6 +151,15 @@ export interface ChargeLine {
   sort: number;
 }
 
+/** One kind of thing inside the cargo: "Clothes — 20 pieces — 15 kg". */
+export interface ItemLine {
+  id: number;
+  description: string;
+  pieces: number | null;
+  kg: number | null;
+  sort: number;
+}
+
 export interface CostLine {
   id: number;
   category: string;
@@ -162,6 +179,7 @@ export interface CostLine {
 const SHIPMENT_SELECT = `
   SELECT s.id, s.ref, s.service, s.client_id, p.name AS client_name, s.ship_date, s.origin, s.destination,
          s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
+         s.consignee_name, s.consignee_phone, s.consignee_address, s.public_token, s.public_off,
          u.name AS created_by_name, s.created_at, s.updated_at,
          (extract(epoch FROM s.updated_at) * 1000000)::bigint::text AS version,
          i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date
@@ -177,7 +195,7 @@ export function parseId(v: string | undefined | null): number | null {
   return n > 0 && n <= MAX_INT ? n : null;
 }
 
-export async function getShipment(id: number): Promise<{ shipment: Shipment; charges: ChargeLine[]; costs: CostLine[] } | null> {
+export async function getShipment(id: number): Promise<{ shipment: Shipment; charges: ChargeLine[]; costs: CostLine[]; items: ItemLine[] } | null> {
   const shipment = await one<Shipment>(`${SHIPMENT_SELECT} WHERE s.id = $1`, [id]);
   if (!shipment) return null;
   const charges = await q<ChargeLine>(
@@ -192,7 +210,56 @@ export async function getShipment(id: number): Promise<{ shipment: Shipment; cha
       WHERE c.shipment_id = $1 ORDER BY c.sort, c.id`,
     [id],
   );
-  return { shipment, charges, costs };
+  const items = await shipmentItems(id);
+  return { shipment, charges, costs, items };
+}
+
+export async function shipmentItems(id: number, runner?: Runner): Promise<ItemLine[]> {
+  return q<ItemLine>('SELECT id, description, pieces, kg, sort FROM office_shipment_items WHERE shipment_id = $1 ORDER BY sort, id', [id], runner);
+}
+
+/* ---------- the public page (the invoice's QR code) ---------- */
+
+/** 128 random bits, URL-safe: the page cannot be found by guessing or counting. */
+const newToken = () => randomBytes(16).toString('base64url');
+export const TOKEN_RE = /^[A-Za-z0-9_-]{20,40}$/;
+
+/**
+ * The shipment's public page code, made the first time it is needed (printing
+ * the invoice). Not when an admin turned the page off. Does not count as an edit.
+ */
+export async function ensurePublicToken(id: number): Promise<string | null> {
+  const r = await one<{ public_token: string | null }>(
+    'UPDATE office_shipments SET public_token = COALESCE(public_token, $2) WHERE id = $1 AND NOT public_off RETURNING public_token',
+    [id, newToken()],
+  );
+  return r?.public_token ?? null;
+}
+
+/**
+ * Turn the customer page on (a code if it has none), make a new code (the old
+ * QR code and link stop working), or turn it off. Returns what to tell the user.
+ */
+export async function setPublicPage(id: number, userId: number | null, mode: 'on' | 'new' | 'off'): Promise<string> {
+  const off = mode === 'off';
+  const r = await one<{ ref: string; public_token: string | null }>(
+    mode === 'on'
+      ? 'UPDATE office_shipments SET public_token = COALESCE(public_token, $2), public_off = false WHERE id = $1 RETURNING ref, public_token'
+      : 'UPDATE office_shipments SET public_token = $2, public_off = $3 WHERE id = $1 RETURNING ref, public_token',
+    mode === 'on' ? [id, newToken()] : [id, off ? null : newToken(), off],
+  );
+  if (!r) throw new ShipmentError('That shipment no longer exists.');
+  const summary = {
+    on: `Turned on the customer page of ${r.ref}`,
+    new: `Made a new customer page link for ${r.ref} — the old QR code and link no longer work`,
+    off: `Turned off the customer page of ${r.ref}`,
+  }[mode];
+  await logActivity(userId, `shipment_page_${mode}`, 'shipment', id, summary);
+  return {
+    on: 'The customer page is on. Its QR code is on the invoice when you print it.',
+    new: 'New link made. The old QR code and link no longer work — print the invoice again for the new QR code.',
+    off: 'The customer page is off. A QR code already printed now opens a "not found" page, and the invoice prints without one until you turn it back on.',
+  }[mode];
 }
 
 export interface LinkedPayment {
@@ -410,6 +477,7 @@ export async function listShipments(f: ShipmentFilters, page: number | null, tod
   const rows = await q<Shipment & { payments: number }>(
     `SELECT s.id, s.ref, s.service, s.client_id, p.name AS client_name, s.ship_date, s.origin, s.destination,
             s.goods, s.pieces, s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.notes, s.bill_address,
+            s.consignee_name, s.consignee_phone, s.consignee_address, s.public_token, s.public_off,
             NULL::text AS created_by_name, s.created_at, s.updated_at, ''::text AS version,
             i.id AS invoice_id, i.number AS invoice_number, i.due_date AS invoice_due_date,
             (SELECT COUNT(*) FROM office_payments x WHERE x.shipment_id = s.id) AS payments
@@ -520,7 +588,17 @@ export interface ShipmentForm {
   status: string;
   notes: string;
   bill_address: string;
+  consignee_name: string;
+  consignee_phone: string;
+  consignee_address: string;
   version: string;
+}
+
+/** One contents row as typed. */
+export interface ItemForm {
+  description: string;
+  pieces: string;
+  kg: string;
 }
 
 /** One charge or cost line as typed. Charges use description…per_usd; costs also category and payee. */
@@ -544,11 +622,13 @@ export interface FormState {
   form: ShipmentForm;
   charges: LineForm[];
   costs: LineForm[];
+  items: ItemForm[];
 }
 
 const FORM_KEYS: (keyof ShipmentForm)[] = [
   'service', 'ship_date', 'client_id', 'new_client', 'new_client_phone', 'origin', 'destination', 'goods', 'pieces',
-  'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'version',
+  'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address',
+  'consignee_name', 'consignee_phone', 'consignee_address', 'version',
 ];
 const LINE_KEYS: (keyof LineForm)[] = [
   'description', 'qty', 'unit', 'rate', 'amount', 'currency', 'per_usd', 'category', 'payee_id', 'new_payee', 'new_payee_kind', 'per',
@@ -593,6 +673,9 @@ export function newForm(service: ServiceKey, todayStr: string, clientId: number 
     status: 'booked',
     notes: '',
     bill_address: '',
+    consignee_name: '',
+    consignee_phone: '',
+    consignee_address: '',
     version: '',
   };
   const qtyFor = (per: string) => (per === 'fixed' ? '1' : '');
@@ -611,13 +694,15 @@ export function newForm(service: ServiceKey, todayStr: string, clientId: number 
     per: t.per === 'fixed' ? '' : t.per,
     new_payee_kind: defaultPayeeKind(t.category),
   }));
-  return { form, charges, costs };
+  // Courier parcels carry many kinds of things, each listed on the invoice.
+  const items = Array.from({ length: service === 'ups' ? 3 : 1 }, () => ({ description: '', pieces: '', kg: '' }));
+  return { form, charges, costs, items };
 }
 
 const numStr = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
 
 /** The edit form, filled from a saved shipment. */
-export function formFromShipment(s: Shipment, charges: ChargeLine[], costs: CostLine[]): FormState {
+export function formFromShipment(s: Shipment, charges: ChargeLine[], costs: CostLine[], items: ItemLine[] = []): FormState {
   // Cost lines have no unit, so a cost line "follows" the kg / CBM fields on
   // the form only when its quantity is exactly that figure (e.g. the airport
   // partner's per-kg line). A fixed line (qty 1) never follows anything.
@@ -647,8 +732,12 @@ export function formFromShipment(s: Shipment, charges: ChargeLine[], costs: Cost
       status: s.status,
       notes: s.notes ?? '',
       bill_address: s.bill_address ?? '',
+      consignee_name: s.consignee_name ?? '',
+      consignee_phone: s.consignee_phone ?? '',
+      consignee_address: s.consignee_address ?? '',
       version: s.version,
     },
+    items: items.length ? items.map((i) => ({ description: i.description, pieces: numStr(i.pieces), kg: numStr(i.kg) })) : [{ description: '', pieces: '', kg: '' }],
     charges: charges.map((c) => ({
       description: c.description,
       qty: numStr(c.qty),
@@ -692,7 +781,7 @@ export function readForm(fd: FormData): FormState {
     return typeof v === 'string' ? v.trim().slice(0, max) : '';
   };
   const form = {} as ShipmentForm;
-  for (const k of FORM_KEYS) form[k] = s(k, k === 'notes' ? 2000 : k === 'goods' || k === 'bill_address' ? 600 : 200);
+  for (const k of FORM_KEYS) form[k] = s(k, k === 'notes' ? 2000 : k === 'goods' || k === 'bill_address' || k === 'consignee_address' ? 600 : 200);
   const line = (r: Record<string, string>): LineForm => {
     const l = {} as LineForm;
     for (const k of LINE_KEYS) l[k] = (r[k] ?? '').slice(0, k === 'description' ? 300 : 120);
@@ -700,7 +789,10 @@ export function readForm(fd: FormData): FormState {
   };
   const charges = formRows(fd, 'charge').map(line).filter((l) => !isBlankLine(l));
   const costs = formRows(fd, 'cost').map(line).filter((l) => !isBlankLine(l));
-  return { form, charges, costs };
+  const items = formRows(fd, 'item')
+    .slice(0, MAX_ITEMS + 1)
+    .map((r) => ({ description: (r.description ?? '').slice(0, 200), pieces: (r.pieces ?? '').slice(0, 20), kg: (r.kg ?? '').slice(0, 20) }));
+  return { form, charges, costs, items };
 }
 
 /* ------------------------------------------------------------------ */
@@ -738,6 +830,10 @@ export interface ParsedShipment {
   status: ShipmentStatus;
   notes: string | null;
   bill_address: string | null;
+  consignee_name: string | null;
+  consignee_phone: string | null;
+  consignee_address: string | null;
+  items: { description: string; pieces: number | null; kg: number | null }[];
   version: string | null;
   charges: ParsedLine[];
   costs: ParsedLine[];
@@ -753,6 +849,9 @@ export interface Checked {
 }
 
 const orNull = (s: string) => (s === '' ? null : s);
+
+/** A parcel's contents list is short; this keeps a pasted mistake from running away. */
+export const MAX_ITEMS = 60;
 
 /**
  * Check everything typed. Never throws for bad input — every problem becomes a
@@ -917,6 +1016,21 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
   lines('charge', state.charges, charges);
   lines('cost', state.costs, costs);
 
+  // Contents: what is inside, each with pieces and/or kg.
+  const items: ParsedShipment['items'] = [];
+  const typed = state.items.filter((it) => it.description || it.pieces || it.kg);
+  if (typed.length > MAX_ITEMS) errors.push(`The contents list can have at most ${MAX_ITEMS} rows.`);
+  typed.slice(0, MAX_ITEMS).forEach((it, i) => {
+    const label = `Contents row ${i + 1}${it.description ? ` (${it.description})` : ''}`;
+    const before = errors.length;
+    if (!it.description) errors.push(`${label}: say what it is (e.g. "Clothes", "Shoes", "Dry fruit").`);
+    const pieces = it.pieces === '' ? null : parseNum(it.pieces);
+    const kg = it.kg === '' ? null : parseNum(it.kg);
+    if (it.pieces !== '' && (pieces === null || pieces < 0 || !Number.isInteger(pieces) || pieces >= 1e9)) errors.push(`${label}: pieces must be a whole number.`);
+    if (it.kg !== '' && (kg === null || kg < 0 || kg >= 1e9)) errors.push(`${label}: the kg "${it.kg}" is not a weight.`);
+    if (errors.length === before) items.push({ description: it.description, pieces, kg: kg === null ? null : Math.round(kg * 1000) / 1000 });
+  });
+
   // Payees picked from the list must exist and not be clients.
   if (payeeIds.size) {
     const found = await q<{ id: number; kind: string }>('SELECT id, kind FROM office_parties WHERE id = ANY($1::int[])', [[...payeeIds]]);
@@ -945,6 +1059,10 @@ export async function checkForm(state: FormState, rates: Record<string, number>,
       status,
       notes: orNull(form.notes.slice(0, 2000)),
       bill_address: cleanAddress(form.bill_address),
+      consignee_name: orNull(form.consignee_name.slice(0, 120)),
+      consignee_phone: orNull(form.consignee_phone.slice(0, 60)),
+      consignee_address: cleanAddress(form.consignee_address),
+      items,
       version: orNull(form.version),
       charges,
       costs,
@@ -1096,7 +1214,7 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
 
     const fields = [
       d.service, clientId, d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg,
-      d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address,
+      d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address, d.consignee_name, d.consignee_phone, d.consignee_address,
     ];
     let id: number;
     let ref: string;
@@ -1104,8 +1222,9 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
       ref = await nextShipmentRef(Number(d.ship_date.slice(0, 4)), t);
       const row = await one<{ id: number }>(
         `INSERT INTO office_shipments (service, client_id, ship_date, origin, destination, goods, pieces, weight_kg,
-                                       chargeable_kg, cbm, awb_no, tracking_no, status, notes, bill_address, ref, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING id`,
+                                       chargeable_kg, cbm, awb_no, tracking_no, status, notes, bill_address,
+                                       consignee_name, consignee_phone, consignee_address, ref, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`,
         [...fields, ref, userId],
         t,
       );
@@ -1116,15 +1235,21 @@ export async function saveShipment(d: ParsedShipment, userId: number, existingId
       await q(
         `UPDATE office_shipments SET service = $1, client_id = $2, ship_date = $3, origin = $4, destination = $5, goods = $6,
                 pieces = $7, weight_kg = $8, chargeable_kg = $9, cbm = $10, awb_no = $11, tracking_no = $12, status = $13,
-                notes = $14, bill_address = $15, updated_at = now()
-          WHERE id = $16`,
+                notes = $14, bill_address = $15, consignee_name = $16, consignee_phone = $17, consignee_address = $18,
+                updated_at = now()
+          WHERE id = $19`,
         [...fields, id],
         t,
       );
       await q('DELETE FROM office_charges WHERE shipment_id = $1', [id], t);
       await q('DELETE FROM office_costs WHERE shipment_id = $1', [id], t);
+      await q('DELETE FROM office_shipment_items WHERE shipment_id = $1', [id], t);
     }
     await insertLines(id, d, userId, t);
+    let sort = 0;
+    for (const it of d.items) {
+      await q('INSERT INTO office_shipment_items (shipment_id, description, pieces, kg, sort) VALUES ($1, $2, $3, $4, $5)', [id, it.description, it.pieces, it.kg, sort++], t);
+    }
     // A client with no saved address keeps this one for their next invoices.
     if (d.bill_address) {
       const saved = await one<{ id: number }>(

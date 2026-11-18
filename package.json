@@ -22,6 +22,7 @@
     "astro": "^7.0.9",
     "nodemailer": "^10.2.1",
     "pg": "^8.23.1",
+    "qrcode": "^1.5.4",
     "resend": "^6.17.2",
     "sharp": "^0.35.3"
   },
@@ -29,6 +30,7 @@
     "@tailwindcss/vite": "^4.3.2",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
     "tailwindcss": "^4.3.2"
   }
 }
