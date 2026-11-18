@@ -1,0 +1,413 @@
+---
+/**
+ * /t/<code> — the shipment page the QR code on a UPS invoice opens (or the
+ * link the office sends on WhatsApp). For the shipper and the receiver: where
+ * the cargo is, what is in it, who sends and who receives it, weights, and the
+ * charges with what is paid and still due.
+ *
+ * No login. The code is 128 random bits, so the page cannot be guessed or
+ * listed; the office can make a new code or turn the page off from the
+ * shipment. Kept out of search engines, never cached, and the address is not
+ * sent on to other sites (Referrer-Policy). Nothing internal is shown: no
+ * costs, partners, profit or notes. See lib/office/publicpage.ts.
+ */
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Eyebrow from '../../components/Eyebrow.astro';
+import { isConfigured } from '../../lib/office/db';
+import { publicShipment, type PublicShipment } from '../../lib/office/publicpage';
+import { getSettings } from '../../lib/office/settings';
+import { INVOICE_STATUS_LABEL } from '../../lib/office/invoices';
+import { SERVICES, SHIPMENT_STATUS } from '../../lib/office/services';
+import { usd, fmtMoney, fmtDate, fmtNum, today } from '../../lib/office/money';
+import { CONTACT } from '../../consts';
+
+export const prerender = false;
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+Astro.response.headers.set('Referrer-Policy', 'no-referrer');
+
+const token = Astro.params.token ?? '';
+let p: PublicShipment | null = null;
+let failed = false;
+if (isConfigured()) {
+  try {
+    p = await publicShipment(token, today());
+  } catch (e) {
+    console.error('Shipment page failed:', e);
+    failed = true;
+  }
+}
+if (!p) Astro.response.status = failed ? 503 : 404;
+
+let phone = CONTACT.phoneExport;
+let email = CONTACT.email;
+if (p) {
+  try {
+    const st = await getSettings();
+    phone = st.phone || phone;
+    email = st.email || email;
+  } catch {
+    /* the defaults will do */
+  }
+}
+const waDigits = phone.replace(/\D/g, '');
+
+const STEPS = ['booked', 'in_transit', 'arrived', 'delivered'] as const;
+const STEP_TEXT: Record<(typeof STEPS)[number], string> = {
+  booked: 'Received for shipping',
+  in_transit: 'On the way',
+  arrived: 'Arrived at destination',
+  delivered: 'Delivered to the receiver',
+};
+const at = p ? STEPS.indexOf(p.status as (typeof STEPS)[number]) : -1;
+const route = p ? [p.origin, p.destination].filter(Boolean).join(' → ') : '';
+const itemPieces = p ? p.items.reduce((a, i) => a + (i.pieces ?? 0), 0) : 0;
+const itemKg = p ? Math.round(p.items.reduce((a, i) => a + (i.kg ?? 0), 0) * 1000) / 1000 : 0;
+const anyPieces = p?.items.some((i) => i.pieces !== null) ?? false;
+const anyKg = p?.items.some((i) => i.kg !== null) ?? false;
+const updated = p
+  ? new Date(p.updated_at).toLocaleString('en-GB', { timeZone: 'Asia/Kabul', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  : '';
+
+const facts: [string, string][] = [];
+if (p) {
+  facts.push(['Service', SERVICES[p.service]?.label ?? p.service]);
+  facts.push(['Ship date', fmtDate(p.ship_date)]);
+  if (route) facts.push(['Route', route]);
+  if (p.goods) facts.push(['Goods', p.goods]);
+  if (p.pieces !== null) facts.push(['Pieces / cartons', fmtNum(p.pieces, 0)]);
+  if (p.weight_kg !== null) facts.push(['Weight', `${fmtNum(p.weight_kg)} kg`]);
+  if (p.chargeable_kg !== null && p.chargeable_kg !== p.weight_kg) facts.push(['Chargeable weight', `${fmtNum(p.chargeable_kg)} kg`]);
+  if (p.cbm !== null) facts.push(['Volume', `${fmtNum(p.cbm, 3)} CBM`]);
+  if (p.awb_no) facts.push(['Airway bill', p.awb_no]);
+}
+const due = p?.fig.due ?? 0;
+---
+
+<BaseLayout title={p ? `Shipment ${p.ref}` : 'Shipment not found'} description="Amanat Logistics shipment details." noindex>
+  {
+    !p ? (
+      <section class="bg-cream">
+        <div class="mx-auto max-w-[760px] px-5 py-20 md:px-10">
+          <div class="rounded-2xl border border-line bg-paper p-7 md:p-10">
+            <h1 class="m-0 font-serif text-[28px] font-bold text-plum">{failed ? 'Please try again in a minute' : 'Shipment not found'}</h1>
+            <p class="mb-0 mt-3 text-[16px] leading-relaxed text-muted-dark">
+              {failed
+                ? 'We could not load this shipment just now.'
+                : 'This link is not valid, or it has been replaced by a new one. Please ask Amanat Logistics for the current link.'}
+            </p>
+            <p class="mb-0 mt-5 text-[15px]">
+              <a class="font-bold text-accent" href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a>
+              <span class="text-muted"> · </span>
+              <a class="font-bold text-accent" href={`mailto:${email}`}>{email}</a>
+            </p>
+          </div>
+        </div>
+      </section>
+    ) : (
+      <>
+        <section class="route-grid bg-fig">
+          <div class="mx-auto flex max-w-[1040px] flex-col items-start gap-4 px-5 py-12 md:px-10 md:py-16">
+            <Eyebrow text={`${SERVICES[p.service]?.short ?? 'Shipment'} shipment`} tone="dark" />
+            <h1 class="m-0 font-serif text-[34px] font-bold leading-[1.1] text-[#FFF7F9] md:text-[46px]">{p.ref}</h1>
+            <p class="m-0 text-[16px] text-[#E8D3DA] md:text-[17px]">
+              {route || (SERVICES[p.service]?.label ?? '')}
+              {p.tracking_no && <> · UPS {p.tracking_no}</>}
+            </p>
+            <span class:list={['pg-status', `pg-${p.status}`]}>{SHIPMENT_STATUS[p.status]}</span>
+          </div>
+        </section>
+
+        <section class="bg-cream">
+          <div class="mx-auto grid max-w-[1040px] gap-5 px-5 py-10 md:px-10 md:py-14">
+            {/* Status */}
+            <div class="rounded-2xl border border-line bg-paper p-6 md:p-8">
+              <div class="mb-5 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 class="m-0 font-serif text-[21px] font-bold text-plum">Where is it now?</h2>
+                <span class="text-[13px] text-muted">Last updated {updated} (Kabul time)</span>
+              </div>
+              {p.status === 'cancelled' ? (
+                <p class="m-0 rounded-lg border border-[#EBC3BD] bg-[#FBEEEC] px-4 py-3 text-[15px] font-semibold text-[#9A3226]">
+                  This shipment was cancelled. Please contact us for details.
+                </p>
+              ) : (
+                <ol class="pg-steps m-0 list-none p-0">
+                  {STEPS.map((k, i) => (
+                    <li class:list={['pg-step', i < at ? 'done' : i === at ? 'now' : 'todo']}>
+                      <span class="pg-dot" aria-hidden="true">{i < at || (i === at && k === 'delivered') ? '✓' : i + 1}</span>
+                      <span class="pg-label">
+                        <strong>{SHIPMENT_STATUS[k]}</strong>
+                        <span>{STEP_TEXT[k]}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              {p.service === 'ups' && p.tracking_no && (
+                <p class="mb-0 mt-5 text-[14.5px]">
+                  UPS tracking number <strong>{p.tracking_no}</strong> —{' '}
+                  <a
+                    class="font-bold text-accent underline"
+                    href={`https://www.ups.com/track?tracknum=${encodeURIComponent(p.tracking_no)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    follow it on UPS ↗
+                  </a>
+                </p>
+              )}
+            </div>
+
+            {/* Shipper / receiver */}
+            <div class="grid gap-5 md:grid-cols-2">
+              <div class="rounded-2xl border border-line bg-paper p-6 md:p-7">
+                <h2 class="pg-h">Shipper</h2>
+                {p.shipper ? (
+                  <>
+                    <p class="m-0 text-[18px] font-bold text-ink">{p.shipper.name}</p>
+                    {p.shipper.address && <p class="m-0 mt-1 whitespace-pre-line text-[15px] text-muted-dark">{p.shipper.address}</p>}
+                    {p.shipper.phone && <p class="m-0 mt-1 text-[15px] text-muted-dark">{p.shipper.phone}</p>}
+                  </>
+                ) : (
+                  <p class="m-0 text-muted">—</p>
+                )}
+              </div>
+              <div class="rounded-2xl border border-line bg-paper p-6 md:p-7">
+                <h2 class="pg-h">Consignee — receiver</h2>
+                {p.consignee.name || p.consignee.phone || p.consignee.address ? (
+                  <>
+                    {p.consignee.name && <p class="m-0 text-[18px] font-bold text-ink">{p.consignee.name}</p>}
+                    {p.consignee.address && <p class="m-0 mt-1 whitespace-pre-line text-[15px] text-muted-dark">{p.consignee.address}</p>}
+                    {p.consignee.phone && <p class="m-0 mt-1 text-[15px] text-muted-dark">{p.consignee.phone}</p>}
+                  </>
+                ) : (
+                  <p class="m-0 text-muted">—</p>
+                )}
+              </div>
+            </div>
+
+            {/* Shipment facts */}
+            <div class="rounded-2xl border border-line bg-paper p-6 md:p-7">
+              <h2 class="pg-h">Shipment</h2>
+              <dl class="pg-facts m-0">
+                {facts.map(([k, v]) => (
+                  <div>
+                    <dt>{k}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+
+            {/* Contents */}
+            {p.items.length > 0 && (
+              <div class="rounded-2xl border border-line bg-paper p-6 md:p-7">
+                <h2 class="pg-h">What is inside</h2>
+                <div class="overflow-x-auto">
+                  <table class="pg-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        {anyPieces && <th class="num">Pieces</th>}
+                        {anyKg && <th class="num">Kg</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.items.map((i) => (
+                        <tr>
+                          <td>{i.description}</td>
+                          {anyPieces && <td class="num">{i.pieces === null ? '—' : fmtNum(i.pieces, 0)}</td>}
+                          {anyKg && <td class="num">{i.kg === null ? '—' : fmtNum(i.kg, 3)}</td>}
+                        </tr>
+                      ))}
+                    </tbody>
+                    {p.items.length > 1 && (
+                      <tfoot>
+                        <tr>
+                          <td>Total</td>
+                          {anyPieces && <td class="num">{fmtNum(itemPieces, 0)}</td>}
+                          {anyKg && <td class="num">{fmtNum(itemKg, 3)}</td>}
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Charges */}
+            <div class="rounded-2xl border border-line bg-paper p-6 md:p-7">
+              <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <h2 class="pg-h m-0">Charges</h2>
+                {p.invoice && (
+                  <span class="text-[14px] text-muted-dark">
+                    Invoice <strong>{p.invoice.number}</strong> · {fmtDate(p.invoice.issue_date)}
+                    <span class:list={['pg-inv', `pg-inv-${p.invoice.status}`]}>{INVOICE_STATUS_LABEL[p.invoice.status]}</span>
+                  </span>
+                )}
+              </div>
+              {p.charges.length === 0 ? (
+                <p class="m-0 text-muted">No charges yet.</p>
+              ) : (
+                <div class="overflow-x-auto">
+                  <table class="pg-table">
+                    <thead>
+                      <tr>
+                        <th>Description</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.charges.map((c) => (
+                        <tr>
+                          <td>{c.description}</td>
+                          <td class="num">
+                            {c.qty === null ? '—' : fmtNum(c.qty, 3)}
+                            {c.qty !== null && c.unit && c.unit !== 'fixed' && <span class="text-muted"> {c.unit === 'cbm' ? 'CBM' : c.unit}</span>}
+                          </td>
+                          <td class="num">
+                            {fmtMoney(c.amount, c.currency)}
+                            {c.currency !== 'USD' && <div class="text-[12.5px] text-muted">{usd(c.usd)}</div>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td colspan="2">Total</td>
+                        <td class="num">{usd(p.fig.revenue)}</td>
+                      </tr>
+                      <tr class="pg-sub">
+                        <td colspan="2">Paid</td>
+                        <td class="num">{usd(p.fig.received)}</td>
+                      </tr>
+                      <tr class:list={['pg-due', due <= 0 && 'zero']}>
+                        <td colspan="2">{due < 0 ? 'Credit in your favour' : 'Balance due'}</td>
+                        <td class="num">{usd(Math.abs(due))}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div class="rounded-2xl border border-line bg-sand p-6 text-[15px] leading-relaxed text-muted-dark md:p-7">
+              Questions about this shipment? Call{' '}
+              <a class="font-bold text-accent" href={`tel:${phone.replace(/\s/g, '')}`}>{phone}</a>
+              {waDigits && (
+                <>
+                  , message us on{' '}
+                  <a class="font-bold text-accent" href={`https://wa.me/${waDigits}?text=${encodeURIComponent(`Shipment ${p.ref}`)}`} target="_blank" rel="noopener noreferrer">
+                    WhatsApp
+                  </a>
+                </>
+              )}{' '}
+              or email <a class="font-bold text-accent" href={`mailto:${email}?subject=${encodeURIComponent(`Shipment ${p.ref}`)}`}>{email}</a>.
+            </div>
+          </div>
+        </section>
+      </>
+    )
+  }
+</BaseLayout>
+
+<style>
+  .pg-status {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.02em;
+    background: #fff7f9;
+    color: var(--color-fig);
+  }
+  .pg-delivered { background: #d9f2e4; color: #14532d; }
+  .pg-cancelled { background: #fbeeec; color: #9a3226; }
+
+  .pg-h {
+    margin: 0 0 10px;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-plum);
+    font-weight: 800;
+  }
+
+  .pg-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .pg-step { position: relative; display: flex; flex-direction: column; gap: 8px; }
+  .pg-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 17px;
+    inset-inline-start: 40px;
+    inset-inline-end: -6px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--color-line);
+  }
+  .pg-step.done:not(:last-child)::after { background: var(--color-plum); }
+  .pg-dot {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-weight: 800;
+    font-size: 15px;
+    border: 2px solid var(--color-line);
+    color: var(--color-muted);
+    background: #fff;
+  }
+  .pg-step.done .pg-dot { background: var(--color-plum); border-color: var(--color-plum); color: #fff; }
+  .pg-step.now .pg-dot { border-color: var(--color-plum); color: var(--color-plum); box-shadow: 0 0 0 4px #f3ebee; }
+  .pg-step.now.pg-step:last-child .pg-dot { background: #1e7b4f; border-color: #1e7b4f; color: #fff; box-shadow: 0 0 0 4px #d9f2e4; }
+  .pg-label { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: var(--color-muted); line-height: 1.35; }
+  .pg-label strong { font-size: 15px; color: var(--color-ink); }
+  .pg-step.todo .pg-label strong { color: var(--color-muted); }
+  @media (max-width: 640px) {
+    .pg-steps { grid-template-columns: 1fr; gap: 14px; }
+    .pg-step { flex-direction: row; align-items: center; gap: 12px; }
+    .pg-step:not(:last-child)::after {
+      top: 38px;
+      bottom: -14px;
+      height: auto;
+      width: 3px;
+      inset-inline-start: 16.5px;
+      inset-inline-end: auto;
+    }
+  }
+
+  .pg-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+  .pg-facts div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--color-line); }
+  .pg-facts dt { color: var(--color-muted); font-size: 14.5px; }
+  .pg-facts dd { margin: 0; font-weight: 700; font-size: 15px; text-align: end; overflow-wrap: anywhere; }
+  @media (max-width: 640px) {
+    .pg-facts { grid-template-columns: 1fr; }
+  }
+
+  .pg-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .pg-table th {
+    text-align: start;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    padding: 8px 10px;
+    border-bottom: 2px solid var(--color-plum);
+  }
+  .pg-table td { padding: 9px 10px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+  .pg-table tfoot td { font-weight: 800; border-bottom: 0; }
+  .pg-table tfoot tr:first-child td { border-top: 2px solid var(--color-fig); }
+  .pg-table .pg-sub td { font-weight: 500; color: var(--color-muted-dark); }
+  .pg-table .pg-due td { background: #f3ebee; font-size: 17px; }
+  .pg-table .pg-due.zero td { background: #e6f4ec; color: #1e7b4f; }
+  .pg-table .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .pg-inv { margin-inline-start: 8px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; background: #f3ebee; color: var(--color-plum); }
+  .pg-inv-paid, .pg-inv-credit { background: #e6f4ec; color: #1e7b4f; }
+  .pg-inv-overdue { background: #fdecea; color: #b42318; }
+</style>

@@ -40,6 +40,7 @@ import {
   type ShipmentStatus,
 } from './services';
 import { logActivity } from './activity';
+import { shipmentItems, type ItemLine } from './shipments';
 
 export const PER_PAGE = 50;
 const ZERO: ShipmentFigures = { revenue: 0, cost: 0, profit: 0, received: 0, applied: 0, due: 0 };
@@ -444,7 +445,14 @@ export interface InvoiceDetail {
     awb_no: string | null;
     tracking_no: string | null;
     status: ShipmentStatus;
+    /** Code of the customer page the invoice's QR code opens; null when there is none (yet) or it was turned off. */
+    public_token: string | null;
+    public_off: boolean;
   };
+  /** Who receives the cargo. */
+  consignee: { name: string | null; phone: string | null; address: string | null } | null;
+  /** What is in the cargo: clothes, shoes, dry fruit… with pieces and kg. */
+  items: ItemLine[];
   client: { id: number; name: string; phone: string | null; city: string | null; country: string | null; address: string | null } | null;
   /** The address printed under the client's name: the shipment's bill-to address, else the client's saved one. */
   billTo: string | null;
@@ -472,6 +480,7 @@ export async function getInvoice(id: number, todayStr: string): Promise<InvoiceD
     `SELECT i.id, i.number, i.issue_date, i.due_date, i.notes, i.created_at,
             s.id AS s_id, s.ref, s.service, s.ship_date, s.origin, s.destination, s.goods, s.pieces,
             s.weight_kg, s.chargeable_kg, s.cbm, s.awb_no, s.tracking_no, s.status, s.bill_address,
+            s.consignee_name, s.consignee_phone, s.consignee_address, s.public_token, s.public_off,
             p.id AS c_id, p.name AS c_name, p.phone AS c_phone, p.city AS c_city, p.country AS c_country, p.address AS c_address
        FROM office_invoices i
        JOIN office_shipments s ON s.id = i.shipment_id
@@ -485,6 +494,7 @@ export async function getInvoice(id: number, todayStr: string): Promise<InvoiceD
        FROM office_charges WHERE shipment_id = $1 ORDER BY sort, id`,
     [r.s_id],
   );
+  const items = await shipmentItems(r.s_id);
   const payments = await q<InvoiceDetail['payments'][number]>(
     `SELECT p.id, p.pay_date, p.amount, p.currency, p.usd, p.method, p.reference, a.name AS account_name
        FROM office_payments p LEFT JOIN office_accounts a ON a.id = p.account_id
@@ -524,7 +534,14 @@ export async function getInvoice(id: number, todayStr: string): Promise<InvoiceD
       awb_no: r.awb_no,
       tracking_no: r.tracking_no,
       status: r.status,
+      public_token: r.public_token,
+      public_off: r.public_off,
     },
+    consignee:
+      r.consignee_name || r.consignee_phone || r.consignee_address
+        ? { name: r.consignee_name, phone: r.consignee_phone, address: r.consignee_address }
+        : null,
+    items,
     client: r.c_id ? { id: r.c_id, name: r.c_name, phone: r.c_phone, city: r.c_city, country: r.c_country, address: r.c_address } : null,
     billTo: r.bill_address || r.c_address || null,
     charges,

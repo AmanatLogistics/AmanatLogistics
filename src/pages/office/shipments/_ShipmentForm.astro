@@ -28,6 +28,8 @@ interface Props {
 }
 const { mode, state, errors, clients, payees, currencies, rates, admin, cancelHref, paymentsLinked = 0 } = Astro.props;
 const { form, charges, costs } = state;
+// Always at least one contents row, so "Add a row" has one to copy.
+const items = state.items.length ? state.items : [{ description: '', pieces: '', kg: '' }];
 const service = isServiceKey(form.service) ? form.service : 'other';
 const def = SERVICES[service];
 
@@ -192,6 +194,49 @@ const isUps = service === 'ups';
   </div>
 
   <div class="o-card">
+    <div class="o-card-head"><h2>What is inside, and who receives it</h2></div>
+    <p class="o-help" style="margin:-6px 0 12px">
+      Printed on the invoice and on the page its QR code opens. {isUps ? 'List every kind of thing in the parcel — clothes, shoes, dry fruit… — with how many pieces or kg.' : 'List the goods with how many pieces or kg, if you want them on the invoice.'}
+    </p>
+    <div class="o-table-wrap" style="margin-bottom:8px">
+      <table class="o-table" data-items>
+        <thead>
+          <tr><th>What is it</th><th class="num" style="width:120px">Pieces</th><th class="num" style="width:120px">Kg</th><th style="width:44px"></th></tr>
+        </thead>
+        <tbody>
+          {items.map((it, i) => (
+            <tr data-item-row>
+              <td><input class="o-input" name={`item[${i}][description]`} value={it.description} maxlength="200" placeholder="e.g. Clothes" aria-label="What is it" /></td>
+              <td><input class="o-input" style="text-align:right" name={`item[${i}][pieces]`} value={it.pieces} inputmode="numeric" aria-label="Pieces" data-item-pieces /></td>
+              <td><input class="o-input" style="text-align:right" name={`item[${i}][kg]`} value={it.kg} inputmode="decimal" aria-label="Kg" data-item-kg /></td>
+              <td><button type="button" class="o-btn ghost sm" data-item-remove aria-label="Remove this row">✕</button></td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr><td>Total</td><td class="num" data-item-total="pieces">—</td><td class="num" data-item-total="kg">—</td><td></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div><button type="button" class="o-btn sm" data-item-add>+ Add a row</button></div>
+
+    <div class="o-row" style="margin-top:16px">
+      <label class="o-field">
+        <span>Receiver (consignee)</span>
+        <input name="consignee_name" value={form.consignee_name} maxlength="120" autocomplete="off" />
+      </label>
+      <label class="o-field">
+        <span>Receiver's phone</span>
+        <input name="consignee_phone" value={form.consignee_phone} maxlength="60" inputmode="tel" autocomplete="off" />
+      </label>
+    </div>
+    <label class="o-field">
+      <span>Receiver's address</span>
+      <textarea name="consignee_address" rows="2" maxlength="600" placeholder={'Street and number\nCity, postcode, country'}>{form.consignee_address}</textarea>
+    </label>
+  </div>
+
+  <div class="o-card">
     <div class="o-card-head"><h2>Charges — what we bill the client</h2></div>
     <p class="o-help" style="margin:-6px 0 12px">
       These lines are the client's invoice. Lines counted per kg or per CBM take their quantity from the weight or CBM above.
@@ -283,6 +328,44 @@ const isUps = service === 'ups';
       if (name.value.trim() !== '' && !/^\d+$/.test(sel.value)) sel.value = '__new';
     });
     sync(false);
+    // Contents rows: add, remove, and the totals under them.
+    var itemsTable = form.querySelector('[data-items]');
+    if (itemsTable) {
+      var body = itemsTable.tBodies[0];
+      var num = function (v) { var n = parseFloat(String(v).replace(/[,\s]/g, '')); return isFinite(n) ? n : 0; };
+      var totals = function () {
+        var p = 0, k = 0, anyP = false, anyK = false;
+        body.querySelectorAll('[data-item-row]').forEach(function (r) {
+          var pi = r.querySelector('[data-item-pieces]').value, ki = r.querySelector('[data-item-kg]').value;
+          if (pi.trim()) { anyP = true; p += num(pi); }
+          if (ki.trim()) { anyK = true; k += num(ki); }
+        });
+        itemsTable.querySelector('[data-item-total="pieces"]').textContent = anyP ? p.toLocaleString('en-US') : '—';
+        itemsTable.querySelector('[data-item-total="kg"]').textContent = anyK ? (Math.round(k * 1000) / 1000).toLocaleString('en-US') : '—';
+      };
+      var next = body.querySelectorAll('[data-item-row]').length;
+      form.querySelector('[data-item-add]').addEventListener('click', function () {
+        var last = body.querySelector('[data-item-row]:last-child');
+        var row = last.cloneNode(true);
+        var i = next++;
+        row.querySelectorAll('input').forEach(function (inp) {
+          inp.value = '';
+          inp.name = inp.name.replace(/^item\[\d+\]/, 'item[' + i + ']');
+        });
+        body.appendChild(row);
+        row.querySelector('input').focus();
+      });
+      body.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-item-remove]');
+        if (!b) return;
+        var row = b.closest('[data-item-row]');
+        if (body.querySelectorAll('[data-item-row]').length > 1) row.remove();
+        else row.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+        totals();
+      });
+      body.addEventListener('input', totals);
+      totals();
+    }
     // Stop a double click on Save from creating the same shipment twice.
     form.addEventListener('submit', function () {
       var b = form.querySelector('button[type="submit"]');

@@ -3,8 +3,10 @@
  * One shipment: what it is, what the client was billed and has paid, what it
  * cost us (profit for admins only), the payments linked to it, and its history.
  * POST actions: quick status change (everyone), delete (admin only, refused
- * while payments are linked).
+ * while payments are linked), and the customer page the invoice's QR code
+ * opens: turn on, new link (the old one stops working), turn off (everyone).
  */
+import QRCode from 'qrcode';
 import OfficeLayout from '../../../../layouts/OfficeLayout.astro';
 import PageHead from '../../../../components/office/PageHead.astro';
 import Flash from '../../../../components/office/Flash.astro';
@@ -21,12 +23,14 @@ import {
   getShipment,
   linkedPayments,
   setShipmentStatus,
+  setPublicPage,
   deleteShipment,
   parseId,
   routeText,
   ShipmentError,
   CHARGE_UNITS,
 } from '../../../../lib/office/shipments';
+import { publicShipmentUrl } from '../../../../lib/office/publicpage';
 
 export const prerender = false;
 const user = await guard(Astro);
@@ -46,6 +50,9 @@ if (id && Astro.request.method === 'POST') {
         const status = oneOf(fd, 'status', SHIPMENT_STATUS);
         if (!status) error = 'Choose a status.';
         else return Astro.redirect(withMsg(`/office/shipments/${id}`, await setShipmentStatus(id, status, user.id)), 303);
+      } else if (action === 'page_on' || action === 'page_new' || action === 'page_off') {
+        const mode = action === 'page_on' ? 'on' : action === 'page_new' ? 'new' : 'off';
+        return Astro.redirect(withMsg(`/office/shipments/${id}#customer-page`, await setPublicPage(id, user.id, mode)), 303);
       } else if (action === 'delete') {
         if (!admin) error = 'Only an admin can delete a shipment.';
         else return Astro.redirect(withMsg(backPath(fd, '/office/shipments'), await deleteShipment(id, user.id)), 303);
@@ -90,6 +97,13 @@ const deleteMsg = s
   ? `Delete shipment ${s.ref}?${s.invoice_number ? ` Its invoice ${s.invoice_number},` : ''} its charges and its costs will be deleted too. This cannot be undone.`
   : '';
 const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
+
+const items = data?.items ?? [];
+const itemPieces = items.reduce((a, i) => a + (i.pieces ?? 0), 0);
+const itemKg = Math.round(items.reduce((a, i) => a + (i.kg ?? 0), 0) * 1000) / 1000;
+const pageUrl = s?.public_token ? publicShipmentUrl(s.public_token, Astro.url) : null;
+const pageQr = pageUrl ? await QRCode.toString(pageUrl, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }) : null;
+const shareText = s && pageUrl ? `Amanat Logistics — shipment ${s.ref}: status, contents and charges\n${pageUrl}` : '';
 ---
 
 <OfficeLayout title={s ? `${s.ref}` : 'Shipment not found'} user={user} active="shipments">
@@ -175,6 +189,18 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                 {s.client_id ? <a href={`/office/parties/${s.client_id}`}>{s.client_name}</a> : '—'}
                 {clientBal && <div class="small muted">{balanceWords(clientBal.balance)}</div>}
               </dd>
+              <dt>Receiver</dt>
+              <dd>
+                {s.consignee_name || s.consignee_phone || s.consignee_address ? (
+                  <>
+                    {s.consignee_name ?? <span class="muted">No name</span>}
+                    {s.consignee_phone && <div class="small">{s.consignee_phone}</div>}
+                    {s.consignee_address && <div class="small muted" style="white-space:pre-line">{s.consignee_address}</div>}
+                  </>
+                ) : (
+                  <span class="muted">Not entered</span>
+                )}
+              </dd>
               <dt>Ship date</dt>
               <dd>{fmtDate(s.ship_date)}</dd>
               <dt>Route</dt>
@@ -259,10 +285,105 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
                 </p>
               )}
             </form>
+
+            <div class="o-card" id="customer-page">
+              <div class="o-card-head"><h2>Customer page (QR code)</h2></div>
+              {pageUrl && pageQr ? (
+                <>
+                  <div class="o-page-qr">
+                    <div class="o-page-qr-img" set:html={pageQr} />
+                    <div>
+                      <p class="o-help" style="margin:0 0 8px">
+                        The QR code on the invoice opens this page: status, contents, shipper, receiver, weight and charges. No login — anyone with the
+                        code or the link can see it, so only give it to the shipper and the receiver.
+                      </p>
+                      <input class="o-page-link" type="text" value={pageUrl} readonly aria-label="Customer page link" />
+                      <div class="o-actions" style="margin-top:8px">
+                        <a class="o-btn sm" href={pageUrl} target="_blank" rel="noopener" data-astro-prefetch="false">Open</a>
+                        <button class="o-btn sm" type="button" data-copy={pageUrl}>Copy link</button>
+                        <a class="o-btn sm" href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noopener noreferrer">Send on WhatsApp</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="o-actions" style="margin-top:12px">
+                    <form method="post" onsubmit="return confirm('Make a new link? The QR code on invoices already printed, and the old link, will stop working.')">
+                      <input type="hidden" name="action" value="page_new" />
+                      <button class="o-btn sm" type="submit">Make a new link</button>
+                    </form>
+                    <form method="post" onsubmit="return confirm('Turn the customer page off? The QR code on invoices already printed will stop working.')">
+                      <input type="hidden" name="action" value="page_off" />
+                      <button class="o-btn sm danger" type="submit">Turn off</button>
+                    </form>
+                  </div>
+                </>
+              ) : (
+                <form method="post" class="o-actions" style="justify-content:space-between">
+                  <input type="hidden" name="action" value="page_on" />
+                  <span class="o-help">
+                    {s.public_off
+                      ? 'Turned off — the QR code and link do not work, and the invoice prints without a QR code.'
+                      : s.service === 'ups'
+                        ? 'Not made yet. It is made when you print the invoice, which then carries its QR code.'
+                        : 'A page the shipper and receiver open from a QR code or a link: status, contents, weight and charges.'}
+                  </span>
+                  <button class="o-btn sm" type="submit">{s.public_off ? 'Turn on again' : 'Make the page'}</button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
 
         <div class="o-card" style="margin-top:16px">
+          <div class="o-card-head">
+            <h2>What is inside</h2>
+            <span class="o-actions">
+              {items.length > 0 && (
+                <span class="small">
+                  {fmtNum(itemPieces, 0)} pcs · {fmtNum(itemKg, 3)} kg
+                </span>
+              )}
+              <a class="small" href={`/office/shipments/${s.id}/edit`}>Change</a>
+            </span>
+          </div>
+          {items.length === 0 ? (
+            <p class="o-empty">
+              Nothing listed. <a href={`/office/shipments/${s.id}/edit`}>Add the contents</a> (clothes, shoes, dry fruit…) with pieces and kg — they print on the invoice.
+            </p>
+          ) : (
+            <div class="o-table-wrap">
+              <table class="o-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th class="num">Pieces</th>
+                    <th class="num">Kg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((i) => (
+                    <tr>
+                      <td>{i.description}</td>
+                      <td class="num">{i.pieces === null ? '—' : fmtNum(i.pieces, 0)}</td>
+                      <td class="num">{i.kg === null ? '—' : fmtNum(i.kg, 3)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>Total</td>
+                    <td class="num">{fmtNum(itemPieces, 0)}</td>
+                    <td class="num">{fmtNum(itemKg, 3)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          {items.length > 0 && s.weight_kg !== null && Math.abs(itemKg - s.weight_kg) > 0.05 && items.every((i) => i.kg !== null) && (
+            <p class="o-help" style="margin:10px 0 0">The contents add up to {fmtNum(itemKg, 3)} kg; the shipment weight is {fmtNum(s.weight_kg)} kg.</p>
+          )}
+        </div>
+
+        <div class="o-card">
           <div class="o-card-head">
             <h2>Charges — billed to the client</h2>
             <span class="o-actions">
@@ -514,3 +635,30 @@ const kindLabel = (k: string) => PARTY_KINDS[k as PartyKind] ?? k;
     )
   }
 </OfficeLayout>
+
+<style is:global>
+  .o-page-qr { display: flex; gap: 14px; align-items: flex-start; }
+  .o-page-qr-img { flex: 0 0 120px; width: 120px; background: #fff; border-radius: 6px; }
+  .o-page-qr-img svg { display: block; width: 100%; height: auto; }
+  .o-page-link { width: 100%; font-size: 12.5px; padding: 6px 8px; border: 1px solid var(--o-line); border-radius: 6px; background: transparent; color: inherit; }
+  @media (max-width: 520px) { .o-page-qr { flex-direction: column; } }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const text = b.dataset.copy ?? '';
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Older phones, or a page not served over https.
+        const input = b.closest('#customer-page')?.querySelector<HTMLInputElement>('.o-page-link');
+        input?.select();
+        document.execCommand('copy');
+      }
+      const was = b.textContent;
+      b.textContent = 'Copied';
+      setTimeout(() => (b.textContent = was), 1500);
+    });
+  });
+</script>

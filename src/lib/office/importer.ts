@@ -3,7 +3,7 @@
  *
  * One file per kind of record. Import order matters, because later files
  * refer to earlier ones by name or reference:
- *   accounts → parties → shipments → charges → costs → payments → expenses → transfers
+ *   accounts → parties → shipments → items → charges → costs → payments → expenses → transfers
  *
  * Several kinds can also come together: several files at once, or one
  * "bundle" file in which each kind's rows follow a line such as "#shipments".
@@ -22,6 +22,7 @@ import { METHODS } from './money';
 import { nextShipmentRef, getSettings } from './settings';
 import { ensureInvoice } from './invoices';
 import { logActivity } from './activity';
+import { TOKEN_RE } from './shipments';
 
 /**
  * Numbers as spreadsheets write them, in either convention:
@@ -118,7 +119,7 @@ function matchEnum(v: string, map: Record<string, string | { short?: string; lab
 /* Kinds and their columns                                             */
 /* ------------------------------------------------------------------ */
 
-export type ImportKind = 'accounts' | 'parties' | 'shipments' | 'charges' | 'costs' | 'payments' | 'expenses' | 'transfers';
+export type ImportKind = 'accounts' | 'parties' | 'shipments' | 'items' | 'charges' | 'costs' | 'payments' | 'expenses' | 'transfers';
 
 interface Col {
   key: string;
@@ -176,8 +177,23 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
       { key: 'status', help: 'booked, in_transit, arrived, delivered, cancelled (default delivered)' },
       { key: 'notes', help: '' },
       { key: 'bill_address', help: 'address printed on its invoice (default: the client\'s)' },
+      { key: 'consignee_name', help: 'who receives the cargo' },
+      { key: 'consignee_phone', help: '' },
+      { key: 'consignee_address', help: '' },
+      { key: 'public_token', help: 'the code of its customer page (QR code), or "off" — only from a backup, so printed QR codes keep working' },
     ],
-    example: [['AML-OLD-101', 'tashkent', '12/03/2026', 'Haji Gul Dry Fruit Traders', 'Kandahar', 'Tashkent → Delhi', 'Dried figs', '40', '1000', '1000', '', '157-12345678', '', 'delivered', '']],
+    example: [['AML-OLD-101', 'tashkent', '12/03/2026', 'Haji Gul Dry Fruit Traders', 'Kandahar', 'Tashkent → Delhi', 'Dried figs', '40', '1000', '1000', '', '157-12345678', '', 'delivered', '', '', 'Ravi Traders', '+91 98 1234 5678', 'Khari Baoli, Delhi']],
+  },
+  items: {
+    label: 'Shipment contents (what is in the cargo)',
+    what: 'One row per kind of goods in a shipment — clothes, shoes, dry fruit… — with pieces and kg. Printed on the invoice.',
+    cols: [
+      { key: 'shipment_ref', required: true, help: 'must match a shipment ref' },
+      { key: 'description', required: true, help: 'e.g. Clothes' },
+      { key: 'pieces', help: 'whole number' },
+      { key: 'kg', help: '' },
+    ],
+    example: [['AML-OLD-101', 'Dried figs', '30', '750'], ['AML-OLD-101', 'Raisins', '10', '250']],
   },
   charges: {
     label: 'Shipment charges (what clients were billed)',
@@ -261,7 +277,7 @@ export const KINDS: Record<ImportKind, { label: string; what: string; cols: Col[
   },
 };
 
-export const KIND_ORDER: ImportKind[] = ['accounts', 'parties', 'shipments', 'charges', 'costs', 'payments', 'expenses', 'transfers'];
+export const KIND_ORDER: ImportKind[] = ['accounts', 'parties', 'shipments', 'items', 'charges', 'costs', 'payments', 'expenses', 'transfers'];
 
 export function isKind(k: string | null): k is ImportKind {
   return !!k && Object.prototype.hasOwnProperty.call(KINDS, k);
@@ -307,6 +323,8 @@ interface Lookups {
   /** Payments and expenses already saved, as "same record" keys, so a file imported twice is not counted twice. */
   paymentKeys: Set<string>;
   expenseKeys: Set<string>;
+  /** Customer page codes already in use. */
+  tokens: Set<string>;
 }
 
 const money2 = (n: unknown) => Number(n).toFixed(2);
@@ -330,7 +348,8 @@ async function loadLookups(runner?: Runner): Promise<Lookups> {
   const expenseKeys = new Set(
     (await q<{ exp_date: string; account_id: number; amount: number; category: string; description: string | null }>('SELECT exp_date, account_id, amount, category, description FROM office_expenses', [], runner)).map(expenseKey),
   );
-  return { parties, accounts, shipments, currencies, invoices, invoiceOf, paymentKeys, expenseKeys };
+  const tokens = new Set((await q<{ public_token: string }>('SELECT public_token FROM office_shipments WHERE public_token IS NOT NULL', [], runner)).map((r) => r.public_token));
+  return { parties, accounts, shipments, currencies, invoices, invoiceOf, paymentKeys, expenseKeys, tokens };
 }
 
 const lk = (s: string) => s.trim().toLowerCase();
@@ -364,6 +383,7 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
   const newParty = new Map<string, string>(); // lower name → kind, from rows that will be saved
   let rowNewParties: [string, string][] = [];
   const seenInFile = new Set<string>();
+  const seenTokens = new Set<string>();
   const invoiceInFile = new Map<string, number>(); // lower invoice number → shipment, for charges
   const fileInvoiceOf = new Map<number, string>(); // shipment → lower invoice number given in this file
 
@@ -403,7 +423,9 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
   raw.slice(1).forEach((cells, i) => {
     const values: Record<string, string> = {};
     header.forEach((h, j) => {
-      if (known.has(h)) values[h] = (cells[j] ?? '').trim();
+      // Line breaks inside a cell as "\n": the file text goes through a form
+      // field between check and save, and browsers send its breaks as "\r\n".
+      if (known.has(h)) values[h] = (cells[j] ?? '').replace(/\r\n?/g, '\n').trim();
     });
     const v = (k: string) => values[k] ?? '';
     const errors: string[] = [];
@@ -446,8 +468,29 @@ export async function checkFile(kind: ImportKind, text: string, createParties: b
       if (ref) seenInFile.add(lk(ref));
       const nums: Record<string, number | null> = {};
       for (const f of ['pieces', 'weight_kg', 'chargeable_kg', 'cbm']) nums[f] = money(v(f), f, errors);
-      data = { bill_address: v('bill_address') || null, ref: ref || null, service, ship_date: date, client, origin: v('origin') || null, destination: v('destination') || null, goods: v('goods') || null, ...nums, pieces: nums.pieces === null ? null : Math.round(nums.pieces), awb_no: v('awb_no') || null, tracking_no: v('tracking_no') || null, status, notes: v('notes') || null };
+      // A backup writes "off" for a customer page that was turned off.
+      const pageOff = /^off$/i.test(v('public_token'));
+      const token = pageOff ? '' : v('public_token');
+      if (token && !TOKEN_RE.test(token)) errors.push(`public_token "${token}" is not a customer page code.`);
+      else if (token && (L.tokens.has(token) || seenTokens.has(token))) errors.push('Its public_token is already used by another shipment.');
+      if (token) seenTokens.add(token);
+      data = {
+        consignee_name: v('consignee_name').slice(0, 120) || null,
+        consignee_phone: v('consignee_phone').slice(0, 60) || null,
+        consignee_address: v('consignee_address').slice(0, 600) || null,
+        public_token: token || null,
+        public_off: pageOff,
+        bill_address: v('bill_address') || null, ref: ref || null, service, ship_date: date, client, origin: v('origin') || null, destination: v('destination') || null, goods: v('goods') || null, ...nums, pieces: nums.pieces === null ? null : Math.round(nums.pieces), awb_no: v('awb_no') || null, tracking_no: v('tracking_no') || null, status, notes: v('notes') || null };
       preview = `${ref || '(new number)'} · ${service ? SERVICES[service as keyof typeof SERVICES].short : '?'} · ${date ?? '?'} · ${v('client_name')}`;
+    } else if (kind === 'items') {
+      const sid = L.shipments.get(lk(v('shipment_ref')));
+      if (v('shipment_ref') && !sid) errors.push(`No shipment ${v('shipment_ref')} — import shipments first.`);
+      if (sid && alreadyThere?.has(lk(v('shipment_ref')))) errors.push(`${v('shipment_ref')} was already in the system before this import, so its contents here are skipped (imported before?).`);
+      const pieces = money(v('pieces'), 'pieces', errors);
+      if (pieces !== null && !Number.isInteger(pieces)) errors.push('pieces must be a whole number.');
+      const kg = money(v('kg'), 'kg', errors);
+      data = { shipment_id: sid, description: v('description').slice(0, 200), pieces, kg: kg === null ? null : Math.round(kg * 1000) / 1000 };
+      preview = `${v('shipment_ref')} · ${v('description')}${pieces !== null ? ` · ${pieces} pcs` : ''}${kg !== null ? ` · ${kg} kg` : ''}`;
     } else if (kind === 'charges' || kind === 'costs') {
       const sid = L.shipments.get(lk(v('shipment_ref')));
       if (v('shipment_ref') && !sid) errors.push(`No shipment ${v('shipment_ref')} — import shipments first.`);
@@ -627,9 +670,20 @@ async function saveChecked(kind: ImportKind, checked: CheckResult, userId: numbe
     const rows: unknown[][] = [];
     for (const d of ok) {
       const ref = (d.ref as string | null) ?? (await nextShipmentRef(Number(String(d.ship_date).slice(0, 4)), t));
-      rows.push([ref, d.service, pid(d.client as PartyRef), d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address, userId]);
+      rows.push([
+        ref, d.service, pid(d.client as PartyRef), d.ship_date, d.origin, d.destination, d.goods, d.pieces, d.weight_kg, d.chargeable_kg, d.cbm, d.awb_no, d.tracking_no, d.status, d.notes, d.bill_address,
+        d.consignee_name, d.consignee_phone, d.consignee_address, d.public_token, d.public_off, userId,
+      ]);
     }
-    await insertMany(t, 'office_shipments', ['ref', 'service', 'client_id', 'ship_date', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'created_by'], rows);
+    await insertMany(
+      t,
+      'office_shipments',
+      ['ref', 'service', 'client_id', 'ship_date', 'origin', 'destination', 'goods', 'pieces', 'weight_kg', 'chargeable_kg', 'cbm', 'awb_no', 'tracking_no', 'status', 'notes', 'bill_address', 'consignee_name', 'consignee_phone', 'consignee_address', 'public_token', 'public_off', 'created_by'],
+      rows,
+    );
+  } else if (kind === 'items') {
+    const sort = await nextSort('office_shipment_items');
+    await insertMany(t, 'office_shipment_items', ['shipment_id', 'description', 'pieces', 'kg', 'sort'], ok.map((d) => [d.shipment_id, d.description, d.pieces, d.kg, sort(d.shipment_id as number)]));
   } else if (kind === 'charges') {
     const sort = await nextSort('office_charges');
     await insertMany(
@@ -747,7 +801,7 @@ export function detectKind(fileName: string, text: string): ImportKind | null {
   if (has('exp_date')) return 'expenses';
   if (has('tr_date')) return 'transfers';
   if (has('pay_date')) return 'payments';
-  if (has('shipment_ref')) return has('payee_name') || has('category') ? 'costs' : 'charges';
+  if (has('shipment_ref')) return has('payee_name') || has('category') ? 'costs' : has('kg') || (has('pieces') && !has('amount') && !has('rate')) ? 'items' : 'charges';
   if (has('ship_date') || has('service')) return 'shipments';
   if (has('currency') && (has('opening_balance') || has('type'))) return 'accounts';
   if (has('name') && has('kind')) return 'parties';
@@ -781,7 +835,7 @@ export async function runBundle(parts: BundlePart[], createParties: boolean, use
       const alreadyThere = new Set<string>();
       for (const part of ordered) {
         const checked = await checkFile(part.kind, part.text, createParties, t, alreadyThere);
-        // A shipment refused because it already exists: its charges and costs below must not be added to it again.
+        // A shipment refused because it already exists: its contents, charges and costs below must not be added to it again.
         if (part.kind === 'shipments') for (const r of checked.rows) if (r.errors.some((e) => e.endsWith('already exists.'))) alreadyThere.add(lk(r.values.ref ?? ''));
         steps.push({ part, checked, outcome: isBlocking(checked) ? null : await saveChecked(part.kind, checked, userId, t) });
       }
